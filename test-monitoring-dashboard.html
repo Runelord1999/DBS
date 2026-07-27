@@ -493,12 +493,12 @@ const PROJECTS={
 
  "TAPI-IDL":{
   name:"TAPI API for IDEAL", code:"TAPI-IDL", lead:"Channels API Team",
-  release:"r2026.05.3 (hypercare)", env:"Production", runNo:"#6,540", commit:"9d41ac2",
-  phase:"Hypercare", pct:95, agentsRunning:1,
+  release:"r2026.05.3 (pilot)", env:"Production", runNo:"#6,540", commit:"9d41ac2",
+  phase:"Pilot", pct:95, agentsRunning:1,
   qc:{qcPass:98.7, override:2.1, escape:0.04, manualBase:94.0, artifacts:2360, overridden:50},
-  stampLabel:"Live · Hypercare", stampTone:"live",
-  verdictHead:'Release <em>live in hypercare</em> — all test gates green, zero open defects',
-  verdictBody:"The test fleet ran 5,372 cases against commit 9d41ac2 and every gate cleared. The release has been in production hypercare for six weeks with no escaped defects; the fleet now runs a lighter synthetic-monitoring pack against production on every deploy.",
+  stampLabel:"Live · Pilot", stampTone:"live",
+  verdictHead:'Release <em>live in pilot</em> — all test gates green, zero open defects',
+  verdictBody:"The test fleet ran 5,372 cases against commit 9d41ac2 and every gate cleared. The release has been in pilot for six weeks with no escaped defects; the fleet now runs a lighter synthetic-monitoring pack against production on every deploy.",
   gates:gates({
     unit:{total:3040, fail:0, skip:4, dur:"1m 48s", status:"pass"},
     comp:{total:1420, fail:0, skip:2, dur:"3m 12s", status:"pass"},
@@ -716,7 +716,7 @@ function renderKpis(){
       ["Projects monitored",String(PROJECT_ORDER.length),"across the delivery fleet","var(--run)","runc",""],
       ["Blocked",String(blocked),"awaiting human approval","var(--fail)","failc",""],
       ["At risk",String(atrisk),"open defects, not yet blocking","var(--warn)","warnc",""],
-      ["On track / live",String(ontrack),"clear to promote or in hypercare","var(--pass)","passc",""],
+      ["On track / live",String(ontrack),"clear to promote or in pilot","var(--pass)","passc",""],
       ["Open defects","total "+totFail,"root-cause items, all projects","var(--agent)","tealc",""],
       ["Avg QC pass",avgQc.toFixed(1)+"%","vs 94.0% manual baseline","var(--gold)","gold","PORTFOLIO"],
     ];
@@ -841,7 +841,7 @@ function buildAgents(p){
     {name:"Refactoring & Performance Agent",runs:p.failures.filter(f=>f.owner==="Refactoring & Performance Agent").length+" hotspots found",last:"10:47 SGT",state:perfGate.total?"running":"idle",out:perfGate.fail?`Profiling the ${esc(p.name)} performance test gate; fix proposed for the current SLO breach.`:`No open performance regressions on ${esc(p.name)} right now.`},
     {name:"Security & Vulnerability Agent",runs:secGate.total+" checks",last:"09:58 SGT",state:secGate.fail?"running":"idle",out:secGate.fail?`${secGate.fail} advisory item${secGate.fail===1?"":"s"} open · fix pinned and verified against regression.`:"No open security advisories on this release."},
     {name:"Test Reporting Agent",runs:"this console",last:"11:20 SGT",state:"running",out:`Compiling the ${esc(p.name)} gate verdict and the QC roll-up that feeds the portfolio Output Quality tab.`},
-    {name:"Compliance & Evidence Agent",runs:"evidence pack",last:"11:20 SGT",state:p.stampTone==="fail"||p.stampTone==="warn"?"block":"idle",out:p.stampTone==="live"?`Evidence pack sealed; ${esc(p.name)} is in production hypercare.`:`Waiting on the remaining test gates to clear before the ${esc(p.name)} CAB evidence pack can be sealed.`},
+    {name:"Compliance & Evidence Agent",runs:"evidence pack",last:"11:20 SGT",state:p.stampTone==="fail"||p.stampTone==="warn"?"block":"idle",out:p.stampTone==="live"?`Evidence pack sealed; ${esc(p.name)} is in pilot.`:`Waiting on the remaining test gates to clear before the ${esc(p.name)} CAB evidence pack can be sealed.`},
   ];
 }
 const PANES={overview:paneOverview,suites:paneSuites,latency:paneLatency,failures:paneFailures,agents:paneAgents};

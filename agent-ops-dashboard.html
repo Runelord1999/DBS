@@ -268,7 +268,7 @@ const P=[
   tradTeam:28,tradMo:11, agTeam:8, agMo:8, inTok:21, outTok:7,   loc:180, quality:96.4, override:5.1, escape:0.18},
  {code:"DGM-CC",  name:"Digimarkets Checks & Controls", phase:"Build",     status:"track", lead:"Controls Platform",    elapsed:3.5,eta:8, pct:41,
   tradTeam:24,tradMo:11, agTeam:8, agMo:8, inTok:17, outTok:6,   loc:150, quality:98.1, override:2.9, escape:0.06},
- {code:"TAPI-IDL",name:"TAPI API for IDEAL",            phase:"Hypercare", status:"track", lead:"Channels API Team",    elapsed:7.5,eta:8, pct:95,
+ {code:"TAPI-IDL",name:"TAPI API for IDEAL",            phase:"Pilot", status:"track", lead:"Channels API Team",    elapsed:7.5,eta:8, pct:95,
   tradTeam:18,tradMo:10, agTeam:5, agMo:8, inTok:12, outTok:4.5, loc:95,  quality:98.7, override:2.1, escape:0.04},
  {code:"TAPI-CC", name:"TAPI API for CC",               phase:"Prototype", status:"risk",  lead:"Channels API Team",    elapsed:1.5,eta:8, pct:18,
   tradTeam:20,tradMo:10, agTeam:6, agMo:8, inTok:14, outTok:5,   loc:110, quality:95.2, override:6.4, escape:0.22},
@@ -322,7 +322,7 @@ function syncHero(){
 }
 recompute();syncHero();
 
-const STAT={track:["t-track","On track"],risk:["t-risk","At risk"],block:["t-block","Blocked"],done:["t-done","In hypercare"]};
+const STAT={track:["t-track","On track"],risk:["t-risk","At risk"],block:["t-block","Blocked"],done:["t-done","In pilot"]};
 const MODELS=[{name:"Haiku 4.5",tokPct:62,costPct:17,color:"var(--cyan)"},{name:"Sonnet 5",tokPct:31,costPct:55,color:"var(--run)"},{name:"Opus 4.8",tokPct:7,costPct:28,color:"var(--violet)"}];
 const TOKGRP=[{g:"Build (code gen, review, refactor)",tok:96,color:"var(--agent)"},{g:"Test & assure",tok:42,color:"var(--run)"},{g:"Define (reqs, docs, stories)",tok:22,color:"var(--cyan)"},{g:"Release & run",tok:10,color:"var(--violet)"}];
 const TOKMONTH=[38,52,64,79,96,112,131,151];
