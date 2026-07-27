@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Delivery Ops — Release Assurance (AOE Optimization)</title>
+<title>Agent Delivery Ops — Release Assurance</title>
 <style>
 :root{
   --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
@@ -33,6 +33,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .field{display:block;margin-bottom:10px}
 .field span{display:block;margin-bottom:5px}
 select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:var(--ink);padding:7px 8px;border-radius:6px;font-size:12px;font-family:var(--mono)}
+select:disabled{opacity:.5}
 .railcard{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:11px 12px}
 .railcard .eyebrow{margin-bottom:7px}
 .rrow{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px;color:var(--ink-2)}
@@ -51,7 +52,7 @@ select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:v
 .crumb .sep{color:var(--hair)}
 .verdict{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:16px}
 .verdict h2{margin:3px 0 6px;font-size:23px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
-.verdict h2 em{font-style:normal;color:var(--fail)}
+.verdict h2 em{font-style:normal}
 .verdict p{margin:0;color:var(--ink-2);font-size:12.5px;max-width:76ch}
 .stamp{border:1px solid var(--fail);color:var(--fail);padding:8px 14px;border-radius:8px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;white-space:nowrap;background:rgba(255,84,112,.06)}
 
@@ -70,11 +71,11 @@ select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:v
 .gate:hover{transform:translateY(-2px)}
 .gate[aria-pressed="true"]{border-color:var(--agent)}
 .gate .bar{position:absolute;left:0;top:0;height:100%;width:4px}
-.g-pass .bar{background:var(--pass)}.g-fail .bar{background:var(--fail)}.g-warn .bar{background:var(--warn)}.g-block .bar{background:var(--violet)}
+.g-pass .bar{background:var(--pass)}.g-fail .bar{background:var(--fail)}.g-warn .bar{background:var(--warn)}.g-block .bar{background:var(--violet)}.g-pending .bar{background:var(--ink-3)}
 .gate .seq{font-size:9px;color:var(--ink-3);font-family:var(--mono)}
 .gate .gn{font-size:12.5px;font-weight:700;margin:3px 0 8px;padding-left:2px}
 .gate .st{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
-.g-pass .st{color:var(--pass)}.g-fail .st{color:var(--fail)}.g-warn .st{color:var(--warn)}.g-block .st{color:var(--violet)}
+.g-pass .st{color:var(--pass)}.g-fail .st{color:var(--fail)}.g-warn .st{color:var(--warn)}.g-block .st{color:var(--violet)}.g-pending .st{color:var(--ink-3)}
 .gate .meta{font-size:10px;color:var(--ink-3);margin-top:7px;font-family:var(--mono)}
 .gate .chev{position:absolute;right:8px;top:10px;color:var(--ink-3);font-size:12px}
 
@@ -104,6 +105,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .t-agent{background:rgba(0,214,190,.15);color:var(--agent)}
 .t-run{background:rgba(91,140,255,.16);color:var(--run)}
 .t-block{background:rgba(155,135,216,.16);color:var(--violet)}
+.t-pending{background:rgba(99,113,143,.16);color:var(--ink-3)}
 .muted{color:var(--ink-3)}
 .foot{padding:11px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--ink-3);line-height:1.55}
 .foot b{color:var(--gold)}
@@ -151,6 +153,18 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .statedot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
 .sd-run{background:var(--run)}.sd-idle{background:var(--ink-3)}.sd-block{background:var(--warn)}
 
+/* portfolio summary */
+.gpill{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;font-size:9px;font-weight:700;margin-right:3px;font-family:var(--mono)}
+.gpill.g-pass{background:rgba(47,211,154,.18);color:var(--pass)}
+.gpill.g-fail{background:rgba(255,84,112,.18);color:var(--fail)}
+.gpill.g-warn{background:rgba(245,178,60,.18);color:var(--warn)}
+.gpill.g-block{background:rgba(155,135,216,.18);color:var(--violet)}
+.gpill.g-pending{background:rgba(99,113,143,.18);color:var(--ink-3)}
+.gpills{white-space:nowrap}
+.gpills-key{display:flex;gap:14px;flex-wrap:wrap;padding:0 16px 13px;font-size:10.5px;color:var(--ink-2)}
+.viewbtn{font-size:11px;color:var(--agent);font-weight:700;background:none;border:1px solid var(--hair);border-radius:6px;padding:5px 10px;white-space:nowrap}
+.viewbtn:hover{border-color:var(--agent)}
+
 .scrim{position:fixed;inset:0;background:rgba(5,9,17,.66);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
 .scrim.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,96vw);background:var(--panel);border-left:1px solid var(--hair);transform:translateX(100%);transition:transform .22s ease;z-index:50;display:flex;flex-direction:column}
@@ -167,6 +181,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .block .lbl{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:600}
 .code{font-family:var(--mono);font-size:11px;color:var(--ink-2);white-space:pre-wrap;line-height:1.55}
 .err{color:var(--fail)}
+.empty{padding:26px;text-align:center;color:var(--ink-3)}
 
 @media (max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2,.grid2b{grid-template-columns:1fr}.agrid{grid-template-columns:1fr}.ladder{flex-wrap:wrap}.gate{flex:1 1 30%}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis{grid-template-columns:repeat(2,1fr)}.rollup-grid{grid-template-columns:1fr}}
@@ -179,40 +194,31 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
       <div><h1>Agent Delivery Ops</h1><p>Release Assurance</p></div></div>
     <div>
       <label class="field"><span class="eyebrow">Project</span>
-        <select id="s-proj">
-          <option>AOE Optimization</option><option>Digicrypto Phase X</option><option>Digimarkets Checks &amp; Controls</option>
-          <option>TAPI API for IDEAL</option><option>TAPI API for CC</option><option>Prime Real Time MTM</option></select></label>
+        <select id="s-proj"></select></label>
       <label class="field"><span class="eyebrow">Release</span>
-        <select id="s-rel"><option>r2026.07.2 (build increment)</option><option>r2026.06.4</option></select></label>
+        <select id="s-rel" disabled></select></label>
       <label class="field"><span class="eyebrow">Environment</span>
-        <select id="s-env"><option>SIT-2 → UAT-1</option><option>DEV</option><option>Pre-prod</option></select></label>
+        <select id="s-env" disabled></select></label>
     </div>
-    <div class="railcard">
+    <div class="railcard" id="fleetcard">
       <div class="eyebrow">Test fleet</div>
-      <div class="live"><span class="dot"></span><span id="m-run">5</span> agents running</div>
-      <div class="rrow" style="margin-top:9px"><span>Latest run</span><b class="num">#4,182</b></div>
-      <div class="rrow"><span>Commit</span><b class="num">a91f4c7</b></div>
+      <div class="live"><span class="dot"></span><span id="m-run">—</span> agents running</div>
+      <div class="rrow" style="margin-top:9px"><span>Latest run</span><b class="num" id="m-runno">—</b></div>
+      <div class="rrow"><span>Commit</span><b class="num" id="m-commit">—</b></div>
       <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
     </div>
-    <div class="mininote">This console is the assurance layer beneath one portfolio project. Its <b>QC roll-up</b> — pass rate, override, escaped defects — is exactly what AOE&nbsp;Optimization reports on the Output&nbsp;Quality tab of the portfolio console.</div>
+    <div class="mininote" id="mininote"></div>
   </aside>
 
   <main class="main">
-    <div class="crumb"><b>Agent Delivery Ops</b><span class="sep">›</span><b id="cb-proj">AOE Optimization</b> <span class="muted" id="cb-code">(AOE-OPT · FX Pricing Tribe)</span><span class="sep">›</span>Release r2026.07.2<span class="sep">›</span><span class="muted">62% built · Build phase</span></div>
-    <div class="verdict">
-      <div>
-        <div class="eyebrow">Release gate · promotion to UAT sign-off</div>
-        <h2>Release <em>blocked at the Component gate</em> — 5 agent fixes await human approval</h2>
-        <p>The test fleet ran 13,515 cases against commit a91f4c7. Twenty-three failed, resolving to nine root-cause items: agents have proposed fixes for five, are still investigating two, and have escalated two that need a human scope decision. No fix ships without a human approving the pull request.</p>
-      </div>
-      <div class="stamp" id="stamp">Blocked · CAB</div>
-    </div>
+    <div class="crumb" id="crumb"></div>
+    <div class="verdict" id="verdict"></div>
 
     <div class="kpis" id="kpis"></div>
 
-    <div class="ladder" id="ladder" role="group" aria-label="Promotion gates — select a gate to filter"></div>
+    <div class="ladder" id="ladder" role="group" aria-label="Promotion test gates — select a test gate to filter"></div>
 
-    <div class="tabs" role="tablist">
+    <div class="tabs" id="tabsbar" role="tablist">
       <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
       <button class="tab" role="tab" data-tab="suites" aria-selected="false">Test suites</button>
       <button class="tab" role="tab" data-tab="latency" aria-selected="false">Service latency</button>
@@ -236,119 +242,396 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-/* project context — aligned to the portfolio console (AOE-OPT row) */
-const PROJECT={name:"AOE Optimization",code:"AOE-OPT",lead:"FX Pricing Tribe",pct:62,
-  qcPass:97.6, override:3.8, escape:0.11, manualBase:94.0, artifacts:1840, overridden:70};
+/* ============================================================
+   Test-gate taxonomy — shared across every project.
+   Every project ladder always shows these six, in this order.
+   A gate that hasn't been reached yet is status:"pending".
+============================================================ */
+const GATE_META=[
+  {id:"unit", seq:"01", name:"Unit"},
+  {id:"comp", seq:"02", name:"Component"},
+  {id:"sit",  seq:"03", name:"SIT"},
+  {id:"uat",  seq:"04", name:"UAT"},
+  {id:"perf", seq:"05", name:"Performance"},
+  {id:"sec",  seq:"06", name:"Security"},
+];
+const GST={pass:["g-pass","Passed"],fail:["g-fail","Failed"],warn:["g-warn","Warnings"],block:["g-block","Blocked"],pending:["g-pending","Not started"]};
+const STAMP_COLOR={fail:"var(--fail)",warn:"var(--warn)",pass:"var(--pass)",live:"var(--agent)"};
+const STAMP_TAG={fail:"t-fail",warn:"t-warn",pass:"t-pass",live:"t-agent"};
 
-const GATES=[
-  {id:"unit", seq:"01", name:"Unit",        total:8412, fail:0,  skip:12, dur:"4m 11s",  status:"pass"},
-  {id:"comp", seq:"02", name:"Component",   total:3164, fail:6,  skip:9,  dur:"11m 02s", status:"fail"},
-  {id:"sit",  seq:"03", name:"SIT",         total:1287, fail:11, skip:14, dur:"38m 47s", status:"fail"},
-  {id:"uat",  seq:"04", name:"UAT",         total:342,  fail:3,  skip:6,  dur:"—",       status:"block"},
-  {id:"perf", seq:"05", name:"Performance", total:96,   fail:2,  skip:0,  dur:"22m 30s", status:"warn"},
-  {id:"sec",  seq:"06", name:"Security",    total:214,  fail:1,  skip:0,  dur:"6m 58s",  status:"fail"},
-];
-const totCases=GATES.reduce((a,g)=>a+g.total,0);
-const totFail=GATES.reduce((a,g)=>a+g.fail,0);
-const passRate=(totCases-totFail)/totCases*100;
+/* helper: build a full 6-gate array from a sparse map, defaulting missing gates to pending */
+function gates(map){
+  return GATE_META.map(m=>Object.assign({id:m.id,seq:m.seq,name:m.name,total:0,fail:0,skip:0,dur:"—",status:"pending"},map[m.id]||{}));
+}
 
-const SUITES=[
-  {gate:"unit",name:"Pricing kernel",total:2841,fail:0,dur:"1m 22s",ch:[["Volatility surface interpolation",914,0],["Discount curve bootstrap",702,0],["Day-count conventions",1225,0]]},
-  {gate:"unit",name:"Trade model",total:3105,fail:0,dur:"1m 40s",ch:[["FX spot / forward",1180,0],["NDF lifecycle",842,0],["Swap leg generation",1083,0]]},
-  {gate:"unit",name:"Reference data",total:2466,fail:0,dur:"1m 09s",ch:[["Currency pair master",981,0],["Holiday calendars",744,0],["Counterparty static",741,0]]},
-  {gate:"comp",name:"Quote router",total:1204,fail:4,dur:"4m 18s",ch:[["Venue failover",318,3],["Spread laddering",442,0],["Quote throttling",444,1]]},
-  {gate:"comp",name:"Murex trade adapter",total:1108,fail:2,dur:"3m 51s",ch:[["Booking message mapping",520,2],["Amend / cancel replay",588,0]]},
-  {gate:"comp",name:"Limit check",total:852,fail:0,dur:"2m 53s",ch:[["Pre-trade credit limit",430,0],["Notional cap",422,0]]},
-  {gate:"sit",name:"End-to-end trade capture",total:604,fail:7,dur:"18m 40s",ch:[["Sales quote to booking",244,4],["Downstream settlement feed",188,2],["Regulatory trade report",172,1]]},
-  {gate:"sit",name:"Upstream market data",total:397,fail:3,dur:"11m 15s",ch:[["Rate feed reconnect",201,3],["Stale tick suppression",196,0]]},
-  {gate:"sit",name:"Batch and EOD",total:286,fail:1,dur:"8m 52s",ch:[["EOD revaluation",158,1],["Position roll",128,0]]},
-  {gate:"uat",name:"Sales desk journeys",total:198,fail:2,dur:"—",ch:[["Request for quote",96,1],["Bulk order upload",102,1]]},
-  {gate:"uat",name:"Trading desk journeys",total:144,fail:1,dur:"—",ch:[["Risk blotter refresh",78,1],["Hedge allocation",66,0]]},
-  {gate:"perf",name:"Load and soak",total:96,fail:2,dur:"22m 30s",ch:[["2,000 quotes/sec sustained",48,1],["8-hour soak, memory drift",48,1]]},
-  {gate:"sec",name:"Static and dependency scan",total:214,fail:1,dur:"6m 58s",ch:[["SAST rules",142,0],["Dependency CVE scan",72,1]]},
-];
-const SERVICES=[
-  {name:"fx-quote-router",p50:9,p95:41,p99:118,slo:100,err:0.02,spark:[38,40,39,44,52,61,73,96,118]},
-  {name:"fx-pricing-engine",p50:14,p95:52,p99:88,slo:150,err:0.00,spark:[50,49,53,51,54,52,50,53,52]},
-  {name:"rates-curve-service",p50:22,p95:74,p99:131,slo:200,err:0.01,spark:[70,72,69,75,73,71,76,74,74]},
-  {name:"credit-deriv-valuation",p50:61,p95:214,p99:402,slo:300,err:0.09,spark:[180,192,205,214,236,268,310,366,402]},
-  {name:"eq-deriv-greeks",p50:44,p95:151,p99:238,slo:400,err:0.00,spark:[148,150,146,152,149,151,153,150,151]},
-  {name:"bond-pricing-api",p50:18,p95:63,p99:104,slo:250,err:0.00,spark:[60,62,61,64,63,62,65,63,63]},
-  {name:"murex-trade-adapter",p50:88,p95:340,p99:611,slo:500,err:0.31,spark:[290,305,318,340,388,441,502,566,611]},
-  {name:"limit-check-service",p50:6,p95:19,p99:34,slo:80,err:0.00,spark:[18,19,18,20,19,19,20,19,19]},
-  {name:"ref-data-service",p50:11,p95:38,p99:66,slo:120,err:0.00,spark:[36,37,38,37,39,38,38,39,38]},
-  {name:"trade-capture-gateway",p50:35,p95:129,p99:246,slo:250,err:0.04,spark:[120,124,127,129,138,152,181,214,246]},
-];
-const breaches=SERVICES.filter(s=>s.p99>s.slo).length;
+/* ============================================================
+   Per-project mock data. Numbers for phase/quality/override/
+   escape are carried over from the portfolio console (Agent
+   Delivery Operations dashboard) so the two stay consistent.
+============================================================ */
+const PROJECTS={
 
-const FAILURES=[
-  {id:"F-4411",gate:"comp",suite:"Quote router / Venue failover",test:"routes to secondary venue within 250ms of primary timeout",
-   err:"AssertionError: expected failover latency <= 250ms, actual 611ms",
-   stack:"at VenueFailoverTest.routesToSecondary(VenueFailoverTest.java:88)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)\nat VenueHealthMonitor.markDown(VenueHealthMonitor.java:57)",
-   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
-   note:"Root cause is a fixed 500ms health-probe interval introduced in a91f4c7. Failover cannot beat the SLO while the probe is slower than the threshold. Proposed change reduces the probe to 100ms with jitter and adds a fast-fail on connection reset.",
-   pr:"PR #2841 · 1 file · +12 / −4 · awaiting human approval"},
-  {id:"F-4412",gate:"comp",suite:"Quote router / Venue failover",test:"does not re-route while primary is degraded but healthy",
-   err:"AssertionError: expected 0 re-routes, actual 3",
-   stack:"at VenueFailoverTest.noFlapping(VenueFailoverTest.java:131)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)",
-   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
-   note:"Same root cause as F-4411. The shorter probe interval alone would worsen flapping, so the proposed fix pairs it with a three-strike hysteresis window before a venue is marked down.",
-   pr:"PR #2841 · included in the same change"},
-  {id:"F-4413",gate:"comp",suite:"Murex trade adapter / Booking message mapping",test:"maps NDF fixing date to MXML field FIXDT",
-   err:"FieldMappingException: FIXDT absent for product NDF_ASIA",
-   stack:"at MxmlMapper.map(MxmlMapper.java:402)\nat BookingMessageMappingTest.ndfFixingDate(BookingMessageMappingTest.java:66)",
-   owner:"Human",state:"needs decision",first:"run #4,181",
-   note:"The mapping table has no entry for the new NDF_ASIA product code. This is a scope gap, not a defect — the Impact Assessment Agent flagged the missing product in the Confluence spec on 12 July and the story was deferred. A product owner must confirm whether NDF_ASIA is in scope for this release.",
-   pr:"No fix proposed — requires a scope decision"},
-  {id:"F-4418",gate:"sit",suite:"End-to-end trade capture / Sales quote to booking",test:"booking reference is returned to the sales blotter within 2s",
-   err:"TimeoutError: no booking reference after 5,000ms",
-   stack:"at TradeCaptureE2E.quoteToBooking(TradeCaptureE2E.java:174)\nat MurexAdapterClient.awaitBookingRef(MurexAdapterClient.java:91)",
-   owner:"Debug & Remediation Agent",state:"investigating",first:"run #4,180",
-   note:"Correlates with the murex-trade-adapter p99 breach (611ms against a 500ms SLO) on the same run. The agent is holding the fix until the latency regression is resolved, because the timeout is a symptom rather than the cause.",
-   pr:"Linked to L-0027 · latency regression"},
-  {id:"F-4421",gate:"sit",suite:"Upstream market data / Rate feed reconnect",test:"resubscribes to all pairs after a feed drop",
-   err:"AssertionError: expected 148 subscriptions, actual 141",
-   stack:"at RateFeedReconnectTest.resubscribeAll(RateFeedReconnectTest.java:59)\nat FeedSession.onReconnect(FeedSession.java:203)",
-   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,182",
-   note:"Seven pairs added to the reference data this week are held in a cache that is populated at start-up and never refreshed on reconnect. Proposed change rebuilds the subscription set from ref-data-service at reconnect time.",
-   pr:"PR #2844 · 2 files · +31 / −7 · awaiting human approval"},
-  {id:"F-4429",gate:"uat",suite:"Sales desk journeys / Request for quote",test:"quote expiry countdown matches the desk convention",
-   err:"Business rejection: countdown shows 30s, desk expects 15s for EM pairs",
-   stack:"Reported by business user during UAT session, 22 July 14:05 SGT",
-   owner:"Human",state:"needs decision",first:"UAT session 3",
-   note:"Not a code defect. The 30s default came from the approved spec; the EM desk applies a shorter convention that was never written down. The Requirements Discovery Agent has drafted the amendment and linked it to the original Confluence page for sponsor sign-off.",
-   pr:"Spec amendment drafted · awaiting sponsor sign-off"},
-  {id:"F-4433",gate:"perf",suite:"Load and soak / 2,000 quotes per second sustained",test:"p99 stays within the 100ms SLO at target load",
-   err:"SLO breach: fx-quote-router p99 = 118ms against a 100ms objective",
-   stack:"Sustained 2,000 quotes/sec for 30 minutes · breach began at minute 14",
-   owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #4,182",
-   note:"Profiling shows 61% of tail latency in synchronised access to the shared spread-ladder cache. Proposed change replaces the lock with a copy-on-write snapshot, measured at p99 = 44ms in the agent's local benchmark.",
-   pr:"PR #2846 · 3 files · +88 / −52 · awaiting human approval"},
-  {id:"F-4434",gate:"perf",suite:"Load and soak / 8-hour soak, memory drift",test:"heap returns to baseline after load is removed",
-   err:"Heap retained 1.8GB above baseline after a 20-minute cool-down",
-   stack:"Soak window 02:00–10:00 SGT · retained set grows ~230MB/hour",
-   owner:"Refactoring & Performance Agent",state:"investigating",first:"run #4,175",
-   note:"Retention is concentrated in cancelled quote objects held by an unbounded audit buffer. The agent is evaluating a bounded ring buffer against the regulatory requirement to retain quote audit history, which may make an in-memory fix unacceptable — the Compliance & Evidence Agent has been asked to confirm the retention rule.",
-   pr:"No fix proposed — control requirement under review"},
-  {id:"F-4440",gate:"sec",suite:"Static and dependency scan / Dependency CVE scan",test:"no dependency carries a high or critical advisory",
-   err:"CVE-2026-3118 · high · transitive dependency netty 4.1.106",
-   stack:"fx-quote-router → grpc-java 1.62.1 → netty 4.1.106",
-   owner:"Security & Vulnerability Agent",state:"fix proposed",first:"run #4,182",
-   note:"Advisory affects HTTP/2 header handling. The service is not directly exposed, so exploitability is rated low, but bank policy blocks promotion on any high advisory. Proposed change pins netty to 4.1.111 and the full regression suite passes against it.",
-   pr:"PR #2847 · 1 file · +1 / −1 · awaiting human approval"},
-];
-const AGENTS=[
-  {name:"Test Script Agent",runs:"312 cases authored",last:"08:14 SGT",state:"idle",out:"Generated 312 cases from 41 Jira stories and 18 NFRs supplied by the Requirements Discovery Agent."},
-  {name:"Test Data Agent",runs:"1.2M rows masked",last:"08:41 SGT",state:"idle",out:"Provisioned masked FX and credit test data for SIT-2, within MAS data-handling rules."},
-  {name:"Test Execution Agent",runs:"13,515 executed",last:"11:02 SGT",state:"running",out:"Executing the UAT regression pack against UAT-1; unit and component packs complete."},
-  {name:"Debug & Remediation Agent",runs:"5 fixes proposed",last:"11:19 SGT",state:"running",out:"Four pull requests open, two failures still under investigation, two escalated to humans for a scope decision."},
-  {name:"Refactoring & Performance Agent",runs:"2 hotspots found",last:"10:47 SGT",state:"running",out:"Lock contention in the spread-ladder cache; benchmarked p99 118ms → 44ms in a proposed change."},
-  {name:"Security & Vulnerability Agent",runs:"214 checks",last:"09:58 SGT",state:"idle",out:"One high advisory · CVE-2026-3118 · fix pinned to netty 4.1.111 and verified against regression."},
-  {name:"Test Reporting Agent",runs:"this console",last:"11:20 SGT",state:"running",out:"Compiling the gate verdict and the QC roll-up that feeds the portfolio Output Quality tab."},
-  {name:"Compliance & Evidence Agent",runs:"evidence pack v3",last:"11:20 SGT",state:"block",out:"Waiting on UAT sign-off before the CAB evidence pack can be sealed; reviewing the audit-buffer retention rule for F-4434."},
-];
+ "AOE-OPT":{
+  name:"AOE Optimization", code:"AOE-OPT", lead:"FX Pricing Tribe",
+  release:"r2026.07.2 (build increment)", env:"SIT-2 → UAT-1", runNo:"#4,182", commit:"a91f4c7",
+  phase:"Build", pct:62, agentsRunning:5,
+  qc:{qcPass:97.6, override:3.8, escape:0.11, manualBase:94.0, artifacts:1840, overridden:70},
+  stampLabel:"Blocked · CAB", stampTone:"fail",
+  verdictHead:'Release <em>blocked at the Component test gate</em> — 5 agent fixes await human approval',
+  verdictBody:"The test fleet ran 13,515 cases against commit a91f4c7. Twenty-three failed, resolving to nine root-cause items: agents have proposed fixes for five, are still investigating two, and have escalated two that need a human scope decision. No fix ships without a human approving the pull request.",
+  gates:gates({
+    unit:{total:8412, fail:0,  skip:12, dur:"4m 11s",  status:"pass"},
+    comp:{total:3164, fail:6,  skip:9,  dur:"11m 02s", status:"fail"},
+    sit: {total:1287, fail:11, skip:14, dur:"38m 47s", status:"fail"},
+    uat: {total:342,  fail:3,  skip:6,  dur:"—",       status:"block"},
+    perf:{total:96,   fail:2,  skip:0,  dur:"22m 30s", status:"warn"},
+    sec: {total:214,  fail:1,  skip:0,  dur:"6m 58s",  status:"fail"},
+  }),
+  suites:[
+    {gate:"unit",name:"Pricing kernel",total:2841,fail:0,dur:"1m 22s",ch:[["Volatility surface interpolation",914,0],["Discount curve bootstrap",702,0],["Day-count conventions",1225,0]]},
+    {gate:"unit",name:"Trade model",total:3105,fail:0,dur:"1m 40s",ch:[["FX spot / forward",1180,0],["NDF lifecycle",842,0],["Swap leg generation",1083,0]]},
+    {gate:"unit",name:"Reference data",total:2466,fail:0,dur:"1m 09s",ch:[["Currency pair master",981,0],["Holiday calendars",744,0],["Counterparty static",741,0]]},
+    {gate:"comp",name:"Quote router",total:1204,fail:4,dur:"4m 18s",ch:[["Venue failover",318,3],["Spread laddering",442,0],["Quote throttling",444,1]]},
+    {gate:"comp",name:"Murex trade adapter",total:1108,fail:2,dur:"3m 51s",ch:[["Booking message mapping",520,2],["Amend / cancel replay",588,0]]},
+    {gate:"comp",name:"Limit check",total:852,fail:0,dur:"2m 53s",ch:[["Pre-trade credit limit",430,0],["Notional cap",422,0]]},
+    {gate:"sit",name:"End-to-end trade capture",total:604,fail:7,dur:"18m 40s",ch:[["Sales quote to booking",244,4],["Downstream settlement feed",188,2],["Regulatory trade report",172,1]]},
+    {gate:"sit",name:"Upstream market data",total:397,fail:3,dur:"11m 15s",ch:[["Rate feed reconnect",201,3],["Stale tick suppression",196,0]]},
+    {gate:"sit",name:"Batch and EOD",total:286,fail:1,dur:"8m 52s",ch:[["EOD revaluation",158,1],["Position roll",128,0]]},
+    {gate:"uat",name:"Sales desk journeys",total:198,fail:2,dur:"—",ch:[["Request for quote",96,1],["Bulk order upload",102,1]]},
+    {gate:"uat",name:"Trading desk journeys",total:144,fail:1,dur:"—",ch:[["Risk blotter refresh",78,1],["Hedge allocation",66,0]]},
+    {gate:"perf",name:"Load and soak",total:96,fail:2,dur:"22m 30s",ch:[["2,000 quotes/sec sustained",48,1],["8-hour soak, memory drift",48,1]]},
+    {gate:"sec",name:"Static and dependency scan",total:214,fail:1,dur:"6m 58s",ch:[["SAST rules",142,0],["Dependency CVE scan",72,1]]},
+  ],
+  services:[
+    {name:"fx-quote-router",gate:"perf",p50:9,p95:41,p99:118,slo:100,err:0.02,spark:[38,40,39,44,52,61,73,96,118]},
+    {name:"fx-pricing-engine",gate:"perf",p50:14,p95:52,p99:88,slo:150,err:0.00,spark:[50,49,53,51,54,52,50,53,52]},
+    {name:"rates-curve-service",gate:"perf",p50:22,p95:74,p99:131,slo:200,err:0.01,spark:[70,72,69,75,73,71,76,74,74]},
+    {name:"credit-deriv-valuation",gate:"perf",p50:61,p95:214,p99:402,slo:300,err:0.09,spark:[180,192,205,214,236,268,310,366,402]},
+    {name:"eq-deriv-greeks",gate:"perf",p50:44,p95:151,p99:238,slo:400,err:0.00,spark:[148,150,146,152,149,151,153,150,151]},
+    {name:"bond-pricing-api",gate:"perf",p50:18,p95:63,p99:104,slo:250,err:0.00,spark:[60,62,61,64,63,62,65,63,63]},
+    {name:"murex-trade-adapter",gate:"sit",p50:88,p95:340,p99:611,slo:500,err:0.31,spark:[290,305,318,340,388,441,502,566,611]},
+    {name:"limit-check-service",gate:"comp",p50:6,p95:19,p99:34,slo:80,err:0.00,spark:[18,19,18,20,19,19,20,19,19]},
+    {name:"ref-data-service",gate:"sit",p50:11,p95:38,p99:66,slo:120,err:0.00,spark:[36,37,38,37,39,38,38,39,38]},
+    {name:"trade-capture-gateway",gate:"sit",p50:35,p95:129,p99:246,slo:250,err:0.04,spark:[120,124,127,129,138,152,181,214,246]},
+  ],
+  failures:[
+    {id:"F-4411",gate:"comp",suite:"Quote router / Venue failover",test:"routes to secondary venue within 250ms of primary timeout",
+     err:"AssertionError: expected failover latency <= 250ms, actual 611ms",
+     stack:"at VenueFailoverTest.routesToSecondary(VenueFailoverTest.java:88)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)\nat VenueHealthMonitor.markDown(VenueHealthMonitor.java:57)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
+     note:"Root cause is a fixed 500ms health-probe interval introduced in a91f4c7. Failover cannot beat the SLO while the probe is slower than the threshold. Proposed change reduces the probe to 100ms with jitter and adds a fast-fail on connection reset.",
+     pr:"PR #2841 · 1 file · +12 / −4 · awaiting human approval"},
+    {id:"F-4412",gate:"comp",suite:"Quote router / Venue failover",test:"does not re-route while primary is degraded but healthy",
+     err:"AssertionError: expected 0 re-routes, actual 3",
+     stack:"at VenueFailoverTest.noFlapping(VenueFailoverTest.java:131)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
+     note:"Same root cause as F-4411. The shorter probe interval alone would worsen flapping, so the proposed fix pairs it with a three-strike hysteresis window before a venue is marked down.",
+     pr:"PR #2841 · included in the same change"},
+    {id:"F-4413",gate:"comp",suite:"Murex trade adapter / Booking message mapping",test:"maps NDF fixing date to MXML field FIXDT",
+     err:"FieldMappingException: FIXDT absent for product NDF_ASIA",
+     stack:"at MxmlMapper.map(MxmlMapper.java:402)\nat BookingMessageMappingTest.ndfFixingDate(BookingMessageMappingTest.java:66)",
+     owner:"Human",state:"needs decision",first:"run #4,181",
+     note:"The mapping table has no entry for the new NDF_ASIA product code. This is a scope gap, not a defect — the Impact Assessment Agent flagged the missing product in the Confluence spec on 12 July and the story was deferred. A product owner must confirm whether NDF_ASIA is in scope for this release.",
+     pr:"No fix proposed — requires a scope decision"},
+    {id:"F-4418",gate:"sit",suite:"End-to-end trade capture / Sales quote to booking",test:"booking reference is returned to the sales blotter within 2s",
+     err:"TimeoutError: no booking reference after 5,000ms",
+     stack:"at TradeCaptureE2E.quoteToBooking(TradeCaptureE2E.java:174)\nat MurexAdapterClient.awaitBookingRef(MurexAdapterClient.java:91)",
+     owner:"Debug & Remediation Agent",state:"investigating",first:"run #4,180",
+     note:"Correlates with the murex-trade-adapter p99 breach (611ms against a 500ms SLO) on the same run. The agent is holding the fix until the latency regression is resolved, because the timeout is a symptom rather than the cause.",
+     pr:"Linked to L-0027 · latency regression"},
+    {id:"F-4421",gate:"sit",suite:"Upstream market data / Rate feed reconnect",test:"resubscribes to all pairs after a feed drop",
+     err:"AssertionError: expected 148 subscriptions, actual 141",
+     stack:"at RateFeedReconnectTest.resubscribeAll(RateFeedReconnectTest.java:59)\nat FeedSession.onReconnect(FeedSession.java:203)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,182",
+     note:"Seven pairs added to the reference data this week are held in a cache that is populated at start-up and never refreshed on reconnect. Proposed change rebuilds the subscription set from ref-data-service at reconnect time.",
+     pr:"PR #2844 · 2 files · +31 / −7 · awaiting human approval"},
+    {id:"F-4429",gate:"uat",suite:"Sales desk journeys / Request for quote",test:"quote expiry countdown matches the desk convention",
+     err:"Business rejection: countdown shows 30s, desk expects 15s for EM pairs",
+     stack:"Reported by business user during UAT session, 22 July 14:05 SGT",
+     owner:"Human",state:"needs decision",first:"UAT session 3",
+     note:"Not a code defect. The 30s default came from the approved spec; the EM desk applies a shorter convention that was never written down. The Requirements Discovery Agent has drafted the amendment and linked it to the original Confluence page for sponsor sign-off.",
+     pr:"Spec amendment drafted · awaiting sponsor sign-off"},
+    {id:"F-4433",gate:"perf",suite:"Load and soak / 2,000 quotes per second sustained",test:"p99 stays within the 100ms SLO at target load",
+     err:"SLO breach: fx-quote-router p99 = 118ms against a 100ms objective",
+     stack:"Sustained 2,000 quotes/sec for 30 minutes · breach began at minute 14",
+     owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #4,182",
+     note:"Profiling shows 61% of tail latency in synchronised access to the shared spread-ladder cache. Proposed change replaces the lock with a copy-on-write snapshot, measured at p99 = 44ms in the agent's local benchmark.",
+     pr:"PR #2846 · 3 files · +88 / −52 · awaiting human approval"},
+    {id:"F-4434",gate:"perf",suite:"Load and soak / 8-hour soak, memory drift",test:"heap returns to baseline after load is removed",
+     err:"Heap retained 1.8GB above baseline after a 20-minute cool-down",
+     stack:"Soak window 02:00–10:00 SGT · retained set grows ~230MB/hour",
+     owner:"Refactoring & Performance Agent",state:"investigating",first:"run #4,175",
+     note:"Retention is concentrated in cancelled quote objects held by an unbounded audit buffer. The agent is evaluating a bounded ring buffer against the regulatory requirement to retain quote audit history, which may make an in-memory fix unacceptable — the Compliance & Evidence Agent has been asked to confirm the retention rule.",
+     pr:"No fix proposed — control requirement under review"},
+    {id:"F-4440",gate:"sec",suite:"Static and dependency scan / Dependency CVE scan",test:"no dependency carries a high or critical advisory",
+     err:"CVE-2026-3118 · high · transitive dependency netty 4.1.106",
+     stack:"fx-quote-router → grpc-java 1.62.1 → netty 4.1.106",
+     owner:"Security & Vulnerability Agent",state:"fix proposed",first:"run #4,182",
+     note:"Advisory affects HTTP/2 header handling. The service is not directly exposed, so exploitability is rated low, but bank policy blocks promotion on any high advisory. Proposed change pins netty to 4.1.111 and the full regression suite passes against it.",
+     pr:"PR #2847 · 1 file · +1 / −1 · awaiting human approval"},
+  ],
+ },
 
-const state={gate:null,tab:"overview",sort:{key:"p99",dir:-1}};
+ "DGC-PX":{
+  name:"Digicrypto Phase X", code:"DGC-PX", lead:"Digital Assets Squad",
+  release:"r2026.03.1", env:"SIT-1 → UAT-1", runNo:"#2,916", commit:"c77a210",
+  phase:"Assure", pct:78, agentsRunning:4,
+  qc:{qcPass:96.4, override:5.1, escape:0.18, manualBase:94.0, artifacts:1210, overridden:62},
+  stampLabel:"At Risk · Security Review", stampTone:"warn",
+  verdictHead:'Release <em>at risk</em> — cold-wallet withdrawal signing regressed under the new custody policy',
+  verdictBody:"The test fleet ran 10,182 cases against commit c77a210. Twelve failed, resolving to seven root-cause items across withdrawal signing, Travel Rule compliance, and HSM key rotation. Five have agent-proposed fixes, one is under investigation, and one needs a compliance scope decision before it can proceed.",
+  gates:gates({
+    unit:{total:6210, fail:0, skip:8,  dur:"3m 40s",  status:"pass"},
+    comp:{total:2540, fail:0, skip:5,  dur:"8m 12s",  status:"pass"},
+    sit: {total:980,  fail:4, skip:10, dur:"26m 03s", status:"fail"},
+    uat: {total:210,  fail:5, skip:3,  dur:"1h 04m",  status:"fail"},
+    perf:{total:64,   fail:1, skip:0,  dur:"18m 45s", status:"warn"},
+    sec: {total:188,  fail:2, skip:0,  dur:"9m 20s",  status:"fail"},
+  }),
+  suites:[
+    {gate:"unit",name:"Wallet key derivation",total:2680,fail:0,dur:"1m 30s",ch:[["BIP-32 derivation paths",1420,0],["Seed backup encoding",1260,0]]},
+    {gate:"unit",name:"Ledger reconciliation",total:3530,fail:0,dur:"2m 10s",ch:[["On-chain vs internal ledger diff",1980,0],["Fee accrual",1550,0]]},
+    {gate:"comp",name:"Custody policy engine",total:1340,fail:0,dur:"4m 05s",ch:[["Approval quorum rules",720,0],["Spending limit policy",620,0]]},
+    {gate:"comp",name:"Exchange connector",total:1200,fail:0,dur:"4m 07s",ch:[["Order book sync",640,0],["Trade settlement callback",560,0]]},
+    {gate:"sit",name:"Withdrawal signing flow",total:560,fail:3,dur:"16m 20s",ch:[["Multisig co-signer quorum",280,3],["Cold wallet unlock",280,0]]},
+    {gate:"sit",name:"Deposit sweep",total:420,fail:1,dur:"9m 43s",ch:[["UTXO sweep batching",420,1]]},
+    {gate:"uat",name:"Compliance desk journeys",total:120,fail:3,dur:"38m 10s",ch:[["Travel Rule payload review",70,3],["Sanctions screening hold",50,0]]},
+    {gate:"uat",name:"Treasury desk journeys",total:90,fail:2,dur:"26m 02s",ch:[["Settlement netting report",90,2]]},
+    {gate:"perf",name:"Signing throughput under load",total:64,fail:1,dur:"18m 45s",ch:[["500 withdrawals/min sustained",64,1]]},
+    {gate:"sec",name:"Key management HSM scan",total:96,fail:1,dur:"5m 10s",ch:[["Key rotation policy check",96,1]]},
+    {gate:"sec",name:"Dependency CVE scan",total:92,fail:1,dur:"4m 10s",ch:[["Third-party library advisories",92,1]]},
+  ],
+  services:[
+    {name:"custody-signing-service",gate:"perf",p50:64,p95:210,p99:380,slo:250,err:0.06,spark:[210,225,240,258,289,320,350,365,380]},
+    {name:"wallet-ledger-service",gate:"sit",p50:20,p95:58,p99:92,slo:150,err:0.01,spark:[54,56,55,58,57,56,59,58,58]},
+    {name:"exchange-connector-gw",gate:"sit",p50:31,p95:88,p99:140,slo:200,err:0.02,spark:[80,84,82,88,86,85,89,87,88]},
+    {name:"compliance-screening-api",gate:"uat",p50:48,p95:130,p99:205,slo:220,err:0.00,spark:[120,124,126,130,128,127,131,129,129]},
+    {name:"hsm-key-service",gate:"sec",p50:12,p95:33,p99:51,slo:100,err:0.00,spark:[30,31,32,33,32,32,34,33,33]},
+  ],
+  failures:[
+    {id:"F-DGC-101",gate:"sit",suite:"Withdrawal signing flow / Multisig co-signer quorum",test:"completes signing with 2 of 3 co-signers online",
+     err:"QuorumError: signing aborted, 1 of 3 co-signers unreachable",
+     stack:"at MultisigQuorumTest.completesWithTwoOfThree(MultisigQuorumTest.kt:74)\nat CustodySigningService.collectSignatures(CustodySigningService.kt:161)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #2,910",
+     note:"The signing session times out on the offline co-signer instead of proceeding once quorum is met. Proposed change stops waiting once 2-of-3 signatures are collected and marks the third as late-join eligible.",
+     pr:"PR #1188 · 2 files · +34 / −9 · awaiting human approval"},
+    {id:"F-DGC-102",gate:"sit",suite:"Deposit sweep / UTXO sweep batching",test:"does not sweep the same UTXO twice in overlapping batches",
+     err:"AssertionError: UTXO abc123 swept in both batch 41 and batch 42",
+     stack:"at UtxoSweepBatchTest.noDoubleSweep(UtxoSweepBatchTest.kt:112)\nat SweepScheduler.selectUtxos(SweepScheduler.kt:88)",
+     owner:"Debug & Remediation Agent",state:"investigating",first:"run #2,913",
+     note:"Appears tied to a stale UTXO set read from cache during high deposit volume. The agent is confirming whether the batch scheduler or the ledger cache is the source of the stale read before proposing a fix.",
+     pr:"No fix proposed yet — root cause not confirmed"},
+    {id:"F-DGC-103",gate:"uat",suite:"Compliance desk journeys / Travel Rule payload review",test:"Travel Rule payload carries the beneficiary VASP identifier",
+     err:"Business rejection: beneficiary VASP field empty for the new EU corridor",
+     stack:"Reported by compliance desk during UAT session, 20 July",
+     owner:"Human",state:"needs decision",first:"UAT session 2",
+     note:"Not a code defect — the EU corridor's Travel Rule schema wasn't in the approved spec when this was built. The Requirements Discovery Agent has mapped the field to the existing payload and needs a compliance sign-off on scope before implementation starts.",
+     pr:"No fix proposed — requires a compliance scope decision"},
+    {id:"F-DGC-104",gate:"uat",suite:"Treasury desk journeys / Settlement netting report",test:"netting report matches the on-chain ledger to the cent",
+     err:"AssertionError: netting report off by 0.4% against ledger balance",
+     stack:"Reported by treasury desk during UAT session, 21 July",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"UAT session 2",
+     note:"Rounding on multi-leg netting is applied per leg instead of once on the final total, compounding small errors. Proposed change moves rounding to the final netting step only.",
+     pr:"PR #1191 · 1 file · +6 / −6 · awaiting human approval"},
+    {id:"F-DGC-105",gate:"perf",suite:"Signing throughput under load / 500 withdrawals per minute sustained",test:"p99 signing latency stays within the 250ms SLO at target load",
+     err:"SLO breach: custody-signing-service p99 = 380ms against a 250ms objective",
+     stack:"Sustained 500 withdrawals/min for 20 minutes · breach began at minute 9",
+     owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #2,916",
+     note:"HSM calls are serialized per wallet shard; under peak withdrawal load the queue backs up. Proposed change adds a second HSM connection pool per shard, benchmarked at p99 = 168ms.",
+     pr:"PR #1193 · 2 files · +47 / −11 · awaiting human approval"},
+    {id:"F-DGC-106",gate:"sec",suite:"Key management HSM scan / Key rotation policy check",test:"all wallet keys rotate on the 90-day policy schedule",
+     err:"PolicyViolation: 14 legacy cold wallets have not rotated in 210 days",
+     stack:"at KeyRotationScanTest.allWithinPolicy(KeyRotationScanTest.kt:52)",
+     owner:"Security & Vulnerability Agent",state:"fix proposed",first:"run #2,916",
+     note:"Legacy cold wallets predate the automated rotation job and were never enrolled. Proposed change back-fills enrollment for all pre-2025 wallets and schedules an immediate rotation.",
+     pr:"PR #1194 · 1 file · +18 / −2 · awaiting human approval"},
+    {id:"F-DGC-107",gate:"sec",suite:"Dependency CVE scan / Third-party library advisories",test:"no dependency carries a high or critical advisory",
+     err:"CVE-2026-4402 · high · HSM client library libhsm-client 3.2.0",
+     stack:"custody-signing-service → libhsm-client 3.2.0",
+     owner:"Security & Vulnerability Agent",state:"fix proposed",first:"run #2,916",
+     note:"Advisory affects PKCS#11 session handling under concurrent load. Proposed change upgrades to libhsm-client 3.2.4, which the vendor confirms resolves the advisory; regression suite passes against it.",
+     pr:"PR #1195 · 1 file · +1 / −1 · awaiting human approval"},
+  ],
+ },
+
+ "DGM-CC":{
+  name:"Digimarkets Checks & Controls", code:"DGM-CC", lead:"Controls Platform",
+  release:"r2026.08.0 (in build)", env:"DEV → SIT-1", runNo:"#1,204", commit:"f30e88b",
+  phase:"Build", pct:41, agentsRunning:2,
+  qc:{qcPass:98.1, override:2.9, escape:0.06, manualBase:94.0, artifacts:980, overridden:28},
+  stampLabel:"On Track", stampTone:"pass",
+  verdictHead:'Release <em>on track</em> — no blocking defects, UAT not yet scheduled',
+  verdictBody:"The test fleet has run 7,316 cases against commit f30e88b. One low-severity defect is open in alert triage; every other suite that has executed so far is clean. UAT and performance gates have not started because build is only 41% complete.",
+  gates:gates({
+    unit:{total:5120, fail:0, skip:6, dur:"2m 55s", status:"pass"},
+    comp:{total:1860, fail:1, skip:4, dur:"5m 40s", status:"warn"},
+    sit: {total:240,  fail:0, skip:2, dur:"9m 10s", status:"pass"},
+    sec: {total:96,   fail:0, skip:0, dur:"3m 05s", status:"pass"},
+  }),
+  suites:[
+    {gate:"unit",name:"Trade surveillance rules",total:2680,fail:0,dur:"1m 20s",ch:[["Wash trade detection",1340,0],["Spoofing pattern rules",1340,0]]},
+    {gate:"unit",name:"Watchlist screening",total:2440,fail:0,dur:"1m 35s",ch:[["Sanctions list match",1220,0],["PEP screening",1220,0]]},
+    {gate:"comp",name:"Alert triage queue",total:960,fail:1,dur:"2m 50s",ch:[["Duplicate alert suppression",480,1],["Priority scoring",480,0]]},
+    {gate:"comp",name:"Case management workflow",total:900,fail:0,dur:"2m 50s",ch:[["Case assignment routing",450,0],["SLA escalation",450,0]]},
+    {gate:"sit",name:"Case management workflow",total:240,fail:0,dur:"9m 10s",ch:[["End-to-end alert to case",240,0]]},
+    {gate:"sec",name:"Static analysis",total:96,fail:0,dur:"3m 05s",ch:[["SAST rules",96,0]]},
+  ],
+  services:[
+    {name:"alert-engine-api",gate:"comp",p50:14,p95:39,p99:61,slo:150,err:0.00,spark:[36,37,38,39,38,38,40,39,39]},
+    {name:"case-management-svc",gate:"sit",p50:19,p95:47,p99:70,slo:180,err:0.00,spark:[44,45,46,47,46,46,48,47,47]},
+    {name:"watchlist-screening-svc",gate:"comp",p50:9,p95:24,p99:38,slo:120,err:0.00,spark:[22,23,23,24,23,23,25,24,24]},
+  ],
+  failures:[
+    {id:"F-DGM-201",gate:"comp",suite:"Alert triage queue / Duplicate alert suppression",test:"suppresses duplicate alerts raised within a 5-minute window",
+     err:"AssertionError: expected 1 alert, actual 3 for the same trigger event",
+     stack:"at DuplicateSuppressionTest.suppressesWithinWindow(DuplicateSuppressionTest.kt:47)\nat AlertTriageQueue.enqueue(AlertTriageQueue.kt:96)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #1,201",
+     note:"The suppression key is built from event type only, not event type plus instrument, so alerts on different instruments in the same window collapse incorrectly and alerts on the same instrument slip through when the key hashes differently. Proposed change keys suppression on (event type, instrument, actor).",
+     pr:"PR #664 · 1 file · +9 / −3 · awaiting human approval"},
+  ],
+ },
+
+ "TAPI-IDL":{
+  name:"TAPI API for IDEAL", code:"TAPI-IDL", lead:"Channels API Team",
+  release:"r2026.05.3 (hypercare)", env:"Production", runNo:"#6,540", commit:"9d41ac2",
+  phase:"Hypercare", pct:95, agentsRunning:1,
+  qc:{qcPass:98.7, override:2.1, escape:0.04, manualBase:94.0, artifacts:2360, overridden:50},
+  stampLabel:"Live · Hypercare", stampTone:"live",
+  verdictHead:'Release <em>live in hypercare</em> — all test gates green, zero open defects',
+  verdictBody:"The test fleet ran 5,372 cases against commit 9d41ac2 and every gate cleared. The release has been in production hypercare for six weeks with no escaped defects; the fleet now runs a lighter synthetic-monitoring pack against production on every deploy.",
+  gates:gates({
+    unit:{total:3040, fail:0, skip:4, dur:"1m 48s", status:"pass"},
+    comp:{total:1420, fail:0, skip:2, dur:"3m 12s", status:"pass"},
+    sit: {total:560,  fail:0, skip:3, dur:"7m 40s", status:"pass"},
+    uat: {total:180,  fail:0, skip:1, dur:"—",      status:"pass"},
+    perf:{total:52,   fail:0, skip:0, dur:"9m 15s", status:"pass"},
+    sec: {total:120,  fail:0, skip:0, dur:"2m 40s", status:"pass"},
+  }),
+  suites:[
+    {gate:"unit",name:"IDEAL protocol handling",total:1620,fail:0,dur:"0m 58s",ch:[["Redirect URL construction",810,0],["Signature verification",810,0]]},
+    {gate:"unit",name:"Payment status model",total:1420,fail:0,dur:"0m 50s",ch:[["Status transition rules",710,0],["Expiry handling",710,0]]},
+    {gate:"comp",name:"IDEAL redirect flow",total:760,fail:0,dur:"1m 40s",ch:[["Bank selector redirect",380,0],["Return URL handling",380,0]]},
+    {gate:"comp",name:"Payment status callback",total:660,fail:0,dur:"1m 32s",ch:[["Webhook delivery",330,0],["Retry on 5xx",330,0]]},
+    {gate:"sit",name:"Settlement file reconciliation",total:560,fail:0,dur:"7m 40s",ch:[["Daily settlement file match",560,0]]},
+    {gate:"uat",name:"Merchant integration journeys",total:180,fail:0,dur:"—",ch:[["Sandbox to production cutover",180,0]]},
+    {gate:"perf",name:"Peak payment load",total:52,fail:0,dur:"9m 15s",ch:[["3,000 payments/min sustained",52,0]]},
+    {gate:"sec",name:"Static and dependency scan",total:120,fail:0,dur:"2m 40s",ch:[["SAST rules",70,0],["Dependency CVE scan",50,0]]},
+  ],
+  services:[
+    {name:"ideal-redirect-svc",gate:"comp",p50:8,p95:22,p99:34,slo:120,err:0.00,spark:[20,21,20,22,21,21,23,22,22]},
+    {name:"payment-callback-svc",gate:"comp",p50:11,p95:27,p99:41,slo:150,err:0.00,spark:[25,26,25,27,26,26,28,27,27]},
+    {name:"settlement-recon-svc",gate:"sit",p50:16,p95:35,p99:52,slo:200,err:0.00,spark:[33,34,33,35,34,34,36,35,35]},
+  ],
+  failures:[],
+ },
+
+ "TAPI-CC":{
+  name:"TAPI API for CC", code:"TAPI-CC", lead:"Channels API Team",
+  release:"r2026.09.0 (prototype)", env:"DEV", runNo:"#118", commit:"1a02f5d",
+  phase:"Prototype", pct:18, agentsRunning:3,
+  qc:{qcPass:95.2, override:6.4, escape:0.22, manualBase:94.0, artifacts:340, overridden:22},
+  stampLabel:"At Risk · Prototype", stampTone:"fail",
+  verdictHead:'Release <em>at risk</em> — high defect density before the Component test gate',
+  verdictBody:"Only the Unit gate has run so far. Of 640 cases, 18 failed — a defect rate well above the portfolio norm for this early a stage, concentrated in card-scheme message mapping. The fleet is holding at Unit until the failure rate drops before opening the Component gate.",
+  gates:gates({
+    unit:{total:640, fail:18, skip:22, dur:"1m 05s", status:"fail"},
+  }),
+  suites:[
+    {gate:"unit",name:"Card scheme message mapping",total:360,fail:12,dur:"0m 38s",ch:[["ISO 8583 field mapping",210,9],["Currency code mapping",150,3]]},
+    {gate:"unit",name:"Auth/capture state machine",total:280,fail:6,dur:"0m 27s",ch:[["Partial capture handling",160,6],["Void and reversal",120,0]]},
+  ],
+  services:[],
+  failures:[
+    {id:"F-TCC-301",gate:"unit",suite:"Card scheme message mapping / ISO 8583 field mapping",test:"maps network data (field 63) for CC scheme messages",
+     err:"AssertionError: field 63 truncated to 8 bytes, expected 16",
+     stack:"at Iso8583MappingTest.field63NetworkData(Iso8583MappingTest.kt:61)\nat CcMessageMapper.map(CcMessageMapper.kt:140)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #114",
+     note:"The mapper reuses a fixed-width buffer sized for the IDEAL scheme's shorter field 63. Proposed change sizes the buffer per scheme definition instead of a shared constant.",
+     pr:"PR #22 · 1 file · +7 / −2 · awaiting human approval"},
+    {id:"F-TCC-302",gate:"unit",suite:"Card scheme message mapping / Currency code mapping",test:"maps ISO 4217 currency code for all in-scope markets",
+     err:"MappingException: no currency mapping for markets TH, VN, PH, ID",
+     stack:"at CurrencyMappingTest.allMarketsCovered(CurrencyMappingTest.kt:33)",
+     owner:"Human",state:"needs decision",first:"run #112",
+     note:"Not a defect — these four markets were added to the regional rollout list after the mapping table was built. The Impact Assessment Agent flagged the gap; a product owner needs to confirm whether they're in scope for this prototype.",
+     pr:"No fix proposed — requires a scope decision"},
+    {id:"F-TCC-303",gate:"unit",suite:"Auth/capture state machine / Partial capture handling",test:"authorization resolves to a terminal state after a partial capture",
+     err:"IllegalStateException: authorization stuck in PARTIALLY_CAPTURED with no valid next transition",
+     stack:"at PartialCaptureTest.resolvesToTerminalState(PartialCaptureTest.kt:88)\nat AuthCaptureStateMachine.transition(AuthCaptureStateMachine.kt:205)",
+     owner:"Debug & Remediation Agent",state:"investigating",first:"run #116",
+     note:"The state machine has no transition defined from PARTIALLY_CAPTURED when the remaining balance is voided rather than captured or reversed. The agent is mapping the correct terminal states with the scheme rulebook before proposing a fix.",
+     pr:"No fix proposed yet — mapping correct terminal states"},
+  ],
+ },
+
+ "PRM-MTM":{
+  name:"Prime Real Time MTM", code:"PRM-MTM", lead:"Prime Services Tribe",
+  release:"r2026.06.1", env:"SIT-2 → UAT-1", runNo:"#3,375", commit:"6be9021",
+  phase:"Build", pct:55, agentsRunning:4,
+  qc:{qcPass:96.9, override:4.3, escape:0.13, manualBase:94.0, artifacts:2650, overridden:114},
+  stampLabel:"On Track · Monitoring", stampTone:"warn",
+  verdictHead:'Release <em>on track</em> — open SIT defects on the real-time MTM feed, no promotion blockers yet',
+  verdictBody:"The test fleet ran 15,368 cases against commit 6be9021. Nine failed across position valuation, the real-time MTM feed, and intraday performance. Three fixes are proposed, two are under investigation. UAT has not started; build is 55% complete and on schedule.",
+  gates:gates({
+    unit:{total:9800, fail:0, skip:14, dur:"5m 20s",  status:"pass"},
+    comp:{total:3820, fail:3, skip:11, dur:"9m 48s",  status:"warn"},
+    sit: {total:1540, fail:6, skip:9,  dur:"29m 12s", status:"fail"},
+    perf:{total:110,  fail:1, skip:0,  dur:"16m 40s", status:"warn"},
+    sec: {total:180,  fail:0, skip:0,  dur:"5m 50s",  status:"pass"},
+  }),
+  suites:[
+    {gate:"unit",name:"Valuation kernel",total:5200,fail:0,dur:"2m 40s",ch:[["Discounting conventions",2600,0],["Sensitivity bump logic",2600,0]]},
+    {gate:"unit",name:"Position model",total:4600,fail:0,dur:"2m 40s",ch:[["Position lifecycle",2300,0],["Hedge linkage",2300,0]]},
+    {gate:"comp",name:"Position valuation engine",total:2040,fail:2,dur:"5m 02s",ch:[["FX leg revaluation",1020,2],["Rate curve application",1020,0]]},
+    {gate:"comp",name:"Greeks aggregation",total:1780,fail:1,dur:"4m 46s",ch:[["Portfolio delta rollup",890,1],["Vega aggregation",890,0]]},
+    {gate:"sit",name:"Real-time MTM feed",total:920,fail:4,dur:"18m 30s",ch:[["Tick-to-snapshot pipeline",520,4],["Feed failover",400,0]]},
+    {gate:"sit",name:"End-of-day reval",total:620,fail:2,dur:"10m 42s",ch:[["Late trade amendment handling",620,2]]},
+    {gate:"perf",name:"Intraday revaluation load",total:110,fail:1,dur:"16m 40s",ch:[["50k position book, 5-second cycle",110,1]]},
+    {gate:"sec",name:"Static and dependency scan",total:180,fail:0,dur:"5m 50s",ch:[["SAST rules",120,0],["Dependency CVE scan",60,0]]},
+  ],
+  services:[
+    {name:"mtm-valuation-engine",gate:"sit",p50:410,p95:1180,p99:2340,slo:2000,err:0.05,spark:[1400,1520,1650,1780,1920,2050,2180,2260,2340]},
+    {name:"rate-source-feed",gate:"sit",p50:18,p95:52,p99:81,slo:150,err:0.02,spark:[48,50,49,52,51,50,53,52,52]},
+    {name:"greeks-service",gate:"comp",p50:66,p95:180,p99:290,slo:400,err:0.00,spark:[175,178,176,180,179,178,182,181,181]},
+    {name:"position-store-api",gate:"comp",p50:14,p95:36,p99:57,slo:120,err:0.00,spark:[34,35,34,36,35,35,37,36,36]},
+  ],
+  failures:[
+    {id:"F-PRM-401",gate:"comp",suite:"Position valuation engine / FX leg revaluation",test:"FX leg revalues against the latest spot rate after a rate-source failover",
+     err:"AssertionError: revaluation used a spot rate 40 seconds stale after failover",
+     stack:"at FxLegRevalTest.usesLatestSpotAfterFailover(FxLegRevalTest.java:97)\nat ValuationEngine.revalueLeg(ValuationEngine.java:212)",
+     owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #3,370",
+     note:"The rate cache doesn't invalidate on a rate-source failover event, so it keeps serving the last good tick from the primary until its normal TTL expires. Proposed change invalidates the cache immediately on a failover signal.",
+     pr:"PR #905 · 1 file · +14 / −5 · awaiting human approval"},
+    {id:"F-PRM-402",gate:"comp",suite:"Greeks aggregation / Portfolio delta rollup",test:"hedged positions are not double-counted in the portfolio delta",
+     err:"AssertionError: expected net delta 0, actual delta 2x the hedge notional",
+     stack:"at PortfolioDeltaTest.noDoubleCountingHedges(PortfolioDeltaTest.java:140)\nat GreeksAggregator.rollUp(GreeksAggregator.java:88)",
+     owner:"Debug & Remediation Agent",state:"investigating",first:"run #3,368",
+     note:"Suspected double aggregation when a hedge position is booked under both the originating desk and the central hedging book. The agent is tracing the position hierarchy before proposing a de-duplication rule.",
+     pr:"No fix proposed yet — tracing the position hierarchy"},
+    {id:"F-PRM-403",gate:"sit",suite:"Real-time MTM feed / Tick-to-snapshot pipeline",test:"MTM snapshot reflects the latest tick within 1 second",
+     err:"AssertionError: snapshot used a tick 6.2s stale during a feed latency spike",
+     stack:"at TickToSnapshotTest.snapshotWithinOneSecond(TickToSnapshotTest.java:75)\nat SnapshotBuilder.build(SnapshotBuilder.java:130)",
+     owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #3,372",
+     note:"When rate-source-feed latency spikes, the snapshot builder silently falls back to the prior tick with no staleness check. Proposed change adds a staleness guard that flags the snapshot rather than serving it silently.",
+     pr:"PR #907 · 2 files · +29 / −6 · awaiting human approval"},
+    {id:"F-PRM-404",gate:"sit",suite:"End-of-day reval / Late trade amendment handling",test:"a late amendment does not cause the EOD reval job to double-process a trade",
+     err:"AssertionError: trade T-88213 revalued twice in the same EOD run",
+     stack:"at EodRevalTest.noDoubleProcessingOnLateAmendment(EodRevalTest.java:162)\nat EodRevalJob.process(EodRevalJob.java:204)",
+     owner:"Debug & Remediation Agent",state:"investigating",first:"run #3,369",
+     note:"A late amendment arriving mid-run appears to re-enter the processing queue instead of updating the in-flight record. The agent is reproducing the race condition before proposing a lock strategy.",
+     pr:"No fix proposed yet — reproducing the race condition"},
+    {id:"F-PRM-405",gate:"perf",suite:"Intraday revaluation load / 50k position book, 5-second cycle",test:"revaluation cycle completes within the 2s p99 SLO at a 50k position book",
+     err:"SLO breach: mtm-valuation-engine p99 = 2,340ms against a 2,000ms objective",
+     stack:"Sustained 50k position book, 5-second cycle for 30 minutes · breach began at minute 11",
+     owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #3,375",
+     note:"Profiling shows the Greeks rollup re-computes every position's sensitivities on each cycle instead of only the ones that changed. Proposed change adds incremental recomputation, benchmarked at p99 = 1,120ms.",
+     pr:"PR #908 · 3 files · +64 / −18 · awaiting human approval"},
+  ],
+ },
+};
+const PROJECT_ORDER=["AOE-OPT","DGC-PX","DGM-CC","TAPI-IDL","TAPI-CC","PRM-MTM"];
+
+const state={view:"project",project:"AOE-OPT",gate:null,tab:"overview",sort:{key:"p99",dir:-1}};
+function cur(){return PROJECTS[state.project];}
 
 /* ---- sparkline ---- */
 function spark(vals,slo,w=90,h=22){
@@ -360,28 +643,102 @@ function spark(vals,slo,w=90,h=22){
   return `<svg class="spark" width="${w}" height="${h}"><line x1="0" y1="${sloY}" x2="${w}" y2="${sloY}" stroke="var(--hair)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="${breach?'var(--fail)':'var(--pass)'}" stroke-width="1.5"/></svg>`;
 }
 
+/* ---- sidebar / crumb / verdict ---- */
+function renderProjectSelect(){
+  const sel=$("#s-proj");
+  sel.innerHTML=`<option value="PORTFOLIO">▣ All Projects — Portfolio Summary</option>`+
+    PROJECT_ORDER.map(code=>`<option value="${code}">${esc(PROJECTS[code].name)}</option>`).join("");
+  sel.value=state.view==="portfolio"?"PORTFOLIO":state.project;
+}
+function renderSidebar(){
+  const p=cur();
+  if(state.view==="portfolio"){
+    $("#s-rel").innerHTML=`<option>—</option>`;
+    $("#s-env").innerHTML=`<option>All environments</option>`;
+    $("#m-run").textContent=PROJECT_ORDER.reduce((a,c)=>a+PROJECTS[c].agentsRunning,0);
+    $("#m-runno").textContent="—";
+    $("#m-commit").textContent="—";
+    $("#mininote").innerHTML=`This is the multi-project view of the assurance layer. Pick a project above, or click any row in the summary table, to drop into its full release-assurance console.`;
+    return;
+  }
+  $("#s-rel").innerHTML=`<option>${esc(p.release)}</option>`;
+  $("#s-env").innerHTML=`<option>${esc(p.env)}</option>`;
+  $("#m-run").textContent=p.agentsRunning;
+  $("#m-runno").textContent=p.runNo;
+  $("#m-commit").textContent=p.commit;
+  $("#mininote").innerHTML=`This console is the assurance layer beneath <b>${esc(p.name)}</b>. Its <b>QC roll-up</b> — pass rate, override, escaped defects — is exactly what ${esc(p.name)} reports on the Output&nbsp;Quality tab of the portfolio console.`;
+}
+function renderCrumbVerdict(){
+  const p=cur();
+  if(state.view==="portfolio"){
+    $("#crumb").innerHTML=`<b>Agent Delivery Ops</b><span class="sep">›</span><span class="muted">All projects · portfolio summary</span>`;
+    $("#verdict").innerHTML=`<div>
+        <div class="eyebrow">Release gates · promotion to UAT sign-off</div>
+        <h2>Six projects in flight — <em style="color:var(--gold)">${PROJECT_ORDER.filter(c=>PROJECTS[c].stampTone==="fail").length} blocked or at risk</em></h2>
+        <p>Each project runs the same six test gates independently. Select a project below for its full failure triage, service latency and agent activity, or pick one from the dropdown on the left.</p>
+      </div>`;
+    return;
+  }
+  $("#crumb").innerHTML=`<b>Agent Delivery Ops</b><span class="sep">›</span><b>${esc(p.name)}</b> <span class="muted">(${esc(p.code)} · ${esc(p.lead)})</span><span class="sep">›</span>Release ${esc(p.release.replace(/\s*\(.*\)$/,""))}<span class="sep">›</span><span class="muted">${p.pct}% built · ${p.phase} phase</span>`;
+  $("#verdict").innerHTML=`<div>
+      <div class="eyebrow">Release gate · promotion to UAT sign-off</div>
+      <h2></h2>
+      <p></p>
+    </div>
+    <div class="stamp" style="border-color:${STAMP_COLOR[p.stampTone]};color:${STAMP_COLOR[p.stampTone]};background:${STAMP_COLOR[p.stampTone]}0f">${esc(p.stampLabel)}</div>`;
+  $("#verdict").querySelector("h2").innerHTML=p.verdictHead;
+  $("#verdict").querySelector("p").textContent=p.verdictBody;
+}
+
 /* ---- gate ladder ---- */
-const GST={pass:["g-pass","Passed"],fail:["g-fail","Failed"],warn:["g-warn","Warnings"],block:["g-block","Blocked"]};
 function renderLadder(){
-  $("#ladder").innerHTML=GATES.map(g=>{const s=GST[g.status],on=state.gate===g.id,pass=g.total-g.fail;
+  if(state.view==="portfolio"){$("#ladder").style.display="none";$("#ladder").innerHTML="";return;}
+  $("#ladder").style.display="";
+  const p=cur();
+  $("#ladder").innerHTML=p.gates.map(g=>{const s=GST[g.status],on=state.gate===g.id,pass=g.total-g.fail;
     return `<button class="gate ${s[0]}" data-gate="${g.id}" aria-pressed="${on}">
       <span class="bar"></span><span class="chev">${on?"◉":"○"}</span>
-      <div class="seq">GATE ${g.seq}</div><div class="gn">${g.name}</div>
+      <div class="seq">TEST GATE ${g.seq}</div><div class="gn">${g.name}</div>
       <div class="st">${s[1]}</div>
-      <div class="meta">${pass.toLocaleString()} pass · ${g.fail} fail</div>
+      <div class="meta">${g.total?pass.toLocaleString()+" pass · "+g.fail+" fail":"not started"}</div>
       <div class="meta">${g.dur}</div></button>`;}).join("");
 }
 
 /* ---- KPIs ---- */
 function renderKpis(){
-  const fixProposed=FAILURES.filter(f=>f.state==="fix proposed").length;
+  if(state.view==="portfolio"){
+    const blocked=PROJECT_ORDER.filter(c=>PROJECTS[c].stampTone==="fail").length;
+    const atrisk=PROJECT_ORDER.filter(c=>PROJECTS[c].stampTone==="warn").length;
+    const ontrack=PROJECT_ORDER.filter(c=>PROJECTS[c].stampTone==="pass"||PROJECTS[c].stampTone==="live").length;
+    const totFail=PROJECT_ORDER.reduce((a,c)=>a+PROJECTS[c].gates.reduce((x,g)=>x+g.fail,0),0);
+    const avgQc=PROJECT_ORDER.reduce((a,c)=>a+PROJECTS[c].qc.qcPass,0)/PROJECT_ORDER.length;
+    const k=[
+      ["Projects monitored",String(PROJECT_ORDER.length),"across the delivery fleet","var(--run)","runc",""],
+      ["Blocked",String(blocked),"awaiting human approval","var(--fail)","failc",""],
+      ["At risk",String(atrisk),"open defects, not yet blocking","var(--warn)","warnc",""],
+      ["On track / live",String(ontrack),"clear to promote or in hypercare","var(--pass)","passc",""],
+      ["Open defects","total "+totFail,"root-cause items, all projects","var(--agent)","tealc",""],
+      ["Avg QC pass",avgQc.toFixed(1)+"%","vs 94.0% manual baseline","var(--gold)","gold","PORTFOLIO"],
+    ];
+    $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap])=>
+      `<div class="kpi" style="--accent:${acc}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+    return;
+  }
+  const p=cur();
+  const totCases=p.gates.reduce((a,g)=>a+g.total,0);
+  const totFail=p.gates.reduce((a,g)=>a+g.fail,0);
+  const passRate=totCases?(totCases-totFail)/totCases*100:100;
+  const fixProposed=p.failures.filter(f=>f.state==="fix proposed").length;
+  const investigating=p.failures.filter(f=>f.state==="investigating").length;
+  const needsDecision=p.failures.filter(f=>f.state==="needs decision").length;
+  const verdictWord=p.stampTone==="fail"?"BLOCKED":p.stampTone==="warn"?"AT RISK":p.stampTone==="live"?"LIVE":"ON TRACK";
   const k=[
-    ["Release verdict","BLOCKED","at Component gate","var(--fail)","failc",""],
-    ["Cases executed",totCases.toLocaleString(),"across 6 gates","var(--run)","runc",""],
-    ["Case pass rate",passRate.toFixed(2)+"%",totFail+" failed → 9 items","var(--pass)","passc",""],
-    ["Agent fixes",fixProposed+" proposed","2 investigating · 2 to humans","var(--agent)","tealc",""],
-    ["QC pass",PROJECT.qcPass.toFixed(1)+"%","agent output · base "+PROJECT.manualBase.toFixed(0)+"%","var(--gold)","gold","PORTFOLIO"],
-    ["Human override",PROJECT.override.toFixed(1)+"%",PROJECT.overridden+" of "+PROJECT.artifacts.toLocaleString()+" artifacts","var(--gold)","gold","PORTFOLIO"],
+    ["Release verdict",verdictWord,p.stampLabel,STAMP_COLOR[p.stampTone],STAMP_TAG[p.stampTone].replace("t-","")+"c",""],
+    ["Cases executed",totCases.toLocaleString(),"across 6 test gates","var(--run)","runc",""],
+    ["Case pass rate",passRate.toFixed(2)+"%",totFail+" failed → "+p.failures.length+" items","var(--pass)","passc",""],
+    ["Agent fixes",fixProposed+" proposed",investigating+" investigating · "+needsDecision+" to humans","var(--agent)","tealc",""],
+    ["QC pass",p.qc.qcPass.toFixed(1)+"%","agent output · base "+p.qc.manualBase.toFixed(0)+"%","var(--gold)","gold","PORTFOLIO"],
+    ["Human override",p.qc.override.toFixed(1)+"%",p.qc.overridden+" of "+p.qc.artifacts.toLocaleString()+" artifacts","var(--gold)","gold","PORTFOLIO"],
   ];
   $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap])=>
     `<div class="kpi" style="--accent:${acc}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
@@ -389,39 +746,47 @@ function renderKpis(){
 
 /* ---- filter chip ---- */
 function renderChip(){
-  $("#filterchip").innerHTML = state.gate
-    ? `<div class="filterchip">Filtered to <b style="color:var(--ink);margin:0 2px">${GATES.find(g=>g.id===state.gate).name}</b> gate <button id="clearf" aria-label="Clear filter">×</button></div>` : "";
+  if(state.view==="portfolio"||!state.gate){$("#filterchip").innerHTML="";return;}
+  const p=cur();
+  $("#filterchip").innerHTML=`<div class="filterchip">Filtered to <b style="color:var(--ink);margin:0 2px">${p.gates.find(g=>g.id===state.gate).name}</b> test gate <button id="clearf" aria-label="Clear filter">×</button></div>`;
 }
 
-/* ---- panes ---- */
-function paneOverview(){
-  const byOwner={};FAILURES.forEach(f=>{const o=f.owner==="Human"?"Human decision":f.owner;byOwner[o]=(byOwner[o]||0)+1;});
+/* ---- panes (project view) ---- */
+function paneOverview(p){
+  const gateFilter=state.gate;
+  const failuresInScope=gateFilter?p.failures.filter(f=>f.gate===gateFilter):p.failures;
+  const byOwner={};failuresInScope.forEach(f=>{const o=f.owner==="Human"?"Human decision":f.owner;byOwner[o]=(byOwner[o]||0)+1;});
+  const maxOwner=Math.max(1,...Object.values(byOwner));
   const ownerRows=Object.entries(byOwner).sort((a,b)=>b[1]-a[1]).map(([o,n])=>{
     const isHuman=o==="Human decision";
     return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px">
       <div style="flex:1;color:var(--ink-2)">${esc(o)}</div>
-      <div class="bar-mini" style="width:120px"><i style="width:${n/9*100}%;background:${isHuman?'var(--warn)':'var(--agent)'}"></i></div>
-      <div class="num" style="width:18px;text-align:right">${n}</div></div>`;}).join("");
+      <div class="bar-mini" style="width:120px"><i style="width:${n/maxOwner*100}%;background:${isHuman?'var(--warn)':'var(--agent)'}"></i></div>
+      <div class="num" style="width:18px;text-align:right">${n}</div></div>`;}).join("")
+    || `<div class="muted" style="font-size:12px">No failures in scope.</div>`;
+  const gateRows=(gateFilter?p.gates.filter(g=>g.id===gateFilter):p.gates).map(g=>{const s=GST[g.status];return `<tr class="clickable" data-gate="${g.id}"><td><b>${g.name}</b> <span class="muted mono" style="font-size:10px">${g.seq}</span></td><td class="r num">${g.total.toLocaleString()}</td><td class="r num passc">${(g.total-g.fail).toLocaleString()}</td><td class="r num ${g.fail?'failc':'muted'}">${g.fail}</td><td class="r num muted">${g.skip}</td><td class="r num muted">${g.dur}</td><td class="r"><span class="tag ${g.status==='pass'?'t-pass':g.status==='fail'?'t-fail':g.status==='warn'?'t-warn':g.status==='block'?'t-block':'t-pending'}">${s[1]}</span></td></tr>`;}).join("");
+  const totCases=p.gates.reduce((a,g)=>a+g.total,0),totFail=p.gates.reduce((a,g)=>a+g.fail,0);
   return `<div class="grid2b">
-    <div class="panel rollup"><div class="panel-hd"><h3>Quality roll-up → portfolio</h3><span class="slo">what AOE Optimization reports at portfolio level</span></div>
+    <div class="panel rollup"><div class="panel-hd"><h3>Quality roll-up → portfolio</h3><span class="slo">what ${esc(p.name)} reports at portfolio level</span></div>
       <div class="rollup-grid">
-        <div class="rollup-c"><small>QC PASS RATE</small><b class="num passc">${PROJECT.qcPass.toFixed(1)}%</b><div class="sub passc">${(PROJECT.qcPass-PROJECT.manualBase).toFixed(1)} pts above manual</div></div>
-        <div class="rollup-c"><small>HUMAN OVERRIDE</small><b class="num gold">${PROJECT.override.toFixed(1)}%</b><div class="sub muted">${PROJECT.overridden} of ${PROJECT.artifacts.toLocaleString()} sent back</div></div>
-        <div class="rollup-c"><small>ESCAPED DEFECTS</small><b class="num tealc">${PROJECT.escape.toFixed(2)}</b><div class="sub muted">per 1k LOC</div></div>
+        <div class="rollup-c"><small>QC PASS RATE</small><b class="num passc">${p.qc.qcPass.toFixed(1)}%</b><div class="sub passc">${(p.qc.qcPass-p.qc.manualBase).toFixed(1)} pts above manual</div></div>
+        <div class="rollup-c"><small>HUMAN OVERRIDE</small><b class="num gold">${p.qc.override.toFixed(1)}%</b><div class="sub muted">${p.qc.overridden} of ${p.qc.artifacts.toLocaleString()} sent back</div></div>
+        <div class="rollup-c"><small>ESCAPED DEFECTS</small><b class="num tealc">${p.qc.escape.toFixed(2)}</b><div class="sub muted">per 1k LOC</div></div>
       </div>
       <div class="foot">These three numbers are computed here, from this release's evidence, and flow straight into the portfolio console's <b>Output Quality</b> tab. The saving story upstairs is only credible because this layer holds the line: agents move fast, humans still approve every change, and quality stays above the manual baseline.</div></div>
-    <div class="panel"><div class="panel-hd"><h3>Failures by owner</h3><span class="slo">9 root-cause items</span></div>
+    <div class="panel"><div class="panel-hd"><h3>Failures by owner${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name+" test gate":""}</h3><span class="slo">${failuresInScope.length} root-cause item${failuresInScope.length===1?"":"s"}</span></div>
       <div style="padding:15px">${ownerRows}
-      <div class="foot" style="border-top:1px solid var(--hair);margin-top:6px;padding:11px 0 0">Seven of nine sit with agents; two need a human scope call. Every agent fix is a pull request a human must approve — the review &amp; governance overlay costed on the portfolio.</div></div></div>
+      <div class="foot" style="border-top:1px solid var(--hair);margin-top:6px;padding:11px 0 0">Every agent fix is a pull request a human must approve — the review &amp; governance overlay costed on the portfolio.</div></div></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd"><h3>Gate summary</h3><span class="slo">promotion blocked until Component, SIT, Performance and Security clear</span></div>
-    <table><thead><tr><th>Gate</th><th class="r">Executed</th><th class="r">Passed</th><th class="r">Failed</th><th class="r">Skipped</th><th class="r">Duration</th><th class="r">Status</th></tr></thead>
-    <tbody>${GATES.map(g=>{const s=GST[g.status];return `<tr class="clickable" data-gate="${g.id}"><td><b>${g.name}</b> <span class="muted mono" style="font-size:10px">${g.seq}</span></td><td class="r num">${g.total.toLocaleString()}</td><td class="r num passc">${(g.total-g.fail).toLocaleString()}</td><td class="r num ${g.fail?'failc':'muted'}">${g.fail}</td><td class="r num muted">${g.skip}</td><td class="r num muted">${g.dur}</td><td class="r"><span class="tag t-${g.status==='pass'?'pass':g.status==='fail'?'fail':g.status==='warn'?'warn':'block'}">${s[1]}</span></td></tr>`;}).join("")}</tbody>
-    <tfoot class="tfoot"><tr><td>Release</td><td class="r num">${totCases.toLocaleString()}</td><td class="r num">${(totCases-totFail).toLocaleString()}</td><td class="r num failc">${totFail}</td><td class="r num">—</td><td class="r num">—</td><td class="r"><span class="tag t-fail">Blocked</span></td></tr></tfoot></table></div>`;
+  <div class="panel mt14"><div class="panel-hd"><h3>Test gate summary${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name:""}</h3><span class="slo">promotion blocked until every required test gate clears</span></div>
+    <table><thead><tr><th>Test Gate</th><th class="r">Executed</th><th class="r">Passed</th><th class="r">Failed</th><th class="r">Skipped</th><th class="r">Duration</th><th class="r">Status</th></tr></thead>
+    <tbody>${gateRows}</tbody>
+    ${gateFilter?"":`<tfoot class="tfoot"><tr><td>Release</td><td class="r num">${totCases.toLocaleString()}</td><td class="r num">${(totCases-totFail).toLocaleString()}</td><td class="r num failc">${totFail}</td><td class="r num">—</td><td class="r num">—</td><td class="r"><span class="tag ${STAMP_TAG[p.stampTone]}">${p.stampLabel.split(" · ")[0]}</span></td></tr></tfoot>`}</table></div>`;
 }
-function paneSuites(){
-  const list=SUITES.filter(s=>!state.gate||s.gate===state.gate);
-  return `<div class="panel"><div class="panel-hd"><h3>Test suites${state.gate?" · "+GATES.find(g=>g.id===state.gate).name+" gate":""}</h3><span class="slo">${list.length} suites · select a row to expand</span></div>
+function paneSuites(p){
+  const list=p.suites.filter(s=>!state.gate||s.gate===state.gate);
+  if(!list.length) return `<div class="panel"><div class="empty">No test suites ${state.gate?"in the "+p.gates.find(g=>g.id===state.gate).name+" test gate":"recorded"} yet.</div></div>`;
+  return `<div class="panel"><div class="panel-hd"><h3>Test suites${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} suites · select a row to expand</span></div>
     <div>${list.map((s,i)=>`<div class="suite" data-suite="${i}">
       <div class="suite-hd"><span class="caret">▶</span><span class="nm">${esc(s.name)}</span>
         <span class="ct">${s.total.toLocaleString()} cases</span>
@@ -429,34 +794,103 @@ function paneSuites(){
         <span class="ct">${s.dur}</span></div>
       <div class="suite-ch">${s.ch.map(([n,t,f])=>`<div class="child"><span>${esc(n)}</span><span class="num">${t} cases · <span class="${f?'failc':'passc'}">${f?f+" failed":"pass"}</span></span></div>`).join("")}</div></div>`).join("")}</div></div>`;
 }
-function paneLatency(){
+function paneLatency(p){
   const {key,dir}=state.sort;
-  const rows=[...SERVICES].sort((a,b)=>(a[key]-b[key])*dir).map(s=>{const breach=s.p99>s.slo;
+  const services=p.services.filter(s=>!state.gate||s.gate===state.gate);
+  if(!services.length) return `<div class="panel"><div class="empty">No services under test${state.gate?" in the "+p.gates.find(g=>g.id===state.gate).name+" test gate":""} yet.</div></div>`;
+  const breaches=services.filter(s=>s.p99>s.slo).length;
+  const rows=[...services].sort((a,b)=>(a[key]-b[key])*dir).map(s=>{const breach=s.p99>s.slo;
     return `<tr><td class="mono">${esc(s.name)}</td><td class="r num">${s.p50}</td><td class="r num">${s.p95}</td>
       <td class="r num ${breach?'failc':''}">${s.p99}</td><td class="r num muted">${s.slo}</td>
       <td class="r num ${s.err>0.1?'failc':s.err>0?'warnc':'muted'}">${s.err.toFixed(2)}%</td>
       <td class="r">${spark(s.spark,s.slo)}</td>
       <td class="r"><span class="tag ${breach?'t-fail':'t-pass'}">${breach?'SLO breach':'within SLO'}</span></td></tr>`;}).join("");
   const th=(k,l)=>`<th class="r sortable" data-sort="${k}">${l}${key===k?(dir<0?" ↓":" ↑"):""}</th>`;
-  return `<div class="panel"><div class="panel-hd"><h3>Service latency under test</h3><span class="slo">${breaches} of ${SERVICES.length} services breaching p99 SLO · ms</span></div>
+  return `<div class="panel"><div class="panel-hd"><h3>Service latency under test${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${breaches} of ${services.length} services breaching p99 SLO · ms</span></div>
     <table><thead><tr><th>Service</th>${th("p50","p50")}${th("p95","p95")}${th("p99","p99")}<th class="r">SLO</th>${th("err","Error")}<th class="r">Trend</th><th class="r">Status</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="foot">The <b>murex-trade-adapter</b> p99 breach (611ms vs 500ms) is the upstream cause of failure F-4418; the <b>fx-quote-router</b> breach drives F-4433. The Refactoring &amp; Performance Agent has a fix benchmarked for the router; the adapter regression is still under investigation.</div></div>`;
+    <div class="foot">Services are tagged to the test gate that exercises them, so filtering by gate above narrows this list too.</div></div>`;
 }
-function paneFailures(){
-  const list=FAILURES.filter(f=>!state.gate||f.gate===state.gate);
-  if(!list.length) return `<div class="panel"><div style="padding:26px;text-align:center;color:var(--ink-3)">No failures in the ${GATES.find(g=>g.id===state.gate).name} gate. Clear the filter to see the others.</div></div>`;
-  return `<div class="panel"><div class="panel-hd"><h3>Failures${state.gate?" · "+GATES.find(g=>g.id===state.gate).name+" gate":""}</h3><span class="slo">${list.length} items · select one for the agent's triage</span></div>
+function paneFailures(p){
+  const list=p.failures.filter(f=>!state.gate||f.gate===state.gate);
+  if(!list.length){
+    const msg=state.gate?`No failures in the ${p.gates.find(g=>g.id===state.gate).name} test gate. Clear the filter to see the others.`:"No open failures on this release.";
+    return `<div class="panel"><div class="empty">${msg}</div></div>`;
+  }
+  return `<div class="panel"><div class="panel-hd"><h3>Failures${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} items · select one for the agent's triage</span></div>
     <table><thead><tr><th>ID</th><th>Test</th><th>Owner</th><th class="r">State</th></tr></thead>
     <tbody>${list.map(f=>{const cls=f.state==="fix proposed"?"t-agent":f.state==="investigating"?"t-run":"t-warn";
       return `<tr class="clickable" data-fail="${f.id}"><td class="mono">${f.id}</td><td><div style="font-weight:600">${esc(f.test)}</div><div class="muted" style="font-size:10.5px">${esc(f.suite)}</div></td><td style="font-size:11.5px">${esc(f.owner)}</td><td class="r"><span class="tag ${cls}">${f.state}</span></td></tr>`;}).join("")}</tbody></table></div>`;
 }
-function paneAgents(){
+function paneAgents(p){
+  const agents=buildAgents(p);
   return `<div class="panel"><div class="panel-hd"><h3>Assurance agents on this release</h3><span class="slo">a subset of the 20-agent delivery fleet, scoped to test &amp; release</span></div>
-    <div class="agrid">${AGENTS.map(a=>`<div class="acard" data-agent="${esc(a.name)}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
-    <div class="foot">These are the same named agents that appear on the portfolio console's fleet — here you see them working one release. The Debug &amp; Remediation, Refactoring &amp; Performance and Security &amp; Vulnerability agents propose changes; a human approves every pull request before it merges.</div></div>`;
+    <div class="agrid">${agents.map(a=>`<div class="acard" data-agent="${esc(a.name)}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
+    <div class="foot">These are the same named agents that appear on the portfolio console's fleet — here you see them working ${esc(p.name)}. The Debug &amp; Remediation, Refactoring &amp; Performance and Security &amp; Vulnerability agents propose changes; a human approves every pull request before it merges.</div></div>`;
+}
+function buildAgents(p){
+  const byState=st=>p.failures.filter(f=>f.state===st).length;
+  const fixProposed=byState("fix proposed"), investigating=byState("investigating"), needsDecision=byState("needs decision");
+  const totCases=p.gates.reduce((a,g)=>a+g.total,0);
+  const lastGate=[...p.gates].reverse().find(g=>g.total>0)||p.gates[0];
+  const perfGate=p.gates.find(g=>g.id==="perf"), secGate=p.gates.find(g=>g.id==="sec");
+  return [
+    {name:"Test Script Agent",runs:Math.max(40,Math.round(totCases*0.02))+" cases authored",last:"08:14 SGT",state:p.pct<100?"running":"idle",out:`Authoring and maintaining the ${esc(p.name)} regression pack from Jira stories and NFRs.`},
+    {name:"Test Data Agent",runs:Math.round(p.qc.artifacts*0.6)+" artifacts masked",last:"08:41 SGT",state:"idle",out:`Provisioned masked test data for ${esc(p.env)}, within MAS data-handling rules.`},
+    {name:"Test Execution Agent",runs:totCases.toLocaleString()+" executed",last:"11:02 SGT",state:"running",out:`Executing the ${esc(lastGate.name)} test gate pack against ${esc(p.env)}.`},
+    {name:"Debug & Remediation Agent",runs:fixProposed+" fixes proposed",last:"11:19 SGT",state:(fixProposed+investigating)?"running":"idle",out:`${fixProposed} pull request${fixProposed===1?"":"s"} open, ${investigating} failure${investigating===1?"":"s"} still under investigation, ${needsDecision} escalated to humans for a scope decision.`},
+    {name:"Refactoring & Performance Agent",runs:p.failures.filter(f=>f.owner==="Refactoring & Performance Agent").length+" hotspots found",last:"10:47 SGT",state:perfGate.total?"running":"idle",out:perfGate.fail?`Profiling the ${esc(p.name)} performance test gate; fix proposed for the current SLO breach.`:`No open performance regressions on ${esc(p.name)} right now.`},
+    {name:"Security & Vulnerability Agent",runs:secGate.total+" checks",last:"09:58 SGT",state:secGate.fail?"running":"idle",out:secGate.fail?`${secGate.fail} advisory item${secGate.fail===1?"":"s"} open · fix pinned and verified against regression.`:"No open security advisories on this release."},
+    {name:"Test Reporting Agent",runs:"this console",last:"11:20 SGT",state:"running",out:`Compiling the ${esc(p.name)} gate verdict and the QC roll-up that feeds the portfolio Output Quality tab.`},
+    {name:"Compliance & Evidence Agent",runs:"evidence pack",last:"11:20 SGT",state:p.stampTone==="fail"||p.stampTone==="warn"?"block":"idle",out:p.stampTone==="live"?`Evidence pack sealed; ${esc(p.name)} is in production hypercare.`:`Waiting on the remaining test gates to clear before the ${esc(p.name)} CAB evidence pack can be sealed.`},
+  ];
 }
 const PANES={overview:paneOverview,suites:paneSuites,latency:paneLatency,failures:paneFailures,agents:paneAgents};
-function render(){renderChip();$("#pane").innerHTML=PANES[state.tab]();document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));}
+
+/* ---- portfolio summary pane ---- */
+function panePortfolioSummary(){
+  const rows=PROJECT_ORDER.map(code=>{
+    const p=PROJECTS[code];
+    const pills=p.gates.map(g=>{const s=GST[g.status];return `<span class="gpill ${s[0]}" title="${esc(g.name)} test gate · ${s[1]}">${g.seq}</span>`;}).join("");
+    const totFail=p.gates.reduce((a,g)=>a+g.fail,0);
+    return `<tr class="clickable" data-viewproject="${code}">
+      <td><div style="font-weight:600">${esc(p.name)}</div><div class="muted mono" style="font-size:10px">${p.code} · ${esc(p.lead)}</div></td>
+      <td><span style="font-size:10px;color:var(--ink-2)">${p.phase} · ${p.pct}%</span></td>
+      <td class="gpills">${pills}</td>
+      <td class="r num ${totFail?'failc':'passc'}">${totFail}</td>
+      <td class="r num">${p.qc.qcPass.toFixed(1)}%</td>
+      <td class="r"><span class="tag ${STAMP_TAG[p.stampTone]}">${esc(p.stampLabel)}</span></td>
+      <td class="r"><button class="viewbtn" data-viewproject="${code}">View →</button></td>
+    </tr>`;
+  }).join("");
+  return `<div class="panel"><div class="panel-hd"><h3>All projects — test gate status</h3><span class="slo">click a project for its full release-assurance console</span></div>
+    <table><thead><tr><th>Project</th><th>Phase</th><th>Test gates (01–06)</th><th class="r">Open defects</th><th class="r">QC pass</th><th class="r">Verdict</th><th class="r"></th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="gpills-key"><span><span class="gpill g-pass">01</span>Passed</span><span><span class="gpill g-fail">•</span>Failed</span><span><span class="gpill g-warn">•</span>Warnings</span><span><span class="gpill g-block">•</span>Blocked</span><span><span class="gpill g-pending">•</span>Not started</span></div>
+    <div class="foot">Test gates, left to right: 01 Unit · 02 Component · 03 SIT · 04 UAT · 05 Performance · 06 Security. Every project runs the same six; a project that hasn't reached a gate yet shows it as "not started" rather than passed.</div></div>`;
+}
+
+/* ---- top-level render ---- */
+function render(){
+  renderChip();
+  if(state.view==="portfolio"){
+    $("#tabsbar").style.display="none";
+    $("#pane").innerHTML=panePortfolioSummary();
+  }else{
+    $("#tabsbar").style.display="";
+    const p=cur();
+    $("#pane").innerHTML=PANES[state.tab](p);
+    document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
+  }
+}
+function renderAll(){
+  renderProjectSelect();renderSidebar();renderCrumbVerdict();renderKpis();renderLadder();render();
+}
+function switchProject(codeOrPortfolio){
+  if(codeOrPortfolio==="PORTFOLIO"){state.view="portfolio";}
+  else{state.view="project";state.project=codeOrPortfolio;}
+  state.gate=null;state.tab="overview";
+  renderAll();
+}
 
 /* ---- drawer ---- */
 function openDrawer(eye,title,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
@@ -478,6 +912,7 @@ function agentDrawer(a){
 }
 
 /* ---- events ---- */
+$("#s-proj").addEventListener("change",e=>switchProject(e.target.value));
 document.addEventListener("click",e=>{
   const g=e.target.closest("[data-gate]");
   if(g){state.gate=state.gate===g.dataset.gate?null:g.dataset.gate;renderLadder();render();return;}
@@ -485,14 +920,15 @@ document.addEventListener("click",e=>{
   const tab=e.target.closest(".tab");if(tab){state.tab=tab.dataset.tab;render();return;}
   const su=e.target.closest("[data-suite]");if(su){su.classList.toggle("open");return;}
   const th=e.target.closest("[data-sort]");if(th){const k=th.dataset.sort;state.sort={key:k,dir:state.sort.key===k?-state.sort.dir:-1};render();return;}
-  const fl=e.target.closest("[data-fail]");if(fl){failDrawer(FAILURES.find(x=>x.id===fl.dataset.fail));return;}
-  const ag=e.target.closest("[data-agent]");if(ag){agentDrawer(AGENTS.find(x=>x.name===ag.dataset.agent));return;}
+  const fl=e.target.closest("[data-fail]");if(fl){failDrawer(cur().failures.find(x=>x.id===fl.dataset.fail));return;}
+  const ag=e.target.closest("[data-agent]");if(ag){agentDrawer(buildAgents(cur()).find(x=>x.name===ag.dataset.agent));return;}
+  const vp=e.target.closest("[data-viewproject]");if(vp){switchProject(vp.dataset.viewproject);return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim")closeDrawer();
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
 function tick(){$("#clock").textContent=new Date().toLocaleTimeString("en-GB",{hour12:false})+" SGT";}
 tick();setInterval(tick,1000);
-renderLadder();renderKpis();render();
+renderAll();
 </script>
 </body>
 </html>
