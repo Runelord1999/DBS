@@ -823,7 +823,7 @@ function paneFailures(p){
 }
 function paneAgents(p){
   const agents=buildAgents(p);
-  return `<div class="panel"><div class="panel-hd"><h3>Assurance agents on this release</h3><span class="slo">a subset of the 20-agent delivery fleet, scoped to test &amp; release</span></div>
+  return `<div class="panel"><div class="panel-hd"><h3>Assurance agents on this release</h3><span class="slo">a subset of the 40-agent delivery fleet, scoped to test &amp; release</span></div>
     <div class="agrid">${agents.map(a=>`<div class="acard" data-agent="${esc(a.name)}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
     <div class="foot">These are the same named agents that appear on the portfolio console's fleet — here you see them working ${esc(p.name)}. The Debug &amp; Remediation, Refactoring &amp; Performance and Security &amp; Vulnerability agents propose changes; a human approves every pull request before it merges.</div></div>`;
 }
@@ -908,7 +908,7 @@ function agentDrawer(a){
   openDrawer("Agent",a.name,
     `<div class="dmeta"><span class="kv">State <b>${a.state==='running'?'Running':a.state==='block'?'Blocked':'Idle'}</b></span><span class="kv">Activity <b>${esc(a.runs)}</b></span><span class="kv">Last <b>${a.last}</b></span></div>
      <div class="block"><div class="lbl">Current output</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.6">${esc(a.out)}</div></div>
-     <div class="foot" style="border:0;padding:0">Part of the 20-agent delivery fleet shown on the portfolio console. On this release it works the assurance stage of the lifecycle; its output rolls up into the release verdict above.</div>`);
+     <div class="foot" style="border:0;padding:0">Part of the 40-agent delivery fleet shown on the portfolio console. On this release it works the assurance stage of the lifecycle; its output rolls up into the release verdict above.</div>`);
 }
 
 /* ---- events ---- */
