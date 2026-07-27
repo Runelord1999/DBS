@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Delivery Ops — Release Assurance (AOE Optimization)</title>
+<style>
+:root{
+  --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
+  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F;
+  --pass:#2FD39A; --fail:#FF5470; --warn:#F5B23C; --run:#5B8CFF;
+  --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --cyan:#38D6F0;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
+  --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:
+  radial-gradient(1200px 600px at 80% -10%,rgba(0,214,190,.06),transparent 60%),
+  radial-gradient(900px 500px at -5% 10%,rgba(91,140,255,.06),transparent 55%),
+  var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px;border-radius:3px}
+
+.shell{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
+.rail{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.6));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--agent),var(--run));display:grid;place-items:center;color:#06131A;font-weight:800;font-size:11px;box-shadow:0 4px 14px rgba(0,214,190,.35)}
+.brand h1{font-size:13px;margin:0;font-weight:700;letter-spacing:-.01em}
+.brand p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3)}
+.field{display:block;margin-bottom:10px}
+.field span{display:block;margin-bottom:5px}
+select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:var(--ink);padding:7px 8px;border-radius:6px;font-size:12px;font-family:var(--mono)}
+.railcard{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:11px 12px}
+.railcard .eyebrow{margin-bottom:7px}
+.rrow{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px;color:var(--ink-2)}
+.rrow:last-child{margin-bottom:0}
+.rrow b{color:var(--ink);font-weight:600}
+.live{color:var(--pass);font-size:11.5px;display:flex;align-items:center}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--pass);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.mininote{font-size:10.5px;color:var(--ink-3);line-height:1.55;margin-top:auto;border-top:1px solid var(--hair);padding-top:12px}
+.mininote b{color:var(--agent)}
+
+.main{padding:20px 26px 44px;min-width:0}
+.crumb{font-size:11px;color:var(--ink-3);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crumb b{color:var(--ink-2);font-weight:600}
+.crumb .sep{color:var(--hair)}
+.verdict{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:16px}
+.verdict h2{margin:3px 0 6px;font-size:23px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
+.verdict h2 em{font-style:normal;color:var(--fail)}
+.verdict p{margin:0;color:var(--ink-2);font-size:12.5px;max-width:76ch}
+.stamp{border:1px solid var(--fail);color:var(--fail);padding:8px 14px;border-radius:8px;font-size:11px;letter-spacing:.13em;text-transform:uppercase;font-weight:700;white-space:nowrap;background:rgba(255,84,112,.06)}
+
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:18px}
+.kpi{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.55));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
+.kpi .cap{position:absolute;right:11px;top:11px;font-size:9px;font-weight:700;letter-spacing:.04em}
+.kpi b{display:block;font-size:20px;font-weight:750;margin-top:6px}
+.kpi small{display:block;color:var(--ink-3);font-size:10px;margin-top:2px}
+.gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
+.port-tag{background:rgba(241,193,75,.14);color:var(--gold);font-size:8.5px;padding:1.5px 6px;border-radius:9px;letter-spacing:.05em;font-weight:700}
+
+.ladder{display:flex;gap:5px;margin-bottom:20px}
+.gate{flex:1;min-width:0;background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.5));border:1px solid var(--hair);border-radius:9px;padding:11px 12px;text-align:left;position:relative;overflow:hidden;transition:border-color .15s,transform .12s;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.gate{transition:none}}
+.gate:hover{transform:translateY(-2px)}
+.gate[aria-pressed="true"]{border-color:var(--agent)}
+.gate .bar{position:absolute;left:0;top:0;height:100%;width:4px}
+.g-pass .bar{background:var(--pass)}.g-fail .bar{background:var(--fail)}.g-warn .bar{background:var(--warn)}.g-block .bar{background:var(--violet)}
+.gate .seq{font-size:9px;color:var(--ink-3);font-family:var(--mono)}
+.gate .gn{font-size:12.5px;font-weight:700;margin:3px 0 8px;padding-left:2px}
+.gate .st{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.g-pass .st{color:var(--pass)}.g-fail .st{color:var(--fail)}.g-warn .st{color:var(--warn)}.g-block .st{color:var(--violet)}
+.gate .meta{font-size:10px;color:var(--ink-3);margin-top:7px;font-family:var(--mono)}
+.gate .chev{position:absolute;right:8px;top:10px;color:var(--ink-3);font-size:12px}
+
+.tabs{display:flex;gap:3px;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--ink-2)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agent)}
+.filterchip{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:20px;padding:4px 12px;margin-bottom:14px}
+.filterchip button{color:var(--ink-3);font-size:14px;line-height:1}
+
+.panel{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.5));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
+.panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.panel-hd h3{margin:0;font-size:13px;font-weight:700}
+.slo{font-size:10.5px;color:var(--ink-3)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--hair);white-space:nowrap}
+th.r,td.r{text-align:right}
+th.sortable{cursor:pointer}th.sortable:hover{color:var(--ink-2)}
+td{padding:11px 16px;border-bottom:1px solid rgba(38,51,83,.5);font-size:12.5px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--panel-2)}
+.mono{font-family:var(--mono)}
+.tag{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2.5px 7px;border-radius:4px;white-space:nowrap}
+.t-pass{background:rgba(47,211,154,.15);color:var(--pass)}
+.t-fail{background:rgba(255,84,112,.15);color:var(--fail)}
+.t-warn{background:rgba(245,178,60,.16);color:var(--warn)}
+.t-agent{background:rgba(0,214,190,.15);color:var(--agent)}
+.t-run{background:rgba(91,140,255,.16);color:var(--run)}
+.t-block{background:rgba(155,135,216,.16);color:var(--violet)}
+.muted{color:var(--ink-3)}
+.foot{padding:11px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--ink-3);line-height:1.55}
+.foot b{color:var(--gold)}
+.tfoot td{font-weight:700;color:var(--ink);background:var(--panel-2);border-top:1px solid var(--hair)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid2b{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+.mt14{margin-top:14px}
+.bar-mini{height:5px;border-radius:3px;background:var(--hair);overflow:hidden;min-width:64px;display:inline-block;vertical-align:middle}
+.bar-mini i{display:block;height:100%;border-radius:3px}
+
+/* roll-up to portfolio panel */
+.rollup{border:1px solid rgba(241,193,75,.35);background:linear-gradient(180deg,rgba(241,193,75,.05),transparent)}
+.rollup .panel-hd{border-bottom-color:rgba(241,193,75,.25)}
+.rollup-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px}
+.rollup-c{text-align:center}
+.rollup-c b{display:block;font-size:26px;font-weight:750}
+.rollup-c small{color:var(--ink-3);font-size:10px}
+.rollup-c .sub{font-size:10px;color:var(--ink-2);margin-top:3px}
+
+/* suites */
+.suite{border-bottom:1px solid rgba(38,51,83,.5)}
+.suite:last-child{border-bottom:0}
+.suite-hd{display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer}
+.suite-hd:hover{background:var(--panel-2)}
+.suite-hd .nm{font-weight:600;font-size:12.5px;flex:1}
+.suite-hd .ct{font-size:11px;color:var(--ink-3);font-family:var(--mono)}
+.suite-ch{display:none;padding:2px 16px 12px 40px}
+.suite.open .suite-ch{display:block}
+.suite.open .caret{transform:rotate(90deg)}
+.caret{color:var(--ink-3);transition:transform .15s;font-size:11px}
+.child{display:flex;justify-content:space-between;font-size:11.5px;padding:5px 0;color:var(--ink-2);border-bottom:1px solid rgba(38,51,83,.35)}
+.child:last-child{border-bottom:0}
+
+/* sparkline */
+.spark{display:inline-block;vertical-align:middle}
+
+/* agents */
+.agrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:15px}
+.acard{border:1px solid var(--hair);border-radius:9px;padding:12px 14px;background:var(--panel-2);cursor:pointer}
+.acard:hover{border-color:var(--agent)}
+.acard .ah{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.acard .ah b{font-size:12.5px;font-weight:700}
+.acard .ao{font-size:11px;color:var(--ink-2);margin-top:5px;line-height:1.5}
+.acard .am{font-size:10px;color:var(--ink-3);margin-top:6px;font-family:var(--mono)}
+.statedot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.sd-run{background:var(--run)}.sd-idle{background:var(--ink-3)}.sd-block{background:var(--warn)}
+
+.scrim{position:fixed;inset:0;background:rgba(5,9,17,.66);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,96vw);background:var(--panel);border-left:1px solid var(--hair);transform:translateX(100%);transition:transform .22s ease;z-index:50;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+@media (prefers-reduced-motion:reduce){.scrim,.drawer{transition:none}}
+.drawer-hd{padding:16px 18px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.drawer-hd h3{margin:4px 0 0;font-size:15px;font-weight:700;line-height:1.3}
+.drawer-body{padding:18px;overflow:auto;flex:1}
+.close{font-size:20px;color:var(--ink-3);line-height:1;padding:2px 6px}.close:hover{color:var(--ink)}
+.dmeta{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 16px}
+.kv{font-size:11px;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:6px;padding:5px 9px}
+.kv b{color:var(--ink)}
+.block{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:12px 14px;margin-bottom:12px}
+.block .lbl{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:600}
+.code{font-family:var(--mono);font-size:11px;color:var(--ink-2);white-space:pre-wrap;line-height:1.55}
+.err{color:var(--fail)}
+
+@media (max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2,.grid2b{grid-template-columns:1fr}.agrid{grid-template-columns:1fr}.ladder{flex-wrap:wrap}.gate{flex:1 1 30%}}
+@media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis{grid-template-columns:repeat(2,1fr)}.rollup-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand"><div class="brand-mark">GFM</div>
+      <div><h1>Agent Delivery Ops</h1><p>Release Assurance</p></div></div>
+    <div>
+      <label class="field"><span class="eyebrow">Project</span>
+        <select id="s-proj">
+          <option>AOE Optimization</option><option>Digicrypto Phase X</option><option>Digimarkets Checks &amp; Controls</option>
+          <option>TAPI API for IDEAL</option><option>TAPI API for CC</option><option>Prime Real Time MTM</option></select></label>
+      <label class="field"><span class="eyebrow">Release</span>
+        <select id="s-rel"><option>r2026.07.2 (build increment)</option><option>r2026.06.4</option></select></label>
+      <label class="field"><span class="eyebrow">Environment</span>
+        <select id="s-env"><option>SIT-2 → UAT-1</option><option>DEV</option><option>Pre-prod</option></select></label>
+    </div>
+    <div class="railcard">
+      <div class="eyebrow">Test fleet</div>
+      <div class="live"><span class="dot"></span><span id="m-run">5</span> agents running</div>
+      <div class="rrow" style="margin-top:9px"><span>Latest run</span><b class="num">#4,182</b></div>
+      <div class="rrow"><span>Commit</span><b class="num">a91f4c7</b></div>
+      <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
+    </div>
+    <div class="mininote">This console is the assurance layer beneath one portfolio project. Its <b>QC roll-up</b> — pass rate, override, escaped defects — is exactly what AOE&nbsp;Optimization reports on the Output&nbsp;Quality tab of the portfolio console.</div>
+  </aside>
+
+  <main class="main">
+    <div class="crumb"><b>Agent Delivery Ops</b><span class="sep">›</span><b id="cb-proj">AOE Optimization</b> <span class="muted" id="cb-code">(AOE-OPT · FX Pricing Tribe)</span><span class="sep">›</span>Release r2026.07.2<span class="sep">›</span><span class="muted">62% built · Build phase</span></div>
+    <div class="verdict">
+      <div>
+        <div class="eyebrow">Release gate · promotion to UAT sign-off</div>
+        <h2>Release <em>blocked at the Component gate</em> — 5 agent fixes await human approval</h2>
+        <p>The test fleet ran 13,515 cases against commit a91f4c7. Twenty-three failed, resolving to nine root-cause items: agents have proposed fixes for five, are still investigating two, and have escalated two that need a human scope decision. No fix ships without a human approving the pull request.</p>
+      </div>
+      <div class="stamp" id="stamp">Blocked · CAB</div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="ladder" id="ladder" role="group" aria-label="Promotion gates — select a gate to filter"></div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button class="tab" role="tab" data-tab="suites" aria-selected="false">Test suites</button>
+      <button class="tab" role="tab" data-tab="latency" aria-selected="false">Service latency</button>
+      <button class="tab" role="tab" data-tab="failures" aria-selected="false">Failures</button>
+      <button class="tab" role="tab" data-tab="agents" aria-selected="false">Agents at work</button>
+    </div>
+    <div id="filterchip"></div>
+    <section id="pane"></section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detail">
+  <div class="drawer-hd"><div><div class="eyebrow" id="d-eye">Failure</div><h3 id="d-title">—</h3></div>
+    <button class="close" id="d-close" aria-label="Close">&times;</button></div>
+  <div class="drawer-body" id="d-body"></div>
+</aside>
+
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* project context — aligned to the portfolio console (AOE-OPT row) */
+const PROJECT={name:"AOE Optimization",code:"AOE-OPT",lead:"FX Pricing Tribe",pct:62,
+  qcPass:97.6, override:3.8, escape:0.11, manualBase:94.0, artifacts:1840, overridden:70};
+
+const GATES=[
+  {id:"unit", seq:"01", name:"Unit",        total:8412, fail:0,  skip:12, dur:"4m 11s",  status:"pass"},
+  {id:"comp", seq:"02", name:"Component",   total:3164, fail:6,  skip:9,  dur:"11m 02s", status:"fail"},
+  {id:"sit",  seq:"03", name:"SIT",         total:1287, fail:11, skip:14, dur:"38m 47s", status:"fail"},
+  {id:"uat",  seq:"04", name:"UAT",         total:342,  fail:3,  skip:6,  dur:"—",       status:"block"},
+  {id:"perf", seq:"05", name:"Performance", total:96,   fail:2,  skip:0,  dur:"22m 30s", status:"warn"},
+  {id:"sec",  seq:"06", name:"Security",    total:214,  fail:1,  skip:0,  dur:"6m 58s",  status:"fail"},
+];
+const totCases=GATES.reduce((a,g)=>a+g.total,0);
+const totFail=GATES.reduce((a,g)=>a+g.fail,0);
+const passRate=(totCases-totFail)/totCases*100;
+
+const SUITES=[
+  {gate:"unit",name:"Pricing kernel",total:2841,fail:0,dur:"1m 22s",ch:[["Volatility surface interpolation",914,0],["Discount curve bootstrap",702,0],["Day-count conventions",1225,0]]},
+  {gate:"unit",name:"Trade model",total:3105,fail:0,dur:"1m 40s",ch:[["FX spot / forward",1180,0],["NDF lifecycle",842,0],["Swap leg generation",1083,0]]},
+  {gate:"unit",name:"Reference data",total:2466,fail:0,dur:"1m 09s",ch:[["Currency pair master",981,0],["Holiday calendars",744,0],["Counterparty static",741,0]]},
+  {gate:"comp",name:"Quote router",total:1204,fail:4,dur:"4m 18s",ch:[["Venue failover",318,3],["Spread laddering",442,0],["Quote throttling",444,1]]},
+  {gate:"comp",name:"Murex trade adapter",total:1108,fail:2,dur:"3m 51s",ch:[["Booking message mapping",520,2],["Amend / cancel replay",588,0]]},
+  {gate:"comp",name:"Limit check",total:852,fail:0,dur:"2m 53s",ch:[["Pre-trade credit limit",430,0],["Notional cap",422,0]]},
+  {gate:"sit",name:"End-to-end trade capture",total:604,fail:7,dur:"18m 40s",ch:[["Sales quote to booking",244,4],["Downstream settlement feed",188,2],["Regulatory trade report",172,1]]},
+  {gate:"sit",name:"Upstream market data",total:397,fail:3,dur:"11m 15s",ch:[["Rate feed reconnect",201,3],["Stale tick suppression",196,0]]},
+  {gate:"sit",name:"Batch and EOD",total:286,fail:1,dur:"8m 52s",ch:[["EOD revaluation",158,1],["Position roll",128,0]]},
+  {gate:"uat",name:"Sales desk journeys",total:198,fail:2,dur:"—",ch:[["Request for quote",96,1],["Bulk order upload",102,1]]},
+  {gate:"uat",name:"Trading desk journeys",total:144,fail:1,dur:"—",ch:[["Risk blotter refresh",78,1],["Hedge allocation",66,0]]},
+  {gate:"perf",name:"Load and soak",total:96,fail:2,dur:"22m 30s",ch:[["2,000 quotes/sec sustained",48,1],["8-hour soak, memory drift",48,1]]},
+  {gate:"sec",name:"Static and dependency scan",total:214,fail:1,dur:"6m 58s",ch:[["SAST rules",142,0],["Dependency CVE scan",72,1]]},
+];
+const SERVICES=[
+  {name:"fx-quote-router",p50:9,p95:41,p99:118,slo:100,err:0.02,spark:[38,40,39,44,52,61,73,96,118]},
+  {name:"fx-pricing-engine",p50:14,p95:52,p99:88,slo:150,err:0.00,spark:[50,49,53,51,54,52,50,53,52]},
+  {name:"rates-curve-service",p50:22,p95:74,p99:131,slo:200,err:0.01,spark:[70,72,69,75,73,71,76,74,74]},
+  {name:"credit-deriv-valuation",p50:61,p95:214,p99:402,slo:300,err:0.09,spark:[180,192,205,214,236,268,310,366,402]},
+  {name:"eq-deriv-greeks",p50:44,p95:151,p99:238,slo:400,err:0.00,spark:[148,150,146,152,149,151,153,150,151]},
+  {name:"bond-pricing-api",p50:18,p95:63,p99:104,slo:250,err:0.00,spark:[60,62,61,64,63,62,65,63,63]},
+  {name:"murex-trade-adapter",p50:88,p95:340,p99:611,slo:500,err:0.31,spark:[290,305,318,340,388,441,502,566,611]},
+  {name:"limit-check-service",p50:6,p95:19,p99:34,slo:80,err:0.00,spark:[18,19,18,20,19,19,20,19,19]},
+  {name:"ref-data-service",p50:11,p95:38,p99:66,slo:120,err:0.00,spark:[36,37,38,37,39,38,38,39,38]},
+  {name:"trade-capture-gateway",p50:35,p95:129,p99:246,slo:250,err:0.04,spark:[120,124,127,129,138,152,181,214,246]},
+];
+const breaches=SERVICES.filter(s=>s.p99>s.slo).length;
+
+const FAILURES=[
+  {id:"F-4411",gate:"comp",suite:"Quote router / Venue failover",test:"routes to secondary venue within 250ms of primary timeout",
+   err:"AssertionError: expected failover latency <= 250ms, actual 611ms",
+   stack:"at VenueFailoverTest.routesToSecondary(VenueFailoverTest.java:88)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)\nat VenueHealthMonitor.markDown(VenueHealthMonitor.java:57)",
+   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
+   note:"Root cause is a fixed 500ms health-probe interval introduced in a91f4c7. Failover cannot beat the SLO while the probe is slower than the threshold. Proposed change reduces the probe to 100ms with jitter and adds a fast-fail on connection reset.",
+   pr:"PR #2841 · 1 file · +12 / −4 · awaiting human approval"},
+  {id:"F-4412",gate:"comp",suite:"Quote router / Venue failover",test:"does not re-route while primary is degraded but healthy",
+   err:"AssertionError: expected 0 re-routes, actual 3",
+   stack:"at VenueFailoverTest.noFlapping(VenueFailoverTest.java:131)\nat QuoteRouter.selectVenue(QuoteRouter.java:214)",
+   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,179",
+   note:"Same root cause as F-4411. The shorter probe interval alone would worsen flapping, so the proposed fix pairs it with a three-strike hysteresis window before a venue is marked down.",
+   pr:"PR #2841 · included in the same change"},
+  {id:"F-4413",gate:"comp",suite:"Murex trade adapter / Booking message mapping",test:"maps NDF fixing date to MXML field FIXDT",
+   err:"FieldMappingException: FIXDT absent for product NDF_ASIA",
+   stack:"at MxmlMapper.map(MxmlMapper.java:402)\nat BookingMessageMappingTest.ndfFixingDate(BookingMessageMappingTest.java:66)",
+   owner:"Human",state:"needs decision",first:"run #4,181",
+   note:"The mapping table has no entry for the new NDF_ASIA product code. This is a scope gap, not a defect — the Impact Assessment Agent flagged the missing product in the Confluence spec on 12 July and the story was deferred. A product owner must confirm whether NDF_ASIA is in scope for this release.",
+   pr:"No fix proposed — requires a scope decision"},
+  {id:"F-4418",gate:"sit",suite:"End-to-end trade capture / Sales quote to booking",test:"booking reference is returned to the sales blotter within 2s",
+   err:"TimeoutError: no booking reference after 5,000ms",
+   stack:"at TradeCaptureE2E.quoteToBooking(TradeCaptureE2E.java:174)\nat MurexAdapterClient.awaitBookingRef(MurexAdapterClient.java:91)",
+   owner:"Debug & Remediation Agent",state:"investigating",first:"run #4,180",
+   note:"Correlates with the murex-trade-adapter p99 breach (611ms against a 500ms SLO) on the same run. The agent is holding the fix until the latency regression is resolved, because the timeout is a symptom rather than the cause.",
+   pr:"Linked to L-0027 · latency regression"},
+  {id:"F-4421",gate:"sit",suite:"Upstream market data / Rate feed reconnect",test:"resubscribes to all pairs after a feed drop",
+   err:"AssertionError: expected 148 subscriptions, actual 141",
+   stack:"at RateFeedReconnectTest.resubscribeAll(RateFeedReconnectTest.java:59)\nat FeedSession.onReconnect(FeedSession.java:203)",
+   owner:"Debug & Remediation Agent",state:"fix proposed",first:"run #4,182",
+   note:"Seven pairs added to the reference data this week are held in a cache that is populated at start-up and never refreshed on reconnect. Proposed change rebuilds the subscription set from ref-data-service at reconnect time.",
+   pr:"PR #2844 · 2 files · +31 / −7 · awaiting human approval"},
+  {id:"F-4429",gate:"uat",suite:"Sales desk journeys / Request for quote",test:"quote expiry countdown matches the desk convention",
+   err:"Business rejection: countdown shows 30s, desk expects 15s for EM pairs",
+   stack:"Reported by business user during UAT session, 22 July 14:05 SGT",
+   owner:"Human",state:"needs decision",first:"UAT session 3",
+   note:"Not a code defect. The 30s default came from the approved spec; the EM desk applies a shorter convention that was never written down. The Requirements Discovery Agent has drafted the amendment and linked it to the original Confluence page for sponsor sign-off.",
+   pr:"Spec amendment drafted · awaiting sponsor sign-off"},
+  {id:"F-4433",gate:"perf",suite:"Load and soak / 2,000 quotes per second sustained",test:"p99 stays within the 100ms SLO at target load",
+   err:"SLO breach: fx-quote-router p99 = 118ms against a 100ms objective",
+   stack:"Sustained 2,000 quotes/sec for 30 minutes · breach began at minute 14",
+   owner:"Refactoring & Performance Agent",state:"fix proposed",first:"run #4,182",
+   note:"Profiling shows 61% of tail latency in synchronised access to the shared spread-ladder cache. Proposed change replaces the lock with a copy-on-write snapshot, measured at p99 = 44ms in the agent's local benchmark.",
+   pr:"PR #2846 · 3 files · +88 / −52 · awaiting human approval"},
+  {id:"F-4434",gate:"perf",suite:"Load and soak / 8-hour soak, memory drift",test:"heap returns to baseline after load is removed",
+   err:"Heap retained 1.8GB above baseline after a 20-minute cool-down",
+   stack:"Soak window 02:00–10:00 SGT · retained set grows ~230MB/hour",
+   owner:"Refactoring & Performance Agent",state:"investigating",first:"run #4,175",
+   note:"Retention is concentrated in cancelled quote objects held by an unbounded audit buffer. The agent is evaluating a bounded ring buffer against the regulatory requirement to retain quote audit history, which may make an in-memory fix unacceptable — the Compliance & Evidence Agent has been asked to confirm the retention rule.",
+   pr:"No fix proposed — control requirement under review"},
+  {id:"F-4440",gate:"sec",suite:"Static and dependency scan / Dependency CVE scan",test:"no dependency carries a high or critical advisory",
+   err:"CVE-2026-3118 · high · transitive dependency netty 4.1.106",
+   stack:"fx-quote-router → grpc-java 1.62.1 → netty 4.1.106",
+   owner:"Security & Vulnerability Agent",state:"fix proposed",first:"run #4,182",
+   note:"Advisory affects HTTP/2 header handling. The service is not directly exposed, so exploitability is rated low, but bank policy blocks promotion on any high advisory. Proposed change pins netty to 4.1.111 and the full regression suite passes against it.",
+   pr:"PR #2847 · 1 file · +1 / −1 · awaiting human approval"},
+];
+const AGENTS=[
+  {name:"Test Script Agent",runs:"312 cases authored",last:"08:14 SGT",state:"idle",out:"Generated 312 cases from 41 Jira stories and 18 NFRs supplied by the Requirements Discovery Agent."},
+  {name:"Test Data Agent",runs:"1.2M rows masked",last:"08:41 SGT",state:"idle",out:"Provisioned masked FX and credit test data for SIT-2, within MAS data-handling rules."},
+  {name:"Test Execution Agent",runs:"13,515 executed",last:"11:02 SGT",state:"running",out:"Executing the UAT regression pack against UAT-1; unit and component packs complete."},
+  {name:"Debug & Remediation Agent",runs:"5 fixes proposed",last:"11:19 SGT",state:"running",out:"Four pull requests open, two failures still under investigation, two escalated to humans for a scope decision."},
+  {name:"Refactoring & Performance Agent",runs:"2 hotspots found",last:"10:47 SGT",state:"running",out:"Lock contention in the spread-ladder cache; benchmarked p99 118ms → 44ms in a proposed change."},
+  {name:"Security & Vulnerability Agent",runs:"214 checks",last:"09:58 SGT",state:"idle",out:"One high advisory · CVE-2026-3118 · fix pinned to netty 4.1.111 and verified against regression."},
+  {name:"Test Reporting Agent",runs:"this console",last:"11:20 SGT",state:"running",out:"Compiling the gate verdict and the QC roll-up that feeds the portfolio Output Quality tab."},
+  {name:"Compliance & Evidence Agent",runs:"evidence pack v3",last:"11:20 SGT",state:"block",out:"Waiting on UAT sign-off before the CAB evidence pack can be sealed; reviewing the audit-buffer retention rule for F-4434."},
+];
+
+const state={gate:null,tab:"overview",sort:{key:"p99",dir:-1}};
+
+/* ---- sparkline ---- */
+function spark(vals,slo,w=90,h=22){
+  const max=Math.max(...vals,slo),min=Math.min(...vals);
+  const X=i=>i/(vals.length-1)*w, Y=v=>h-2-((v-min)/((max-min)||1))*(h-4);
+  const pts=vals.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
+  const breach=vals[vals.length-1]>slo;
+  const sloY=Y(slo).toFixed(1);
+  return `<svg class="spark" width="${w}" height="${h}"><line x1="0" y1="${sloY}" x2="${w}" y2="${sloY}" stroke="var(--hair)" stroke-dasharray="2 2"/><polyline points="${pts}" fill="none" stroke="${breach?'var(--fail)':'var(--pass)'}" stroke-width="1.5"/></svg>`;
+}
+
+/* ---- gate ladder ---- */
+const GST={pass:["g-pass","Passed"],fail:["g-fail","Failed"],warn:["g-warn","Warnings"],block:["g-block","Blocked"]};
+function renderLadder(){
+  $("#ladder").innerHTML=GATES.map(g=>{const s=GST[g.status],on=state.gate===g.id,pass=g.total-g.fail;
+    return `<button class="gate ${s[0]}" data-gate="${g.id}" aria-pressed="${on}">
+      <span class="bar"></span><span class="chev">${on?"◉":"○"}</span>
+      <div class="seq">GATE ${g.seq}</div><div class="gn">${g.name}</div>
+      <div class="st">${s[1]}</div>
+      <div class="meta">${pass.toLocaleString()} pass · ${g.fail} fail</div>
+      <div class="meta">${g.dur}</div></button>`;}).join("");
+}
+
+/* ---- KPIs ---- */
+function renderKpis(){
+  const fixProposed=FAILURES.filter(f=>f.state==="fix proposed").length;
+  const k=[
+    ["Release verdict","BLOCKED","at Component gate","var(--fail)","failc",""],
+    ["Cases executed",totCases.toLocaleString(),"across 6 gates","var(--run)","runc",""],
+    ["Case pass rate",passRate.toFixed(2)+"%",totFail+" failed → 9 items","var(--pass)","passc",""],
+    ["Agent fixes",fixProposed+" proposed","2 investigating · 2 to humans","var(--agent)","tealc",""],
+    ["QC pass",PROJECT.qcPass.toFixed(1)+"%","agent output · base "+PROJECT.manualBase.toFixed(0)+"%","var(--gold)","gold","PORTFOLIO"],
+    ["Human override",PROJECT.override.toFixed(1)+"%",PROJECT.overridden+" of "+PROJECT.artifacts.toLocaleString()+" artifacts","var(--gold)","gold","PORTFOLIO"],
+  ];
+  $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap])=>
+    `<div class="kpi" style="--accent:${acc}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+}
+
+/* ---- filter chip ---- */
+function renderChip(){
+  $("#filterchip").innerHTML = state.gate
+    ? `<div class="filterchip">Filtered to <b style="color:var(--ink);margin:0 2px">${GATES.find(g=>g.id===state.gate).name}</b> gate <button id="clearf" aria-label="Clear filter">×</button></div>` : "";
+}
+
+/* ---- panes ---- */
+function paneOverview(){
+  const byOwner={};FAILURES.forEach(f=>{const o=f.owner==="Human"?"Human decision":f.owner;byOwner[o]=(byOwner[o]||0)+1;});
+  const ownerRows=Object.entries(byOwner).sort((a,b)=>b[1]-a[1]).map(([o,n])=>{
+    const isHuman=o==="Human decision";
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px">
+      <div style="flex:1;color:var(--ink-2)">${esc(o)}</div>
+      <div class="bar-mini" style="width:120px"><i style="width:${n/9*100}%;background:${isHuman?'var(--warn)':'var(--agent)'}"></i></div>
+      <div class="num" style="width:18px;text-align:right">${n}</div></div>`;}).join("");
+  return `<div class="grid2b">
+    <div class="panel rollup"><div class="panel-hd"><h3>Quality roll-up → portfolio</h3><span class="slo">what AOE Optimization reports at portfolio level</span></div>
+      <div class="rollup-grid">
+        <div class="rollup-c"><small>QC PASS RATE</small><b class="num passc">${PROJECT.qcPass.toFixed(1)}%</b><div class="sub passc">${(PROJECT.qcPass-PROJECT.manualBase).toFixed(1)} pts above manual</div></div>
+        <div class="rollup-c"><small>HUMAN OVERRIDE</small><b class="num gold">${PROJECT.override.toFixed(1)}%</b><div class="sub muted">${PROJECT.overridden} of ${PROJECT.artifacts.toLocaleString()} sent back</div></div>
+        <div class="rollup-c"><small>ESCAPED DEFECTS</small><b class="num tealc">${PROJECT.escape.toFixed(2)}</b><div class="sub muted">per 1k LOC</div></div>
+      </div>
+      <div class="foot">These three numbers are computed here, from this release's evidence, and flow straight into the portfolio console's <b>Output Quality</b> tab. The saving story upstairs is only credible because this layer holds the line: agents move fast, humans still approve every change, and quality stays above the manual baseline.</div></div>
+    <div class="panel"><div class="panel-hd"><h3>Failures by owner</h3><span class="slo">9 root-cause items</span></div>
+      <div style="padding:15px">${ownerRows}
+      <div class="foot" style="border-top:1px solid var(--hair);margin-top:6px;padding:11px 0 0">Seven of nine sit with agents; two need a human scope call. Every agent fix is a pull request a human must approve — the review &amp; governance overlay costed on the portfolio.</div></div></div>
+  </div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Gate summary</h3><span class="slo">promotion blocked until Component, SIT, Performance and Security clear</span></div>
+    <table><thead><tr><th>Gate</th><th class="r">Executed</th><th class="r">Passed</th><th class="r">Failed</th><th class="r">Skipped</th><th class="r">Duration</th><th class="r">Status</th></tr></thead>
+    <tbody>${GATES.map(g=>{const s=GST[g.status];return `<tr class="clickable" data-gate="${g.id}"><td><b>${g.name}</b> <span class="muted mono" style="font-size:10px">${g.seq}</span></td><td class="r num">${g.total.toLocaleString()}</td><td class="r num passc">${(g.total-g.fail).toLocaleString()}</td><td class="r num ${g.fail?'failc':'muted'}">${g.fail}</td><td class="r num muted">${g.skip}</td><td class="r num muted">${g.dur}</td><td class="r"><span class="tag t-${g.status==='pass'?'pass':g.status==='fail'?'fail':g.status==='warn'?'warn':'block'}">${s[1]}</span></td></tr>`;}).join("")}</tbody>
+    <tfoot class="tfoot"><tr><td>Release</td><td class="r num">${totCases.toLocaleString()}</td><td class="r num">${(totCases-totFail).toLocaleString()}</td><td class="r num failc">${totFail}</td><td class="r num">—</td><td class="r num">—</td><td class="r"><span class="tag t-fail">Blocked</span></td></tr></tfoot></table></div>`;
+}
+function paneSuites(){
+  const list=SUITES.filter(s=>!state.gate||s.gate===state.gate);
+  return `<div class="panel"><div class="panel-hd"><h3>Test suites${state.gate?" · "+GATES.find(g=>g.id===state.gate).name+" gate":""}</h3><span class="slo">${list.length} suites · select a row to expand</span></div>
+    <div>${list.map((s,i)=>`<div class="suite" data-suite="${i}">
+      <div class="suite-hd"><span class="caret">▶</span><span class="nm">${esc(s.name)}</span>
+        <span class="ct">${s.total.toLocaleString()} cases</span>
+        <span class="tag ${s.fail?'t-fail':'t-pass'}">${s.fail?s.fail+" failed":"all passed"}</span>
+        <span class="ct">${s.dur}</span></div>
+      <div class="suite-ch">${s.ch.map(([n,t,f])=>`<div class="child"><span>${esc(n)}</span><span class="num">${t} cases · <span class="${f?'failc':'passc'}">${f?f+" failed":"pass"}</span></span></div>`).join("")}</div></div>`).join("")}</div></div>`;
+}
+function paneLatency(){
+  const {key,dir}=state.sort;
+  const rows=[...SERVICES].sort((a,b)=>(a[key]-b[key])*dir).map(s=>{const breach=s.p99>s.slo;
+    return `<tr><td class="mono">${esc(s.name)}</td><td class="r num">${s.p50}</td><td class="r num">${s.p95}</td>
+      <td class="r num ${breach?'failc':''}">${s.p99}</td><td class="r num muted">${s.slo}</td>
+      <td class="r num ${s.err>0.1?'failc':s.err>0?'warnc':'muted'}">${s.err.toFixed(2)}%</td>
+      <td class="r">${spark(s.spark,s.slo)}</td>
+      <td class="r"><span class="tag ${breach?'t-fail':'t-pass'}">${breach?'SLO breach':'within SLO'}</span></td></tr>`;}).join("");
+  const th=(k,l)=>`<th class="r sortable" data-sort="${k}">${l}${key===k?(dir<0?" ↓":" ↑"):""}</th>`;
+  return `<div class="panel"><div class="panel-hd"><h3>Service latency under test</h3><span class="slo">${breaches} of ${SERVICES.length} services breaching p99 SLO · ms</span></div>
+    <table><thead><tr><th>Service</th>${th("p50","p50")}${th("p95","p95")}${th("p99","p99")}<th class="r">SLO</th>${th("err","Error")}<th class="r">Trend</th><th class="r">Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="foot">The <b>murex-trade-adapter</b> p99 breach (611ms vs 500ms) is the upstream cause of failure F-4418; the <b>fx-quote-router</b> breach drives F-4433. The Refactoring &amp; Performance Agent has a fix benchmarked for the router; the adapter regression is still under investigation.</div></div>`;
+}
+function paneFailures(){
+  const list=FAILURES.filter(f=>!state.gate||f.gate===state.gate);
+  if(!list.length) return `<div class="panel"><div style="padding:26px;text-align:center;color:var(--ink-3)">No failures in the ${GATES.find(g=>g.id===state.gate).name} gate. Clear the filter to see the others.</div></div>`;
+  return `<div class="panel"><div class="panel-hd"><h3>Failures${state.gate?" · "+GATES.find(g=>g.id===state.gate).name+" gate":""}</h3><span class="slo">${list.length} items · select one for the agent's triage</span></div>
+    <table><thead><tr><th>ID</th><th>Test</th><th>Owner</th><th class="r">State</th></tr></thead>
+    <tbody>${list.map(f=>{const cls=f.state==="fix proposed"?"t-agent":f.state==="investigating"?"t-run":"t-warn";
+      return `<tr class="clickable" data-fail="${f.id}"><td class="mono">${f.id}</td><td><div style="font-weight:600">${esc(f.test)}</div><div class="muted" style="font-size:10.5px">${esc(f.suite)}</div></td><td style="font-size:11.5px">${esc(f.owner)}</td><td class="r"><span class="tag ${cls}">${f.state}</span></td></tr>`;}).join("")}</tbody></table></div>`;
+}
+function paneAgents(){
+  return `<div class="panel"><div class="panel-hd"><h3>Assurance agents on this release</h3><span class="slo">a subset of the 20-agent delivery fleet, scoped to test &amp; release</span></div>
+    <div class="agrid">${AGENTS.map(a=>`<div class="acard" data-agent="${esc(a.name)}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
+    <div class="foot">These are the same named agents that appear on the portfolio console's fleet — here you see them working one release. The Debug &amp; Remediation, Refactoring &amp; Performance and Security &amp; Vulnerability agents propose changes; a human approves every pull request before it merges.</div></div>`;
+}
+const PANES={overview:paneOverview,suites:paneSuites,latency:paneLatency,failures:paneFailures,agents:paneAgents};
+function render(){renderChip();$("#pane").innerHTML=PANES[state.tab]();document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));}
+
+/* ---- drawer ---- */
+function openDrawer(eye,title,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
+function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
+function failDrawer(f){
+  const cls=f.state==="fix proposed"?"t-agent":f.state==="investigating"?"t-run":"t-warn";
+  openDrawer("Failure · "+f.id,f.test,
+    `<div class="dmeta"><span class="kv">Suite <b>${esc(f.suite)}</b></span><span class="kv">Owner <b>${esc(f.owner)}</b></span><span class="kv">First seen <b>${esc(f.first)}</b></span><span class="tag ${cls}" style="align-self:center">${f.state}</span></div>
+     <div class="block"><div class="lbl">Assertion</div><div class="code err">${esc(f.err)}</div></div>
+     <div class="block"><div class="lbl">Stack / context</div><div class="code">${esc(f.stack)}</div></div>
+     <div class="block"><div class="lbl">Agent triage</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.6">${esc(f.note)}</div></div>
+     <div class="block" style="border-color:rgba(0,214,190,.3)"><div class="lbl" style="color:var(--agent)">Proposed action</div><div class="code" style="color:var(--ink)">${esc(f.pr)}</div></div>`);
+}
+function agentDrawer(a){
+  openDrawer("Agent",a.name,
+    `<div class="dmeta"><span class="kv">State <b>${a.state==='running'?'Running':a.state==='block'?'Blocked':'Idle'}</b></span><span class="kv">Activity <b>${esc(a.runs)}</b></span><span class="kv">Last <b>${a.last}</b></span></div>
+     <div class="block"><div class="lbl">Current output</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.6">${esc(a.out)}</div></div>
+     <div class="foot" style="border:0;padding:0">Part of the 20-agent delivery fleet shown on the portfolio console. On this release it works the assurance stage of the lifecycle; its output rolls up into the release verdict above.</div>`);
+}
+
+/* ---- events ---- */
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-gate]");
+  if(g){state.gate=state.gate===g.dataset.gate?null:g.dataset.gate;renderLadder();render();return;}
+  const cf=e.target.closest("#clearf");if(cf){state.gate=null;renderLadder();render();return;}
+  const tab=e.target.closest(".tab");if(tab){state.tab=tab.dataset.tab;render();return;}
+  const su=e.target.closest("[data-suite]");if(su){su.classList.toggle("open");return;}
+  const th=e.target.closest("[data-sort]");if(th){const k=th.dataset.sort;state.sort={key:k,dir:state.sort.key===k?-state.sort.dir:-1};render();return;}
+  const fl=e.target.closest("[data-fail]");if(fl){failDrawer(FAILURES.find(x=>x.id===fl.dataset.fail));return;}
+  const ag=e.target.closest("[data-agent]");if(ag){agentDrawer(AGENTS.find(x=>x.name===ag.dataset.agent));return;}
+  if(e.target.closest("#d-close")||e.target.id==="scrim")closeDrawer();
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+function tick(){$("#clock").textContent=new Date().toLocaleTimeString("en-GB",{hour12:false})+" SGT";}
+tick();setInterval(tick,1000);
+renderLadder();renderKpis();render();
+</script>
+</body>
+</html>

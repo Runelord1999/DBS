@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Delivery Operations — Portfolio, Savings & Token Economics</title>
+<style>
+:root{
+  --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
+  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F;
+  --pass:#2FD39A; --fail:#FF5470; --warn:#F5B23C; --run:#5B8CFF;
+  --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
+  --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:
+  radial-gradient(1200px 600px at 80% -10%,rgba(0,214,190,.06),transparent 60%),
+  radial-gradient(900px 500px at -5% 10%,rgba(91,140,255,.06),transparent 55%),
+  var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--agent);outline-offset:2px;border-radius:3px}
+
+.shell{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
+.rail{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.6));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--agent),var(--run));display:grid;place-items:center;color:#06131A;font-weight:800;font-size:11px;box-shadow:0 4px 14px rgba(0,214,190,.35)}
+.brand h1{font-size:13px;margin:0;font-weight:700;letter-spacing:-.01em}
+.brand p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3)}
+.field{display:block;margin-bottom:10px}
+.field span{display:block;margin-bottom:5px}
+select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:var(--ink);padding:7px 8px;border-radius:6px;font-size:12px;font-family:var(--mono)}
+.railcard{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:11px 12px}
+.railcard .eyebrow{margin-bottom:7px}
+.rrow{display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:6px;color:var(--ink-2)}
+.rrow:last-child{margin-bottom:0}
+.rrow b{color:var(--ink);font-weight:600}
+.live{color:var(--pass);font-size:11.5px;display:flex;align-items:center}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--pass);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.mininote{font-size:10.5px;color:var(--ink-3);line-height:1.5;margin-top:auto;border-top:1px solid var(--hair);padding-top:12px}
+
+.main{padding:20px 26px 44px;min-width:0}
+.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;flex-wrap:wrap;margin-bottom:18px}
+.hero h2{margin:4px 0 6px;font-size:24px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
+.grad{background:linear-gradient(90deg,var(--gold),#FFDE8A);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{margin:0;color:var(--ink-2);font-size:12.5px;max-width:78ch}
+.heroright{display:flex;gap:10px;flex-wrap:wrap}
+.effcard{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:11px 15px;text-align:right;min-width:106px}
+.effcard b{display:block;font-size:21px;font-weight:750}
+.effcard small{color:var(--ink-3);font-size:9px;letter-spacing:.06em;text-transform:uppercase}
+
+.railread{display:flex;justify-content:space-between;align-items:center;background:var(--panel-2);border:1px solid var(--hair);border-radius:6px;padding:7px 9px;font-size:12px;color:var(--ink-2)}
+.railread b{color:var(--gold)}
+
+.assump{background:linear-gradient(180deg,var(--panel-3),var(--panel));border:1px solid var(--hair);border-radius:12px;padding:14px 16px;margin-bottom:16px}
+.assump-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.assump-live{font-size:12px;color:var(--ink-2);margin-top:4px}
+.assump-live b{font-size:19px;margin:0 4px}
+#a-delta{font-size:12px;font-weight:700}
+.reset{font-size:11px;color:var(--ink-2);border:1px solid var(--hair);border-radius:6px;padding:6px 11px;background:var(--panel-2)}
+.reset:hover{color:var(--ink);border-color:var(--agent)}
+.ctrls{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.ctrl-top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:var(--ink-2);margin-bottom:7px}
+.ctrl-top b{font-size:14px;color:var(--ink)}
+.ctrl-sub{font-size:10px;color:var(--ink-3);margin-top:5px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:var(--hair);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer;box-shadow:0 1px 5px rgba(0,214,190,.5)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer}
+@media (max-width:900px){.ctrls{grid-template-columns:repeat(2,1fr)}}
+
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:20px}
+.kpi{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.55));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
+.kpi .cap{position:absolute;right:11px;top:12px;font-size:10px;font-weight:700}
+.kpi b{display:block;font-size:21px;font-weight:750;margin-top:6px}
+.kpi small{display:block;color:var(--ink-3);font-size:10px;margin-top:2px}
+.gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
+
+.tabs{display:flex;gap:3px;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--ink-2)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agent)}
+
+.panel{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.5));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
+.panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.panel-hd h3{margin:0;font-size:13px;font-weight:700}
+.slo{font-size:10.5px;color:var(--ink-3)}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--hair);white-space:nowrap}
+th.r,td.r{text-align:right}
+th.sortable{cursor:pointer}th.sortable:hover{color:var(--ink-2)}
+td{padding:11px 16px;border-bottom:1px solid rgba(38,51,83,.5);font-size:12.5px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover{background:var(--panel-2)}
+.pname{font-weight:600}.pcode{font-size:10px;color:var(--ink-3);font-family:var(--mono)}
+.tag{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2.5px 7px;border-radius:4px;white-space:nowrap}
+.t-track{background:rgba(47,211,154,.15);color:var(--pass)}
+.t-risk{background:rgba(245,178,60,.16);color:var(--warn)}
+.t-block{background:rgba(255,84,112,.15);color:var(--fail)}
+.t-done{background:rgba(0,214,190,.15);color:var(--agent)}
+.phase{font-size:10px;color:var(--ink-2)}
+.prog{position:relative;height:7px;background:var(--hair);border-radius:4px;overflow:hidden;min-width:88px}
+.prog i{position:absolute;left:0;top:0;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--agent),var(--pass))}
+.progwrap{display:flex;align-items:center;gap:9px}
+.progwrap .num{font-size:11px;color:var(--ink-2);min-width:30px;text-align:right}
+.bar-mini{height:5px;border-radius:3px;background:var(--hair);overflow:hidden;min-width:64px;display:inline-block;vertical-align:middle}
+.bar-mini i{display:block;height:100%;border-radius:3px}
+.muted{color:var(--ink-3)}
+.searchbox{background:var(--panel-2);border:1px solid var(--hair);border-radius:6px;color:var(--ink);padding:6px 10px;font-size:12px;width:210px;font-family:var(--mono)}
+.foot{padding:11px 16px;border-top:1px solid var(--hair);font-size:11px;color:var(--ink-3);line-height:1.55}
+.tfoot td{font-weight:700;color:var(--ink);background:var(--panel-2);border-top:1px solid var(--hair)}
+
+.grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:14px}
+.grid2e{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.mt14{margin-top:14px}
+.chart-body{padding:16px 16px 10px}
+.legend{display:flex;gap:15px;flex-wrap:wrap;padding:2px 16px 14px;font-size:11px;color:var(--ink-2)}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px}
+
+.tokrow{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:14px}
+.toktile{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--hair);border-radius:10px;padding:13px 14px}
+.toktile b{display:block;font-size:19px;font-weight:750;margin-top:5px}
+.toktile small{display:block;color:var(--ink-3);font-size:9.5px;margin-top:2px}
+
+.donutwrap{display:flex;align-items:center;gap:16px;padding:14px 16px}
+.donut-legend{font-size:11.5px;color:var(--ink-2);flex:1}
+.dl{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dl .sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.dl .v{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink)}
+
+.fleetgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;padding:16px}
+.fgroup{border:1px solid var(--hair);border-radius:9px;overflow:hidden;background:var(--panel-2)}
+.fgroup h4{margin:0;padding:9px 12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--agent);background:rgba(0,214,190,.07);border-bottom:1px solid var(--hair);display:flex;justify-content:space-between}
+.fgroup h4 span{color:var(--ink-3);font-family:var(--mono)}
+.arow{padding:8px 12px;border-bottom:1px solid rgba(38,51,83,.5);cursor:pointer}
+.arow:last-child{border-bottom:0}.arow:hover{background:var(--panel-3)}
+.arow .an{font-size:11.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.arow .as{font-size:10px;color:var(--ink-3);margin-top:3px;display:flex;justify-content:space-between}
+.statedot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.sd-run{background:var(--run)}.sd-idle{background:var(--ink-3)}.sd-block{background:var(--warn)}
+
+.scrim{position:fixed;inset:0;background:rgba(5,9,17,.66);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(620px,96vw);background:var(--panel);border-left:1px solid var(--hair);transform:translateX(100%);transition:transform .22s ease;z-index:50;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+@media (prefers-reduced-motion:reduce){.scrim,.drawer{transition:none}}
+.drawer-hd{padding:16px 18px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.drawer-hd h3{margin:3px 0 2px;font-size:16px;font-weight:700}
+.drawer-body{padding:18px;overflow:auto;flex:1}
+.close{font-size:20px;color:var(--ink-3);line-height:1;padding:2px 6px}.close:hover{color:var(--ink)}
+.dstat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.dstat .c{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:11px 12px}
+.dstat b{display:block;font-size:17px;font-weight:750;margin-top:3px}
+.dstat small{color:var(--ink-3);font-size:9.5px;letter-spacing:.04em;text-transform:uppercase}
+.wf{margin:4px 0 16px}
+.wfrow{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:12px}
+.wfrow .lbl{width:158px;color:var(--ink-2);flex:0 0 auto}
+.wfrow .track{flex:1;height:16px;background:var(--panel-2);border-radius:4px;position:relative;overflow:hidden}
+.wfrow .track i{position:absolute;top:0;height:100%;border-radius:4px}
+.wfrow .val{width:96px;text-align:right;flex:0 0 auto;font-family:var(--mono);font-size:11px}
+.sec-h{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:6px 0 10px;font-weight:600}
+.swarm{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.task{border:1px solid var(--hair);border-radius:8px;padding:11px 12px;background:var(--panel-2)}
+.task .th{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;margin-bottom:8px}
+.task .th .cnt{font-size:9.5px;color:var(--agent);font-family:var(--mono)}
+.agent-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-2);padding:3px 0}
+.agent-chip .qn{margin-left:auto;font-family:var(--mono);font-size:10px}
+
+@media (max-width:1240px){.kpis,.tokrow{grid-template-columns:repeat(3,1fr)}.grid2,.grid2e,.grid3{grid-template-columns:1fr}.fleetgrid{grid-template-columns:repeat(2,1fr)}.swarm{grid-template-columns:1fr}}
+@media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis,.tokrow{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand"><div class="brand-mark">GFM</div>
+      <div><h1>Agent Delivery Ops</h1><p>Portfolio · Savings · Tokens</p></div></div>
+    <div>
+      <label class="field"><span class="eyebrow">Portfolio</span>
+        <select id="s1"><option>GFM — all projects</option><option>FX &amp; Rates</option><option>Credit &amp; Derivs</option></select></label>
+      <div class="field"><span class="eyebrow">Baseline (conservative)</span>
+        <div class="railread"><span>Traditional SDLC</span><b class="num" id="rr-base">−40%</b></div></div>
+      <label class="field"><span class="eyebrow">Period</span>
+        <select id="s3"><option>FY2026 to date</option><option>This quarter</option><option>Rolling 12 months</option></select></label>
+    </div>
+    <div class="railcard">
+      <div class="eyebrow">Fleet status</div>
+      <div class="live"><span class="dot"></span>20 agents live · <span class="num" id="m-active" style="margin-left:4px">&nbsp;</span></div>
+      <div class="rrow" style="margin-top:9px"><span>Tasks / hour</span><b class="num">1,884</b></div>
+      <div class="rrow"><span>Tokens / min</span><b class="num">42.6M</b></div>
+      <div class="rrow"><span>Human reviewers</span><b class="num">18</b></div>
+      <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
+    </div>
+    <div class="mininote">Baseline is the traditional 12-month SDLC cost, deliberately discounted 40% to stay conservative. All figures are modelled planning estimates for management review, not booked actuals.</div>
+  </aside>
+
+  <main class="main">
+    <div class="hero">
+      <div>
+        <div class="eyebrow" id="hero-eye">FY2026 to date · 6 projects · baseline = traditional SDLC, −40% (conservative)</div>
+        <h2>Modelled saving of <span class="grad" id="hero-save">S$7.3M</span> so far, tracking to <span class="grad" id="hero-proj">S$12.3M</span> at completion</h2>
+        <p>A small team steering 20 agents is delivering the current book of work for roughly half the traditional cost and in two-thirds of the time — and the agent compute behind it is under 8% of spend. Quality holds above the manual baseline.</p>
+      </div>
+      <div class="heroright">
+        <div class="effcard"><small>Cost efficiency</small><b class="num gold" id="eff1">2.16×</b></div>
+        <div class="effcard"><small>Speed</small><b class="num tealc">1.5×</b></div>
+        <div class="effcard"><small>Token share</small><b class="num cyanc" id="eff2">7.9%</b></div>
+      </div>
+    </div>
+
+    <div class="assump" id="assump">
+      <div class="assump-hd">
+        <div><span class="eyebrow">Assumptions · drag to stress-test</span>
+          <div class="assump-live">Projected saving <b class="num grad" id="a-save">S$12.3M</b> <span class="num" id="a-delta"></span></div></div>
+        <button class="reset" id="a-reset">Reset to base case</button>
+      </div>
+      <div class="ctrls">
+        <div class="ctrl"><div class="ctrl-top"><span>Loaded rate</span><b class="num" id="v-rate">S$20k</b></div>
+          <input type="range" id="sl-rate" min="12" max="30" step="0.5" value="20"><div class="ctrl-sub">per person-month</div></div>
+        <div class="ctrl"><div class="ctrl-top"><span>Baseline discount</span><b class="num" id="v-disc">40%</b></div>
+          <input type="range" id="sl-disc" min="0" max="60" step="5" value="40"><div class="ctrl-sub">cut off traditional cost</div></div>
+        <div class="ctrl"><div class="ctrl-top"><span>Target team size</span><b class="num" id="v-team">×1.00</b></div>
+          <input type="range" id="sl-team" min="60" max="160" step="5" value="100"><div class="ctrl-sub">vs planned headcount</div></div>
+        <div class="ctrl"><div class="ctrl-top"><span>Token price</span><b class="num" id="v-tok">×1.0</b></div>
+          <input type="range" id="sl-tok" min="50" max="250" step="10" value="100"><div class="ctrl-sub">vs current API pricing</div></div>
+      </div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="portfolio" aria-selected="true">Portfolio</button>
+      <button class="tab" role="tab" data-tab="savings" aria-selected="false">Cost &amp; savings</button>
+      <button class="tab" role="tab" data-tab="tokens" aria-selected="false">Token economics</button>
+      <button class="tab" role="tab" data-tab="fleet" aria-selected="false">Agent fleet</button>
+      <button class="tab" role="tab" data-tab="quality" aria-selected="false">Output quality</button>
+    </div>
+    <section id="pane"></section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detail">
+  <div class="drawer-hd"><div><div class="eyebrow" id="d-eye">Project</div><h3 id="d-title">—</h3><div class="slo" id="d-lead"></div></div>
+    <button class="close" id="d-close" aria-label="Close">&times;</button></div>
+  <div class="drawer-body" id="d-body"></div>
+</aside>
+
+<script>
+"use strict";
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const M=v=>"S$"+v.toFixed(2)+"M";
+const M1=v=>"S$"+v.toFixed(1)+"M";
+const K=v=>"S$"+Math.round(v)+"k";
+
+const RATE=20, DISC=0.60, pIn=1.10, pOut=16.00;
+const P=[
+ {code:"AOE-OPT", name:"AOE Optimization",              phase:"Build",     status:"track", lead:"FX Pricing Tribe",     elapsed:5, eta:8, pct:62,
+  tradTeam:36,tradMo:12, agTeam:10,agMo:8, inTok:28, outTok:9.5, loc:240, quality:97.6, override:3.8, escape:0.11},
+ {code:"DGC-PX",  name:"Digicrypto Phase X",            phase:"Assure",    status:"risk",  lead:"Digital Assets Squad", elapsed:6.5,eta:8, pct:78,
+  tradTeam:28,tradMo:11, agTeam:8, agMo:8, inTok:21, outTok:7,   loc:180, quality:96.4, override:5.1, escape:0.18},
+ {code:"DGM-CC",  name:"Digimarkets Checks & Controls", phase:"Build",     status:"track", lead:"Controls Platform",    elapsed:3.5,eta:8, pct:41,
+  tradTeam:24,tradMo:11, agTeam:8, agMo:8, inTok:17, outTok:6,   loc:150, quality:98.1, override:2.9, escape:0.06},
+ {code:"TAPI-IDL",name:"TAPI API for IDEAL",            phase:"Hypercare", status:"track", lead:"Channels API Team",    elapsed:7.5,eta:8, pct:95,
+  tradTeam:18,tradMo:10, agTeam:5, agMo:8, inTok:12, outTok:4.5, loc:95,  quality:98.7, override:2.1, escape:0.04},
+ {code:"TAPI-CC", name:"TAPI API for CC",               phase:"Prototype", status:"risk",  lead:"Channels API Team",    elapsed:1.5,eta:8, pct:18,
+  tradTeam:20,tradMo:10, agTeam:6, agMo:8, inTok:14, outTok:5,   loc:110, quality:95.2, override:6.4, escape:0.22},
+ {code:"PRM-MTM", name:"Prime Real Time MTM",           phase:"Build",     status:"track", lead:"Prime Services Tribe", elapsed:4.5,eta:9, pct:55,
+  tradTeam:44,tradMo:12, agTeam:13,agMo:9, inTok:34, outTok:12,  loc:320, quality:96.9, override:4.3, escape:0.13},
+];
+/* live control state — driven by the assumptions sliders */
+const CTRL={rate:RATE, disc:1-DISC, teamMult:1.0, tokMult:1.0}; // disc = fraction cut off the baseline
+const DEF={rate:RATE, disc:1-DISC, teamMult:1.0, tokMult:1.0};
+const sum=f=>P.reduce((a,p)=>a+f(p),0);
+const T={};
+let DEFAULTS=null;
+function recompute(){
+  const rate=CTRL.rate, keep=1-CTRL.disc, tm=CTRL.teamMult, km=CTRL.tokMult;
+  P.forEach(p=>{
+    p.baseFull=p.tradTeam*p.tradMo*rate/1000;
+    p.baseline=p.baseFull*keep;
+    p.agTeamEff=Math.max(1,Math.round(p.agTeam*tm));
+    p.labour=(p.agTeam*tm)*p.agMo*rate/1000;
+    p.tokM=p.inTok+p.outTok;
+    p.tokCost=((p.inTok*1000*pIn+p.outTok*1000*pOut)/1e6)*km;
+    p.platform=0.06+p.loc/6000;
+    p.govern=p.labour*0.12;
+    p.spend=p.labour+p.tokCost+p.platform+p.govern;
+    p.savings=p.baseline-p.spend;
+    p.savePct=p.baseline>0?p.savings/p.baseline*100:0;
+    p.realized=p.savings*(p.pct/100);
+    p.spentToDate=p.spend*(p.pct/100);
+    p.agentCostK=p.spend*1e6/p.loc;
+    p.tradCostK=p.baseline*1e6/p.loc;
+  });
+  T.baseFull=sum(p=>p.baseFull);T.baseline=sum(p=>p.baseline);T.spend=sum(p=>p.spend);
+  T.savings=sum(p=>p.savings);T.realized=sum(p=>p.realized);T.labour=sum(p=>p.labour);
+  T.tokCost=sum(p=>p.tokCost);T.platform=sum(p=>p.platform);T.govern=sum(p=>p.govern);
+  T.inTok=sum(p=>p.inTok);T.outTok=sum(p=>p.outTok);T.loc=sum(p=>p.loc);
+  T.avgPct=sum(p=>p.pct)/P.length;
+  T.quality=sum(p=>p.quality*p.baseline)/(sum(p=>p.baseline)||1);
+  T.override=sum(p=>p.override)/P.length;
+  T.totTok=T.inTok+T.outTok;T.tokShare=T.spend>0?T.tokCost/T.spend*100:0;
+  T.eff=T.spend>0?T.baseline/T.spend:0;
+  T.blended=(T.tokCost*1e6)/(T.totTok*1000);
+  T.savePct=T.baseline>0?T.savings/T.baseline*100:0;
+  T.agentCostK=T.spend*1e6/T.loc;T.tradCostK=T.baseline*1e6/T.loc;
+  if(!DEFAULTS) DEFAULTS={savings:T.savings,realized:T.realized,spend:T.spend,baseline:T.baseline};
+}
+function syncHero(){
+  $("#hero-save").textContent=M1(T.realized);$("#hero-proj").textContent=M1(T.savings);
+  $("#eff1").textContent=T.eff.toFixed(2)+"×";$("#eff2").textContent=T.tokShare.toFixed(1)+"%";
+  const dp=Math.round(CTRL.disc*100);
+  $("#hero-eye").textContent="FY2026 to date · 6 projects · baseline = traditional SDLC"+(dp===0?" (full)":", −"+dp+"%")+(Math.abs(CTRL.disc-DEF.disc)<1e-9?" (conservative)":" (adjusted)");
+}
+recompute();syncHero();
+
+const STAT={track:["t-track","On track"],risk:["t-risk","At risk"],block:["t-block","Blocked"],done:["t-done","In hypercare"]};
+const MODELS=[{name:"Haiku 4.5",tokPct:62,costPct:17,color:"var(--cyan)"},{name:"Sonnet 5",tokPct:31,costPct:55,color:"var(--run)"},{name:"Opus 4.8",tokPct:7,costPct:28,color:"var(--violet)"}];
+const TOKGRP=[{g:"Build (code gen, review, refactor)",tok:96,color:"var(--agent)"},{g:"Test & assure",tok:42,color:"var(--run)"},{g:"Define (reqs, docs, stories)",tok:22,color:"var(--cyan)"},{g:"Release & run",tok:10,color:"var(--violet)"}];
+const TOKMONTH=[38,52,64,79,96,112,131,151];
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Now"];
+const FLEET=[
+ {g:"DEFINE",items:[["Requirements Discovery",92,"running",98.4,3.1,14],["Documentation → Confluence",88,"running",99.1,1.4,11],["Jira Story",76,"running",98.9,2.0,6],["NFR",64,"idle",97.7,3.5,4],["Impact Assessment",58,"running",96.8,4.6,5]]},
+ {g:"BUILD",items:[["UX Prototype",81,"running",97.2,4.0,9],["Code Generation",96,"running",95.6,6.8,58],["Code Review",94,"running",98.2,3.3,22],["Debug & Remediation",89,"running",96.1,5.2,16],["Refactoring & Performance",71,"running",97.9,2.7,12]]},
+ {g:"TEST & ASSURE",items:[["Test Script",90,"running",98.6,2.2,15],["Test Data",67,"running",99.0,1.1,6],["Test Execution",98,"running",99.3,0.8,13],["Test Reporting",85,"running",99.5,0.5,4],["Security & Vulnerability",73,"running",97.4,3.6,8]]},
+ {g:"RELEASE & RUN",items:[["Release & Deployment",44,"idle",98.8,1.6,3],["Compliance & Evidence",69,"running",99.2,0.9,4],["Observability & Incident",62,"running",98.0,2.4,3],["Legacy Comprehension",39,"idle",95.9,5.0,5],["Orchestrator & Traceability",99,"running",99.6,0.3,2]]},
+];
+const activeCount=FLEET.reduce((a,g)=>a+g.items.filter(i=>i[2]==="running").length,0);
+$("#m-active").textContent=activeCount+" running";
+const SWARM=[
+ {task:"Prototyping",agents:[["UX Prototype",97],["Requirements Discovery",98]]},
+ {task:"Requirements & docs",agents:[["Documentation",99],["NFR",97],["Jira Story",99],["Impact Assessment",96]]},
+ {task:"Coding",agents:[["Code Gen · worker A",95],["Code Gen · worker B",96],["Code Review",98],["Refactoring",98]]},
+ {task:"Test authoring",agents:[["Test Script",98],["Test Data",99]]},
+ {task:"Test execution",agents:[["Test Execution",99],["Security & Vuln",97]]},
+ {task:"Debugging",agents:[["Debug · triage",96],["Debug · remediation",96]]},
+ {task:"QC & evidence",agents:[["Test Reporting",99],["Compliance & Evidence",99],["Orchestrator",99]]},
+];
+const state={tab:"portfolio",sort:{k:"savings",dir:-1}};
+
+/* charts */
+function donut(segs,cTop,cBot,size=132,thick=20){
+  const r=(size-thick)/2,cx=size/2,cy=size/2,C=2*Math.PI*r;let off=0,arcs="";
+  segs.forEach(s=>{const len=s.v/100*C;
+    arcs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${thick}" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.label)} ${s.v}%</title></circle>`;off+=len;});
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hair)" stroke-width="${thick}" opacity=".4"/>${arcs}<text x="${cx}" y="${cy-2}" text-anchor="middle" fill="var(--ink)" font-size="18" font-weight="750" font-family="var(--mono)">${cTop}</text><text x="${cx}" y="${cy+15}" text-anchor="middle" fill="var(--ink-3)" font-size="9">${cBot}</text></svg>`;
+}
+function gauge(val,base){
+  const W=190,H=118,cx=W/2,cy=H-8,r=78,max=100,min=90;
+  const a=v=>Math.PI*(1-(v-min)/(max-min));
+  const pt=(v,rr)=>[cx+rr*Math.cos(a(v)),cy-rr*Math.sin(a(v))];
+  const arc=(v1,v2,color,w)=>{const[x1,y1]=pt(v1,r),[x2,y2]=pt(v2,r);
+    return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;};
+  const[nx,ny]=pt(val,r-2),[bx1,by1]=pt(base,r+8),[bx2,by2]=pt(base,r-8);
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${arc(min,max,"var(--hair)",13)}${arc(min,val,"var(--pass)",13)}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="var(--ink)" stroke-width="2"/><circle cx="${cx}" cy="${cy}" r="4" fill="var(--ink)"/>
+    <line x1="${bx1.toFixed(1)}" y1="${by1.toFixed(1)}" x2="${bx2.toFixed(1)}" y2="${by2.toFixed(1)}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="2 2"/>
+    <text x="${cx}" y="${cy-24}" text-anchor="middle" fill="var(--pass)" font-size="24" font-weight="750" font-family="var(--mono)">${val.toFixed(1)}%</text>
+    <text x="${cx}" y="${cy-8}" text-anchor="middle" fill="var(--ink-3)" font-size="9">QC pass · base ${base}%</text></svg>`;
+}
+function hbars(items,fmt){
+  const max=Math.max(...items.map(i=>i.v));
+  return `<div style="padding:4px 2px">${items.map(i=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:11.5px">
+    <div style="width:210px;color:var(--ink-2);flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.label)}</div>
+    <div style="flex:1;height:14px;background:var(--panel-2);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${(i.v/max*100).toFixed(1)}%;background:${i.color||'var(--agent)'};border-radius:4px"></i></div>
+    <div class="num" style="width:60px;text-align:right;flex:0 0 auto;color:var(--ink)">${fmt?fmt(i.v):i.v}</div></div>`).join("")}</div>`;
+}
+
+function renderKpis(){
+  const k=[
+    ["Saving realized",M1(T.realized),"pro-rated by completion","var(--gold)","gold","▲"],
+    ["Projected saving",M1(T.savings),"vs "+M1(T.baseline)+" baseline","var(--gold)","gold",""],
+    ["Blended saving",T.savePct.toFixed(0)+"%","on a −40% baseline","var(--pass)","passc",""],
+    ["Token cost (FY)",M(T.tokCost),T.tokShare.toFixed(1)+"% of spend","var(--cyan)","cyanc",""],
+    ["Output quality",T.quality.toFixed(1)+"%","QC pass · base 94.0%","var(--pass)","passc","▲"],
+    ["Cost / 1k LOC","S$"+(T.agentCostK/1000).toFixed(1)+"k","vs S$"+(T.tradCostK/1000).toFixed(1)+"k traditional","var(--run)","runc",""],
+  ];
+  $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap])=>`<div class="kpi" style="--accent:${acc}"><span class="cap ${c}">${cap||""}</span><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+}
+
+function cumulativeCurve(){
+  const rf=[0.03,0.09,0.17,0.27,0.39,0.52,0.68,1.00],pf=[0.86,0.90,0.93,0.95,0.965,0.98,0.99,1.00];
+  const pts=rf.map(f=>+(f*T.realized).toFixed(2)),proj=pf.map(f=>+(f*T.savings).toFixed(2));
+  const W=520,H=176,pad=30,maxV=Math.ceil(T.savings/3)*3;
+  const X=i=>pad+i/(pts.length-1)*(W-pad-10),Y=v=>H-24-(v/maxV)*(H-40);
+  const line=(arr,c,d)=>`<polyline points="${arr.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")}" fill="none" stroke="${c}" stroke-width="2.2" ${d?'stroke-dasharray="4 4"':''} stroke-linejoin="round"/>`;
+  const area=`<defs><linearGradient id="ga" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--gold)" stop-opacity=".28"/><stop offset="1" stop-color="var(--gold)" stop-opacity="0"/></linearGradient></defs><polygon points="${X(0)},${Y(0)} ${pts.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")} ${X(7)},${Y(0)}" fill="url(#ga)"/>`;
+  let grid="";for(let g=0;g<=maxV;g+=3)grid+=`<line x1="${pad}" y1="${Y(g)}" x2="${W-10}" y2="${Y(g)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${Y(g)+3}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${g}</text>`;
+  const xl=MONTHS.map((m,i)=>`<text x="${X(i)}" y="${H-8}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${m}</text>`).join("");
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative savings">${grid}${area}${line(proj,"var(--ink-3)",true)}${line(pts,"var(--gold)",false)}${xl}<circle cx="${X(7)}" cy="${Y(T.realized)}" r="3.6" fill="var(--gold)"/></svg>`;
+}
+function costCompositionBars(){
+  const rows=[...P].sort((a,b)=>b.baseline-a.baseline);
+  const max=Math.max(...rows.map(p=>p.baseline)),W=560,rh=40,lblW=150,barW=W-lblW-64;let y=6,svg="";
+  rows.forEach(p=>{const sc=v=>v/max*barW;const parts=[[p.labour,"var(--agent)"],[p.tokCost,"var(--cyan)"],[p.platform,"var(--run)"],[p.govern,"var(--warn)"]];let x=lblW;
+    svg+=`<text x="0" y="${y+10}" fill="var(--ink-2)" font-size="10.5">${esc(p.name).slice(0,19)}</text><rect x="${lblW}" y="${y-2}" width="${sc(p.baseline).toFixed(1)}" height="7" rx="2" fill="var(--hair)"/><text x="${lblW+sc(p.baseline)+5}" y="${y+4}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${M1(p.baseline)} base</text>`;
+    parts.forEach(([v,c])=>{const w=sc(v);svg+=`<rect x="${x.toFixed(1)}" y="${(y+8).toFixed(1)}" width="${Math.max(w,0.5).toFixed(1)}" height="11" fill="${c}"><title>${M(v)}</title></rect>`;x+=w;});
+    svg+=`<text x="${(x+5).toFixed(1)}" y="${y+17}" fill="var(--pass)" font-size="9" font-family="var(--mono)">${M1(p.spend)} · save ${p.savePct.toFixed(0)}%</text>`;y+=rh;});
+  return `<svg width="100%" viewBox="0 0 ${W} ${y}" role="img" aria-label="Cost composition by project">${svg}</svg>`;
+}
+function driverWaterfall(){
+  const labourSaved=T.baseline-T.labour;
+  const parts=[["Reduced human labour",labourSaved,"var(--pass)"],["less: agent tokens",-T.tokCost,"var(--cyan)"],["less: platform & tooling",-T.platform,"var(--run)"],["less: review & governance",-T.govern,"var(--warn)"]];
+  const max=labourSaved;
+  return `<div class="wf">${parts.map(([l,v,c])=>{const w=Math.abs(v)/max*100;return `<div class="wfrow"><div class="lbl">${l}</div><div class="track"><i style="left:${v<0?(100-w):0}%;width:${w}%;background:${c};opacity:${v<0?.6:1}"></i></div><div class="val" style="color:${v<0?'var(--ink-3)':'var(--pass)'}">${v<0?'−':''}${M(Math.abs(v))}</div></div>`;}).join("")}<div class="wfrow" style="border-top:1px solid var(--hair);padding-top:8px;margin-top:2px"><div class="lbl" style="font-weight:700;color:var(--ink)">Net saving</div><div class="track"><i style="left:0;width:${T.savings/max*100}%;background:var(--gold)"></i></div><div class="val" style="color:var(--gold);font-weight:700">${M(T.savings)}</div></div></div>`;
+}
+function tokenMonthChart(){
+  const W=520,H=150,pad=28,bw=(W-pad-8)/TOKMONTH.length,max=Math.max(...TOKMONTH)*1.15;let bars="";
+  TOKMONTH.forEach((v,i)=>{const h=v/max*(H-38),x=pad+i*bw+bw*0.16,y=H-22-h;
+    bars+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.68).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--cyan)" opacity=".85"><title>${MONTHS[i]} · S$${v}k</title></rect><text x="${(x+bw*0.34).toFixed(1)}" y="${H-8}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${MONTHS[i]}</text>`;});
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly token spend">${bars}<line x1="${pad}" y1="${H-22}" x2="${W-8}" y2="${H-22}" stroke="var(--hair)"/></svg>`;
+}
+
+function panePortfolio(){
+  const {k,dir}=state.sort;
+  const rows=[...P].sort((a,b)=>((typeof a[k]==="string")?a[k].localeCompare(b[k]):a[k]-b[k])*dir).map(p=>{const st=STAT[p.status];
+    return `<tr class="clickable" data-p="${p.code}"><td><div class="pname">${esc(p.name)}</div><div class="pcode">${p.code} · ${esc(p.lead)}</div></td><td><span class="phase">${p.phase}</span></td><td><div class="progwrap"><div class="prog"><i style="width:${p.pct}%"></i></div><span class="num">${p.pct}%</span></div></td><td class="r num">${M1(p.spend)}</td><td class="r num muted">${M1(p.baseline)}</td><td class="r num cyanc">${K(p.tokCost*1000)}</td><td class="r num gold">${M1(p.savings)}</td><td class="r num passc">${p.savePct.toFixed(0)}%</td><td class="r num">${p.quality.toFixed(1)}%</td><td class="r"><span class="tag ${st[0]}">${st[1]}</span></td></tr>`;}).join("");
+  const th=(key,l,cls="")=>`<th class="${cls} sortable" data-sort="${key}">${l}${k===key?(dir<0?" ↓":" ↑"):""}</th>`;
+  return `<div class="panel"><div class="panel-hd"><h3>Projects in flight</h3><span class="slo">Select a project for its agent swarm, token spend and cost breakdown</span></div>
+    <table><thead><tr>${th("name","Project")}${th("phase","Phase")}<th>Build completion</th>${th("spend","Est. spend","r")}${th("baseline","Baseline","r")}<th class="r">Tokens</th>${th("savings","Saving","r")}${th("savePct","%","r")}${th("quality","Quality","r")}${th("status","Status","r")}</tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot class="tfoot"><tr><td>Portfolio · 6 projects</td><td></td><td><div class="progwrap"><div class="prog"><i style="width:${T.avgPct}%"></i></div><span class="num">${T.avgPct.toFixed(0)}%</span></div></td><td class="r num">${M1(T.spend)}</td><td class="r num">${M1(T.baseline)}</td><td class="r num cyanc">${K(T.tokCost*1000)}</td><td class="r num gold">${M1(T.savings)}</td><td class="r num passc">${T.savePct.toFixed(0)}%</td><td class="r num">${T.quality.toFixed(1)}%</td><td></td></tr></tfoot></table>
+    <div class="foot">Baseline = the same scope under the traditional 12-month SDLC at S$${RATE}k / person-month, then <b>discounted 40%</b> to stay conservative. Est. spend = agent-run labour + token compute + platform + review &amp; governance.</div></div>`;
+}
+function paneSavings(){
+  return `<div class="grid2"><div class="panel"><div class="panel-hd"><h3>Cumulative savings</h3><span class="slo">Realized vs projected · S$M</span></div><div class="chart-body">${cumulativeCurve()}</div><div class="legend"><span><i style="background:var(--gold)"></i>Realized (${M1(T.realized)})</span><span><i style="background:var(--ink-3)"></i>Projected (${M1(T.savings)})</span></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Where the saving comes from</h3><span class="slo">Portfolio · at completion</span></div><div class="chart-body">${driverWaterfall()}</div><div class="foot">Removing head-count is the entire saving; tokens, platform and governance give a little back. The net — on an already-conservative baseline — is the number to quote.</div></div></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Cost composition, by project</h3><span class="slo"><span style="color:var(--agent)">▬</span> labour <span style="color:var(--cyan)">▬</span> tokens <span style="color:var(--run)">▬</span> platform <span style="color:var(--warn)">▬</span> governance</span></div><div class="chart-body">${costCompositionBars()}</div></div>`;
+}
+function paneTokens(){
+  const tiles=[["Total tokens (FY)",T.totTok.toFixed(0)+"B","in "+T.inTok+"B · out "+T.outTok+"B","tealc"],["Token cost",M(T.tokCost),T.tokShare.toFixed(1)+"% of total spend","cyanc"],["Blended rate","S$"+T.blended.toFixed(2),"per 1M tokens",""],["Cache hit","71%","input served from cache",""],["Cost / 1k LOC","S$"+(T.agentCostK/1000).toFixed(1)+"k","vs S$"+(T.tradCostK/1000).toFixed(1)+"k traditional",""],["S$1 of tokens","→ S$"+(T.labour/T.tokCost).toFixed(0),"of delivery work","cyanc"]];
+  const modelDonut=donut(MODELS.map(m=>({label:m.name,v:m.tokPct,color:m.color})),T.totTok.toFixed(0)+"B","tokens");
+  const costDonut=donut(MODELS.map(m=>({label:m.name,v:m.costPct,color:m.color})),M(T.tokCost),"token cost");
+  const dl=key=>MODELS.map(m=>`<div class="dl"><span class="sw" style="background:${m.color}"></span>${m.name}<span class="v">${m[key]}%</span></div>`).join("");
+  const priceRows=[["Haiku 4.5","0.25","1.25","62%","S$0.14M"],["Sonnet 5","3.00","15.00","31%","S$0.46M"],["Opus 4.8","15.00","75.00","7%","S$0.24M"]];
+  return `<div class="tokrow">${tiles.map(([l,v,s,c])=>`<div class="toktile"><div class="eyebrow">${l}</div><b class="num ${c||''}">${v}</b><small>${s}</small></div>`).join("")}</div>
+    <div class="grid3">
+      <div class="panel"><div class="panel-hd"><h3>Token volume by model</h3></div><div class="donutwrap">${modelDonut}<div class="donut-legend">${dl('tokPct')}</div></div></div>
+      <div class="panel"><div class="panel-hd"><h3>Token cost by model</h3></div><div class="donutwrap">${costDonut}<div class="donut-legend">${dl('costPct')}</div></div><div class="foot" style="border-top:0;padding-top:0">Haiku carries 62% of volume for 17% of cost. Opus is 7% of tokens but 28% of cost — reserved for the hard reasoning.</div></div>
+      <div class="panel"><div class="panel-hd"><h3>Monthly token spend</h3><span class="slo">S$k realized</span></div><div class="chart-body">${tokenMonthChart()}</div></div>
+    </div>
+    <div class="grid2e mt14">
+      <div class="panel"><div class="panel-hd"><h3>Tokens by lifecycle stage</h3><span class="slo">Billions · FY to date</span></div><div class="chart-body">${hbars(TOKGRP.map(t=>({label:t.g,v:t.tok,color:t.color})),v=>v+"B")}</div><div class="foot" style="border-top:0;padding-top:0">Code generation dominates consumption — also where labour displacement is largest, so the spend is well-aimed.</div></div>
+      <div class="panel"><div class="panel-hd"><h3>Model pricing &amp; allocation</h3><span class="slo">Illustrative list pricing, S$ / 1M tokens</span></div>
+        <table><thead><tr><th>Model</th><th class="r">Input</th><th class="r">Output</th><th class="r">Share</th><th class="r">Cost</th></tr></thead>
+        <tbody>${priceRows.map(r=>`<tr><td>${r[0]}</td><td class="r num">${r[1]}</td><td class="r num">${r[2]}</td><td class="r num muted">${r[3]}</td><td class="r num cyanc">${r[4]}</td></tr>`).join("")}</tbody>
+        <tfoot class="tfoot"><tr><td>Blended</td><td class="r num" colspan="2">S$${T.blended.toFixed(2)} / 1M</td><td class="r num">${T.totTok.toFixed(0)}B</td><td class="r num">${M(T.tokCost)}</td></tr></tfoot></table>
+        <div class="foot">Routing cheap work to Haiku and reserving Opus for hard reasoning keeps compute under 8% of spend — the single biggest lever on token cost.</div></div>
+    </div>`;
+}
+function paneFleet(){
+  const groups=FLEET.map(g=>{const gt=g.items.reduce((a,i)=>a+i[5],0);
+    return `<div class="fgroup"><h4>${g.g}<span>${gt}B tok</span></h4>${g.items.map(([n,u,st,q,ov,tok])=>`<div class="arow" data-agent="${esc(n)}" data-q="${q}" data-ov="${ov}" data-u="${u}" data-tok="${tok}"><div class="an"><span>${esc(n)}</span><span class="statedot sd-${st==="running"?"run":st==="blocked"?"block":"idle"}"></span></div><div class="as"><span>util ${u}% · ${tok}B tok</span><span class="num">QC ${q}%</span></div><div class="bar-mini" style="margin-top:6px;width:100%"><i style="width:${u}%;background:${u>85?'var(--run)':'var(--agent)'}"></i></div></div>`).join("")}</div>`;}).join("");
+  return `<div class="panel"><div class="panel-hd"><h3>Agent fleet · 20 agents across the end-to-end lifecycle</h3><span class="slo">${activeCount} running now · each major task is served by a team of agents</span></div><div class="fleetgrid">${groups}</div><div class="foot">Utilisation is share of the last hour on live work; token figures are FY-to-date consumption. Agents above 85% (Code Generation, Test Execution, Orchestrator) are the throughput constraints and the first candidates for horizontal scaling.</div></div>`;
+}
+function paneQuality(){
+  const rows=[...P].sort((a,b)=>b.quality-a.quality).map(p=>`<tr><td><div class="pname">${esc(p.name)}</div><div class="pcode">${p.code}</div></td><td class="r"><span class="bar-mini"><i style="width:${p.quality}%;background:var(--pass)"></i></span> <span class="num">${p.quality.toFixed(1)}%</span></td><td class="r num ${p.override>5?'warnc':'muted'}">${p.override.toFixed(1)}%</td><td class="r num ${p.escape>0.15?'warnc':'muted'}">${p.escape.toFixed(2)}</td><td class="r">${p.quality>=98?'<span class="tag t-track">Above base</span>':p.quality>=96?'<span class="tag t-track">On base</span>':'<span class="tag t-risk">Watch</span>'}</td></tr>`).join("");
+  return `<div class="grid2e"><div class="panel"><div class="panel-hd"><h3>Output quality by project</h3><span class="slo">QC pass · manual baseline 94.0%</span></div><table><thead><tr><th>Project</th><th class="r">QC pass</th><th class="r">Override</th><th class="r">Escapes /kLOC</th><th class="r">Verdict</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Override = share of agent output a reviewer sent back. Escapes = defects found after the QC gate, per thousand lines. These guardrails stop "faster and cheaper" from meaning "worse".</div></div>
+    <div class="panel"><div class="panel-hd"><h3>Quality guardrails</h3><span class="slo">Portfolio</span></div><div style="display:flex;justify-content:center;padding:12px 0 2px">${gauge(T.quality,94)}</div><div class="chart-body" style="padding-top:4px"><div class="wf"><div class="wfrow"><div class="lbl">Human override</div><div class="track"><i style="left:0;width:${T.override*7}%;background:var(--warn)"></i></div><div class="val warnc">${T.override.toFixed(1)}%</div></div><div class="wfrow"><div class="lbl">Rework loops / task</div><div class="track"><i style="left:0;width:22%;background:var(--run)"></i></div><div class="val num">0.37</div></div><div class="wfrow"><div class="lbl">Escaped defects /kLOC</div><div class="track"><i style="left:0;width:14%;background:var(--pass)"></i></div><div class="val num">0.12</div></div></div><div class="foot" style="border-top:0;padding:2px 0 0">Quality sits <b class="passc">${(T.quality-94).toFixed(1)} points above</b> the manual baseline. Watch the override rate: if it climbs, agents are producing work humans don't trust and the savings stop being real.</div></div></div></div>`;
+}
+const PANES={portfolio:panePortfolio,savings:paneSavings,tokens:paneTokens,fleet:paneFleet,quality:paneQuality};
+function render(){$("#pane").innerHTML=PANES[state.tab]();document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));}
+
+function updateReadouts(){
+  $("#v-rate").textContent="S$"+(CTRL.rate%1?CTRL.rate.toFixed(1):CTRL.rate.toFixed(0))+"k";
+  const dp=Math.round(CTRL.disc*100);
+  $("#v-disc").textContent=dp+"%";
+  $("#v-team").textContent="×"+CTRL.teamMult.toFixed(2);
+  $("#v-tok").textContent="×"+CTRL.tokMult.toFixed(1);
+  $("#rr-base").textContent=dp===0?"full":("−"+dp+"%");
+  $("#a-save").textContent=M1(T.savings);
+  const d=T.savings-DEFAULTS.savings, el=$("#a-delta");
+  if(Math.abs(d)<0.05){el.textContent="(base case)";el.style.color="var(--ink-3)";}
+  else{el.textContent=(d>0?"▲ +":"▼ −")+"S$"+Math.abs(d).toFixed(1)+"M vs base";el.style.color=d>0?"var(--pass)":"var(--fail)";}
+}
+function refresh(){recompute();syncHero();renderKpis();render();updateReadouts();closeDrawer();}
+
+function openDrawer(eye,title,lead,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-lead").textContent=lead;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
+function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
+function projectDrawer(p){
+  const left=Math.max(0,p.eta-p.elapsed);
+  const swarm=SWARM.map(s=>`<div class="task"><div class="th">${s.task}<span class="cnt">${s.agents.length} agents</span></div>${s.agents.map(([n,q])=>`<div class="agent-chip"><span class="statedot sd-run"></span>${esc(n)}<span class="qn passc">${q}%</span></div>`).join("")}</div>`).join("");
+  openDrawer(p.code+" · "+p.phase,p.name,p.lead+" · month "+p.elapsed+" of "+p.eta,
+    `<div class="dstat"><div class="c"><small>Completion</small><b class="num tealc">${p.pct}%</b></div><div class="c"><small>Est. spend</small><b class="num">${M(p.spend)}</b></div><div class="c"><small>Saving</small><b class="num gold">${M(p.savings)} · ${p.savePct.toFixed(0)}%</b></div><div class="c"><small>Baseline (−40%)</small><b class="num muted">${M(p.baseline)}</b></div><div class="c"><small>Tokens</small><b class="num cyanc">${p.tokM.toFixed(1)}B</b></div><div class="c"><small>Months left</small><b class="num">${left.toFixed(1)}</b></div></div>
+     <div class="sec-h">Cost breakdown</div><div class="wf">
+       <div class="wfrow"><div class="lbl">Traditional baseline</div><div class="track"><i style="left:0;width:100%;background:var(--hair)"></i></div><div class="val muted">${M(p.baseline)}</div></div>
+       <div class="wfrow"><div class="lbl">Agent-run labour</div><div class="track"><i style="left:0;width:${p.labour/p.baseline*100}%;background:var(--agent)"></i></div><div class="val num">${M(p.labour)}</div></div>
+       <div class="wfrow"><div class="lbl">+ tokens</div><div class="track"><i style="left:0;width:${p.tokCost/p.baseline*100}%;background:var(--cyan)"></i></div><div class="val num">${M(p.tokCost)}</div></div>
+       <div class="wfrow"><div class="lbl">+ platform</div><div class="track"><i style="left:0;width:${p.platform/p.baseline*100}%;background:var(--run)"></i></div><div class="val num">${M(p.platform)}</div></div>
+       <div class="wfrow"><div class="lbl">+ review &amp; governance</div><div class="track"><i style="left:0;width:${p.govern/p.baseline*100}%;background:var(--warn)"></i></div><div class="val num">${M(p.govern)}</div></div>
+       <div class="wfrow" style="border-top:1px solid var(--hair);padding-top:8px"><div class="lbl" style="color:var(--gold);font-weight:700">Net saving</div><div class="track"><i style="left:0;width:${p.savePct}%;background:var(--gold)"></i></div><div class="val" style="color:var(--gold);font-weight:700">${M(p.savings)}</div></div></div>
+     <div class="sec-h">Token profile — ${p.tokM.toFixed(1)}B tokens · ${K(p.tokCost*1000)} · S$${(p.agentCostK/1000).toFixed(1)}k / 1k LOC</div>
+     <div class="wf"><div class="wfrow"><div class="lbl">Input (cache-blended)</div><div class="track"><i style="left:0;width:${p.inTok/p.tokM*100}%;background:var(--cyan)"></i></div><div class="val num">${p.inTok}B</div></div><div class="wfrow"><div class="lbl">Output</div><div class="track"><i style="left:0;width:${p.outTok/p.tokM*100}%;background:var(--violet)"></i></div><div class="val num">${p.outTok}B</div></div></div>
+     <div class="sec-h">Agent swarm — ${SWARM.reduce((a,s)=>a+s.agents.length,0)} agents across ${SWARM.length} tasks</div>
+     <div class="swarm">${swarm}</div>
+     <div class="foot" style="border:0;padding:8px 0 0">Quality ${p.quality.toFixed(1)}% · override ${p.override.toFixed(1)}% · escapes ${p.escape.toFixed(2)}/kLOC. ${p.status==="risk"?'<b class="warnc">At risk:</b> override above the 5% guardrail — a human lead is reviewing agent output before the next gate.':'Tracking within all quality guardrails.'}</div>`);
+}
+function agentDrawer(n,q,ov,u,tok){
+  openDrawer("Agent",n,"part of the 20-agent fleet",`<div class="dstat"><div class="c"><small>Utilisation</small><b class="num tealc">${u}%</b></div><div class="c"><small>QC pass</small><b class="num passc">${q}%</b></div><div class="c"><small>Override</small><b class="num ${ov>4?'warnc':''}">${ov}%</b></div><div class="c"><small>Tokens (FY)</small><b class="num cyanc">${tok}B</b></div><div class="c"><small>Status</small><b>${u>85?'Near capacity':'Spare capacity'}</b></div><div class="c"><small>Scope</small><b>All projects</b></div></div><div class="foot" style="border:0;padding:0">Runs across every project. Utilisation is share of live work in the last hour; QC pass is the rate its output clears the gate; override is how often a reviewer sends work back. ${u>85?'Near capacity — a candidate for horizontal scaling to lift portfolio throughput.':'Has headroom for additional load.'}</div>`);
+}
+document.addEventListener("click",e=>{
+  const tab=e.target.closest(".tab");if(tab){state.tab=tab.dataset.tab;render();return;}
+  const th=e.target.closest("[data-sort]");if(th){const key=th.dataset.sort;state.sort={k:key,dir:state.sort.k===key?-state.sort.dir:-1};render();return;}
+  const pr=e.target.closest("[data-p]");if(pr){projectDrawer(P.find(x=>x.code===pr.dataset.p));return;}
+  const ag=e.target.closest("[data-agent]");if(ag){agentDrawer(ag.dataset.agent,ag.dataset.q,ag.dataset.ov,ag.dataset.u,ag.dataset.tok);return;}
+  if(e.target.closest("#d-close")||e.target.id==="scrim")closeDrawer();
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+$("#sl-rate").addEventListener("input",e=>{CTRL.rate=+e.target.value;refresh();});
+$("#sl-disc").addEventListener("input",e=>{CTRL.disc=+e.target.value/100;refresh();});
+$("#sl-team").addEventListener("input",e=>{CTRL.teamMult=+e.target.value/100;refresh();});
+$("#sl-tok").addEventListener("input",e=>{CTRL.tokMult=+e.target.value/100;refresh();});
+$("#a-reset").addEventListener("click",()=>{
+  CTRL.rate=DEF.rate;CTRL.disc=DEF.disc;CTRL.teamMult=DEF.teamMult;CTRL.tokMult=DEF.tokMult;
+  $("#sl-rate").value=DEF.rate;$("#sl-disc").value=Math.round(DEF.disc*100);
+  $("#sl-team").value=Math.round(DEF.teamMult*100);$("#sl-tok").value=Math.round(DEF.tokMult*100);
+  refresh();
+});
+function tick(){$("#clock").textContent=new Date().toLocaleTimeString("en-GB",{hour12:false});}
+tick();setInterval(tick,1000);
+renderKpis();render();updateReadouts();
+</script>
+</body>
+</html>
