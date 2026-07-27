@@ -194,7 +194,8 @@ tbody tr.clickable:hover{background:var(--panel-2)}
       <div class="eyebrow">Fleet status</div>
       <div class="live"><span class="dot"></span>20 agents live · <span class="num" id="m-active" style="margin-left:4px">&nbsp;</span></div>
       <div class="rrow" style="margin-top:9px"><span>Tasks / hour</span><b class="num">1,884</b></div>
-      <div class="rrow"><span>Tokens / min</span><b class="num">42.6M</b></div>
+      <div class="rrow"><span>Tokens / min</span><b class="num" id="m-tokmin">42.6M</b></div>
+      <div class="rrow"><span>Token cost / min</span><b class="num cyanc" id="m-tokcost">S$—</b></div>
       <div class="rrow"><span>Human reviewers</span><b class="num">18</b></div>
       <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
     </div>
@@ -223,7 +224,7 @@ tbody tr.clickable:hover{background:var(--panel-2)}
       </div>
       <div class="ctrls">
         <div class="ctrl"><div class="ctrl-top"><span>Loaded rate</span><b class="num" id="v-rate">S$20k</b></div>
-          <input type="range" id="sl-rate" min="12" max="30" step="0.5" value="20"><div class="ctrl-sub">per person-month</div></div>
+          <input type="range" id="sl-rate" min="8" max="30" step="0.5" value="20"><div class="ctrl-sub">per person-month</div></div>
         <div class="ctrl"><div class="ctrl-top"><span>Baseline discount</span><b class="num" id="v-disc">40%</b></div>
           <input type="range" id="sl-disc" min="0" max="60" step="5" value="40"><div class="ctrl-sub">cut off traditional cost</div></div>
         <div class="ctrl"><div class="ctrl-top"><span>Target team size</span><b class="num" id="v-team">×1.00</b></div>
@@ -261,20 +262,23 @@ const M1=v=>"S$"+v.toFixed(1)+"M";
 const K=v=>"S$"+Math.round(v)+"k";
 
 const RATE=20, DISC=0.60, pIn=1.10, pOut=16.00;
-const P=[
- {code:"AOE-OPT", name:"AOE Optimization",              phase:"Build",     status:"track", lead:"FX Pricing Tribe",     elapsed:5, eta:8, pct:62,
+const ALL_P=[
+ {code:"AOE-OPT", name:"AOE Optimization",              phase:"Build",     status:"track", lead:"FX Pricing Tribe",     elapsed:5, eta:8, pct:62, segment:"fx",
   tradTeam:36,tradMo:12, agTeam:10,agMo:8, inTok:28, outTok:9.5, loc:240, quality:97.6, override:3.8, escape:0.11},
- {code:"DGC-PX",  name:"Digicrypto Phase X",            phase:"Assure",    status:"risk",  lead:"Digital Assets Squad", elapsed:6.5,eta:8, pct:78,
+ {code:"DGC-PX",  name:"Digicrypto Phase X",            phase:"Assure",    status:"risk",  lead:"Digital Assets Squad", elapsed:6.5,eta:8, pct:78, segment:"credit",
   tradTeam:28,tradMo:11, agTeam:8, agMo:8, inTok:21, outTok:7,   loc:180, quality:96.4, override:5.1, escape:0.18},
- {code:"DGM-CC",  name:"Digimarkets Checks & Controls", phase:"Build",     status:"track", lead:"Controls Platform",    elapsed:3.5,eta:8, pct:41,
+ {code:"DGM-CC",  name:"Digimarkets Checks & Controls", phase:"Build",     status:"track", lead:"Controls Platform",    elapsed:3.5,eta:8, pct:41, segment:"fx",
   tradTeam:24,tradMo:11, agTeam:8, agMo:8, inTok:17, outTok:6,   loc:150, quality:98.1, override:2.9, escape:0.06},
- {code:"TAPI-IDL",name:"TAPI API for IDEAL",            phase:"Pilot", status:"track", lead:"Channels API Team",    elapsed:7.5,eta:8, pct:95,
+ {code:"TAPI-IDL",name:"TAPI API for IDEAL",            phase:"Pilot", status:"track", lead:"Channels API Team",    elapsed:7.5,eta:8, pct:95, segment:"credit",
   tradTeam:18,tradMo:10, agTeam:5, agMo:8, inTok:12, outTok:4.5, loc:95,  quality:98.7, override:2.1, escape:0.04},
- {code:"TAPI-CC", name:"TAPI API for CC",               phase:"Prototype", status:"risk",  lead:"Channels API Team",    elapsed:1.5,eta:8, pct:18,
+ {code:"TAPI-CC", name:"TAPI API for CC",               phase:"Prototype", status:"risk",  lead:"Channels API Team",    elapsed:1.5,eta:8, pct:18, segment:"credit",
   tradTeam:20,tradMo:10, agTeam:6, agMo:8, inTok:14, outTok:5,   loc:110, quality:95.2, override:6.4, escape:0.22},
- {code:"PRM-MTM", name:"Prime Real Time MTM",           phase:"Build",     status:"track", lead:"Prime Services Tribe", elapsed:4.5,eta:9, pct:55,
+ {code:"PRM-MTM", name:"Prime Real Time MTM",           phase:"Build",     status:"track", lead:"Prime Services Tribe", elapsed:4.5,eta:9, pct:55, segment:"fx",
   tradTeam:44,tradMo:12, agTeam:13,agMo:9, inTok:34, outTok:12,  loc:320, quality:96.9, override:4.3, escape:0.13},
 ];
+let P=ALL_P.slice();
+const FULL_TOKM=ALL_P.reduce((a,p)=>a+p.inTok+p.outTok,0);
+const BASE_TOKENS_PER_MIN=42.6; /* millions of tokens/min, full portfolio, live fleet rate */
 /* live control state — driven by the assumptions sliders */
 const CTRL={rate:RATE, disc:1-DISC, teamMult:1.0, tokMult:1.0}; // disc = fraction cut off the baseline
 const DEF={rate:RATE, disc:1-DISC, teamMult:1.0, tokMult:1.0};
@@ -314,13 +318,35 @@ function recompute(){
   T.agentCostK=T.spend*1e6/T.loc;T.tradCostK=T.baseline*1e6/T.loc;
   if(!DEFAULTS) DEFAULTS={savings:T.savings,realized:T.realized,spend:T.spend,baseline:T.baseline};
 }
+/* base-case savings for a given project list, at the DEFAULT slider assumptions —
+   used to re-anchor the assumptions delta whenever the Portfolio filter changes scope */
+function computeBaseDefaults(list){
+  const rate=DEF.rate, keep=1-DEF.disc, tm=DEF.teamMult, km=DEF.tokMult;
+  let realized=0, savings=0, spend=0, baseline=0;
+  list.forEach(p=>{
+    const baseFull=p.tradTeam*p.tradMo*rate/1000, base=baseFull*keep;
+    const labour=(p.agTeam*tm)*p.agMo*rate/1000;
+    const tokCost=((p.inTok*1000*pIn+p.outTok*1000*pOut)/1e6)*km;
+    const platform=0.06+p.loc/6000, govern=labour*0.12;
+    const sp=labour+tokCost+platform+govern, sav=base-sp;
+    savings+=sav; realized+=sav*(p.pct/100); spend+=sp; baseline+=base;
+  });
+  return {savings,realized,spend,baseline};
+}
+function renderFleetStats(){
+  const scopeTokM=P.reduce((a,p)=>a+p.inTok+p.outTok,0);
+  const tokensPerMin=BASE_TOKENS_PER_MIN*(FULL_TOKM?scopeTokM/FULL_TOKM:0);
+  const costPerMin=tokensPerMin*T.blended;
+  $("#m-tokmin").textContent=tokensPerMin.toFixed(1)+"M";
+  $("#m-tokcost").textContent="S$"+costPerMin.toFixed(costPerMin<10?2:0);
+}
 function syncHero(){
   $("#hero-save").textContent=M1(T.realized);$("#hero-proj").textContent=M1(T.savings);
   $("#eff1").textContent=T.eff.toFixed(2)+"×";$("#eff2").textContent=T.tokShare.toFixed(1)+"%";
   const dp=Math.round(CTRL.disc*100);
-  $("#hero-eye").textContent="FY2026 to date · 6 projects · baseline = traditional SDLC"+(dp===0?" (full)":", −"+dp+"%")+(Math.abs(CTRL.disc-DEF.disc)<1e-9?" (conservative)":" (adjusted)");
+  $("#hero-eye").textContent="FY2026 to date · "+P.length+" project"+(P.length===1?"":"s")+" · baseline = traditional SDLC"+(dp===0?" (full)":", −"+dp+"%")+(Math.abs(CTRL.disc-DEF.disc)<1e-9?" (conservative)":" (adjusted)");
 }
-recompute();syncHero();
+recompute();syncHero();renderFleetStats();
 
 const STAT={track:["t-track","On track"],risk:["t-risk","At risk"],block:["t-block","Blocked"],done:["t-done","In pilot"]};
 const MODELS=[{name:"Haiku 4.5",tokPct:62,costPct:17,color:"var(--cyan)"},{name:"Sonnet 5",tokPct:31,costPct:55,color:"var(--run)"},{name:"Opus 4.8",tokPct:7,costPct:28,color:"var(--violet)"}];
@@ -427,7 +453,7 @@ function panePortfolio(){
   return `<div class="panel"><div class="panel-hd"><h3>Projects in flight</h3><span class="slo">Select a project for its agent swarm, token spend and cost breakdown</span></div>
     <table><thead><tr>${th("name","Project")}${th("phase","Phase")}<th>Build completion</th>${th("spend","Est. spend","r")}${th("baseline","Baseline","r")}<th class="r">Tokens</th>${th("savings","Saving","r")}${th("savePct","%","r")}${th("quality","Quality","r")}${th("status","Status","r")}</tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot class="tfoot"><tr><td>Portfolio · 6 projects</td><td></td><td><div class="progwrap"><div class="prog"><i style="width:${T.avgPct}%"></i></div><span class="num">${T.avgPct.toFixed(0)}%</span></div></td><td class="r num">${M1(T.spend)}</td><td class="r num">${M1(T.baseline)}</td><td class="r num cyanc">${K(T.tokCost*1000)}</td><td class="r num gold">${M1(T.savings)}</td><td class="r num passc">${T.savePct.toFixed(0)}%</td><td class="r num">${T.quality.toFixed(1)}%</td><td></td></tr></tfoot></table>
+      <tfoot class="tfoot"><tr><td>Portfolio · ${P.length} project${P.length===1?"":"s"}</td><td></td><td><div class="progwrap"><div class="prog"><i style="width:${T.avgPct}%"></i></div><span class="num">${T.avgPct.toFixed(0)}%</span></div></td><td class="r num">${M1(T.spend)}</td><td class="r num">${M1(T.baseline)}</td><td class="r num cyanc">${K(T.tokCost*1000)}</td><td class="r num gold">${M1(T.savings)}</td><td class="r num passc">${T.savePct.toFixed(0)}%</td><td class="r num">${T.quality.toFixed(1)}%</td><td></td></tr></tfoot></table>
     <div class="foot">Baseline = the same scope under the traditional 12-month SDLC at S$${RATE}k / person-month, then <b>discounted 40%</b> to stay conservative. Est. spend = agent-run labour + token compute + platform + review &amp; governance.</div></div>`;
 }
 function paneSavings(){
@@ -463,8 +489,8 @@ function paneFleet(){
 }
 function paneQuality(){
   const rows=[...P].sort((a,b)=>b.quality-a.quality).map(p=>`<tr><td><div class="pname">${esc(p.name)}</div><div class="pcode">${p.code}</div></td><td class="r"><span class="bar-mini"><i style="width:${p.quality}%;background:var(--pass)"></i></span> <span class="num">${p.quality.toFixed(1)}%</span></td><td class="r num ${p.override>5?'warnc':'muted'}">${p.override.toFixed(1)}%</td><td class="r num ${p.escape>0.15?'warnc':'muted'}">${p.escape.toFixed(2)}</td><td class="r">${p.quality>=98?'<span class="tag t-track">Above base</span>':p.quality>=96?'<span class="tag t-track">On base</span>':'<span class="tag t-risk">Watch</span>'}</td></tr>`).join("");
-  return `<div class="grid2e"><div class="panel"><div class="panel-hd"><h3>Output quality by project</h3><span class="slo">QC pass · manual baseline 94.0%</span></div><table><thead><tr><th>Project</th><th class="r">QC pass</th><th class="r">Override</th><th class="r">Escapes /kLOC</th><th class="r">Verdict</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Override = share of agent output a reviewer sent back. Escapes = defects found after the QC gate, per thousand lines. These guardrails stop "faster and cheaper" from meaning "worse".</div></div>
-    <div class="panel"><div class="panel-hd"><h3>Quality guardrails</h3><span class="slo">Portfolio</span></div><div style="display:flex;justify-content:center;padding:12px 0 2px">${gauge(T.quality,94)}</div><div class="chart-body" style="padding-top:4px"><div class="wf"><div class="wfrow"><div class="lbl">Human override</div><div class="track"><i style="left:0;width:${T.override*7}%;background:var(--warn)"></i></div><div class="val warnc">${T.override.toFixed(1)}%</div></div><div class="wfrow"><div class="lbl">Rework loops / task</div><div class="track"><i style="left:0;width:22%;background:var(--run)"></i></div><div class="val num">0.37</div></div><div class="wfrow"><div class="lbl">Escaped defects /kLOC</div><div class="track"><i style="left:0;width:14%;background:var(--pass)"></i></div><div class="val num">0.12</div></div></div><div class="foot" style="border-top:0;padding:2px 0 0">Quality sits <b class="passc">${(T.quality-94).toFixed(1)} points above</b> the manual baseline. Watch the override rate: if it climbs, agents are producing work humans don't trust and the savings stop being real.</div></div></div></div>`;
+  return `<div class="grid2e"><div class="panel"><div class="panel-hd"><h3>Output quality by project</h3><span class="slo">QC pass · manual baseline 94.0%</span></div><table><thead><tr><th>Project</th><th class="r">QC pass</th><th class="r">Override</th><th class="r">Defects /kLOC</th><th class="r">Verdict</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Override = share of agent output a reviewer sent back. Defects /kLOC = defects found after the QC gate, per thousand lines. These guardrails stop "faster and cheaper" from meaning "worse".</div></div>
+    <div class="panel"><div class="panel-hd"><h3>Quality guardrails</h3><span class="slo">Portfolio</span></div><div style="display:flex;justify-content:center;padding:12px 0 2px">${gauge(T.quality,94)}</div><div class="chart-body" style="padding-top:4px"><div class="wf"><div class="wfrow"><div class="lbl">Human override</div><div class="track"><i style="left:0;width:${T.override*7}%;background:var(--warn)"></i></div><div class="val warnc">${T.override.toFixed(1)}%</div></div><div class="wfrow"><div class="lbl">Rework loops / task</div><div class="track"><i style="left:0;width:22%;background:var(--run)"></i></div><div class="val num">0.37</div></div><div class="wfrow"><div class="lbl">Defects /kLOC</div><div class="track"><i style="left:0;width:14%;background:var(--pass)"></i></div><div class="val num">0.12</div></div></div><div class="foot" style="border-top:0;padding:2px 0 0">Quality sits <b class="passc">${(T.quality-94).toFixed(1)} points above</b> the manual baseline. Watch the override rate: if it climbs, agents are producing work humans don't trust and the savings stop being real.</div></div></div></div>`;
 }
 const PANES={portfolio:panePortfolio,savings:paneSavings,tokens:paneTokens,fleet:paneFleet,quality:paneQuality};
 function render(){$("#pane").innerHTML=PANES[state.tab]();document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));}
@@ -481,7 +507,7 @@ function updateReadouts(){
   if(Math.abs(d)<0.05){el.textContent="(base case)";el.style.color="var(--ink-3)";}
   else{el.textContent=(d>0?"▲ +":"▼ −")+"S$"+Math.abs(d).toFixed(1)+"M vs base";el.style.color=d>0?"var(--pass)":"var(--fail)";}
 }
-function refresh(){recompute();syncHero();renderKpis();render();updateReadouts();closeDrawer();}
+function refresh(){recompute();syncHero();renderFleetStats();renderKpis();render();updateReadouts();closeDrawer();}
 
 function openDrawer(eye,title,lead,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-lead").textContent=lead;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
 function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
@@ -501,7 +527,7 @@ function projectDrawer(p){
      <div class="wf"><div class="wfrow"><div class="lbl">Input (cache-blended)</div><div class="track"><i style="left:0;width:${p.inTok/p.tokM*100}%;background:var(--cyan)"></i></div><div class="val num">${p.inTok}B</div></div><div class="wfrow"><div class="lbl">Output</div><div class="track"><i style="left:0;width:${p.outTok/p.tokM*100}%;background:var(--violet)"></i></div><div class="val num">${p.outTok}B</div></div></div>
      <div class="sec-h">Agent swarm — ${SWARM.reduce((a,s)=>a+s.agents.length,0)} agents across ${SWARM.length} tasks</div>
      <div class="swarm">${swarm}</div>
-     <div class="foot" style="border:0;padding:8px 0 0">Quality ${p.quality.toFixed(1)}% · override ${p.override.toFixed(1)}% · escapes ${p.escape.toFixed(2)}/kLOC. ${p.status==="risk"?'<b class="warnc">At risk:</b> override above the 5% guardrail — a human lead is reviewing agent output before the next gate.':'Tracking within all quality guardrails.'}</div>`);
+     <div class="foot" style="border:0;padding:8px 0 0">Quality ${p.quality.toFixed(1)}% · override ${p.override.toFixed(1)}% · defects ${p.escape.toFixed(2)}/kLOC. ${p.status==="risk"?'<b class="warnc">At risk:</b> override above the 5% guardrail — a human lead is reviewing agent output before the next gate.':'Tracking within all quality guardrails.'}</div>`);
 }
 function agentDrawer(n,q,ov,u,tok){
   openDrawer("Agent",n,"part of the 20-agent fleet",`<div class="dstat"><div class="c"><small>Utilisation</small><b class="num tealc">${u}%</b></div><div class="c"><small>QC pass</small><b class="num passc">${q}%</b></div><div class="c"><small>Override</small><b class="num ${ov>4?'warnc':''}">${ov}%</b></div><div class="c"><small>Tokens (FY)</small><b class="num cyanc">${tok}B</b></div><div class="c"><small>Status</small><b>${u>85?'Near capacity':'Spare capacity'}</b></div><div class="c"><small>Scope</small><b>All projects</b></div></div><div class="foot" style="border:0;padding:0">Runs across every project. Utilisation is share of live work in the last hour; QC pass is the rate its output clears the gate; override is how often a reviewer sends work back. ${u>85?'Near capacity — a candidate for horizontal scaling to lift portfolio throughput.':'Has headroom for additional load.'}</div>`);
@@ -514,6 +540,12 @@ document.addEventListener("click",e=>{
   if(e.target.closest("#d-close")||e.target.id==="scrim")closeDrawer();
 });
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+$("#s1").addEventListener("change",e=>{
+  const v=e.target.value;
+  P = v==="GFM — all projects" ? ALL_P.slice() : ALL_P.filter(p=>p.segment===(v==="FX & Rates"?"fx":"credit"));
+  DEFAULTS=computeBaseDefaults(P);
+  refresh();
+});
 $("#sl-rate").addEventListener("input",e=>{CTRL.rate=+e.target.value;refresh();});
 $("#sl-disc").addEventListener("input",e=>{CTRL.disc=+e.target.value/100;refresh();});
 $("#sl-team").addEventListener("input",e=>{CTRL.teamMult=+e.target.value/100;refresh();});
