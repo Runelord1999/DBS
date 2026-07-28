@@ -183,6 +183,10 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .err{color:var(--fail)}
 .empty{padding:26px;text-align:center;color:var(--ink-3)}
 
+/* custom tooltip — anchored so the cursor sits at its bottom-left corner, never covering the text */
+.tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.5);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
+.tt.show{opacity:1}
+
 @media (max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2,.grid2b{grid-template-columns:1fr}.agrid{grid-template-columns:1fr}.ladder{flex-wrap:wrap}.gate{flex:1 1 30%}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis{grid-template-columns:repeat(2,1fr)}.rollup-grid{grid-template-columns:1fr}}
 </style>
@@ -202,9 +206,9 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
     </div>
     <div class="railcard" id="fleetcard">
       <div class="eyebrow">Test fleet</div>
-      <div class="live" title="Assurance agents actively working this project right now (Portfolio view sums this across all six)."><span class="dot"></span><span id="m-run">—</span> agents running</div>
-      <div class="rrow" style="margin-top:9px" title="The most recent test run number for this release."><span>Latest run</span><b class="num" id="m-runno">—</b></div>
-      <div class="rrow" title="The git commit the latest test run executed against."><span>Commit</span><b class="num" id="m-commit">—</b></div>
+      <div class="live" data-tip="Assurance agents actively working this project right now (Portfolio view sums this across all six)."><span class="dot"></span><span id="m-run">—</span> agents running</div>
+      <div class="rrow" style="margin-top:9px" data-tip="The most recent test run number for this release."><span>Latest run</span><b class="num" id="m-runno">—</b></div>
+      <div class="rrow" data-tip="The git commit the latest test run executed against."><span>Commit</span><b class="num" id="m-commit">—</b></div>
       <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
     </div>
     <div class="mininote" id="mininote"></div>
@@ -241,6 +245,28 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 "use strict";
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* custom tooltip engine — reads data-tip, positions the box so the cursor sits at its bottom-left corner */
+(function(){
+  let box=null,lastEl=null;
+  function ensure(){ if(!box){box=document.createElement("div");box.className="tt";document.body.appendChild(box);} return box; }
+  function place(x,y){
+    const el=ensure(),pad=14;
+    let left=x+pad, top=y-el.offsetHeight-pad;
+    if(left+el.offsetWidth>window.innerWidth-8) left=Math.max(8,x-el.offsetWidth-pad);
+    if(top<8) top=y+pad;
+    el.style.left=left+"px"; el.style.top=top+"px";
+  }
+  document.addEventListener("mousemove",e=>{
+    const t=e.target.closest("[data-tip]");
+    const el=ensure();
+    if(!t){el.classList.remove("show");lastEl=null;return;}
+    if(t!==lastEl){el.textContent=t.getAttribute("data-tip");lastEl=t;}
+    el.classList.add("show");
+    place(e.clientX,e.clientY);
+  });
+  document.addEventListener("mouseleave",()=>{if(box)box.classList.remove("show");lastEl=null;});
+})();
 
 /* ============================================================
    Test-gate taxonomy — shared across every project.
@@ -685,7 +711,7 @@ function renderCrumbVerdict(){
       <h2></h2>
       <p></p>
     </div>
-    <div class="stamp" style="border-color:${STAMP_COLOR[p.stampTone]};color:${STAMP_COLOR[p.stampTone]};background:${STAMP_COLOR[p.stampTone]}0f" title="Promotion verdict, derived from the status of this release's six test gates below.">${esc(p.stampLabel)}</div>`;
+    <div class="stamp" style="border-color:${STAMP_COLOR[p.stampTone]};color:${STAMP_COLOR[p.stampTone]};background:${STAMP_COLOR[p.stampTone]}0f" data-tip="Promotion verdict, derived from the status of this release's six test gates below.">${esc(p.stampLabel)}</div>`;
   $("#verdict").querySelector("h2").innerHTML=p.verdictHead;
   $("#verdict").querySelector("p").textContent=p.verdictBody;
 }
@@ -696,7 +722,7 @@ function renderLadder(){
   $("#ladder").style.display="";
   const p=cur();
   $("#ladder").innerHTML=p.gates.map(g=>{const s=GST[g.status],on=state.gate===g.id,pass=g.total-g.fail;
-    return `<button class="gate ${s[0]}" data-gate="${g.id}" aria-pressed="${on}" title="${esc(g.name)} test gate · ${s[1]}${g.total?" · "+pass.toLocaleString()+" pass, "+g.fail+" fail of "+g.total.toLocaleString()+" cases":" · not yet reached"}. Click to filter every tab to this gate.">
+    return `<button class="gate ${s[0]}" data-gate="${g.id}" aria-pressed="${on}" data-tip="${esc(g.name)} test gate · ${s[1]}${g.total?" · "+pass.toLocaleString()+" pass, "+g.fail+" fail of "+g.total.toLocaleString()+" cases":" · not yet reached"}. Click to filter every tab to this gate.">
       <span class="bar"></span><span class="chev">${on?"◉":"○"}</span>
       <div class="seq">TEST GATE ${g.seq}</div><div class="gn">${g.name}</div>
       <div class="st">${s[1]}</div>
@@ -721,7 +747,7 @@ function renderKpis(){
       ["Avg QC pass",avgQc.toFixed(1)+"%","vs 94.0% manual baseline","var(--gold)","gold","PORTFOLIO","Baseline-weighted average QC pass rate across all six projects, versus the 94% manual baseline."],
     ];
     $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap,tip])=>
-      `<div class="kpi" style="--accent:${acc}" title="${esc(tip)}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+      `<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
     return;
   }
   const p=cur();
@@ -741,7 +767,7 @@ function renderKpis(){
     ["Human override",p.qc.override.toFixed(1)+"%",p.qc.overridden+" of "+p.qc.artifacts.toLocaleString()+" artifacts","var(--gold)","gold","PORTFOLIO","Share of agent-produced artifacts a human reviewer sent back for rework."],
   ];
   $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap,tip])=>
-    `<div class="kpi" style="--accent:${acc}" title="${esc(tip)}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+    `<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}">${cap?`<span class="cap"><span class="port-tag">${cap}</span></span>`:""}<div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
 }
 
 /* ---- filter chip ---- */
@@ -767,26 +793,26 @@ function paneOverview(p){
   const gateRows=(gateFilter?p.gates.filter(g=>g.id===gateFilter):p.gates).map(g=>{const s=GST[g.status];return `<tr class="clickable" data-gate="${g.id}"><td><b>${g.name}</b> <span class="muted mono" style="font-size:10px">${g.seq}</span></td><td class="r num">${g.total.toLocaleString()}</td><td class="r num passc">${(g.total-g.fail).toLocaleString()}</td><td class="r num ${g.fail?'failc':'muted'}">${g.fail}</td><td class="r num muted">${g.skip}</td><td class="r num muted">${g.dur}</td><td class="r"><span class="tag ${g.status==='pass'?'t-pass':g.status==='fail'?'t-fail':g.status==='warn'?'t-warn':g.status==='block'?'t-block':'t-pending'}">${s[1]}</span></td></tr>`;}).join("");
   const totCases=p.gates.reduce((a,g)=>a+g.total,0),totFail=p.gates.reduce((a,g)=>a+g.fail,0);
   return `<div class="grid2b">
-    <div class="panel rollup"><div class="panel-hd" title="The exact three numbers this project reports up to the portfolio console's Output Quality tab."><h3>Quality roll-up → portfolio</h3><span class="slo">what ${esc(p.name)} reports at portfolio level</span></div>
+    <div class="panel rollup"><div class="panel-hd" data-tip="The exact three numbers this project reports up to the portfolio console's Output Quality tab."><h3>Quality roll-up → portfolio</h3><span class="slo">what ${esc(p.name)} reports at portfolio level</span></div>
       <div class="rollup-grid">
-        <div class="rollup-c" title="Rate at which this project's agent output clears the QC gate."><small>QC PASS RATE</small><b class="num passc">${p.qc.qcPass.toFixed(1)}%</b><div class="sub passc">${(p.qc.qcPass-p.qc.manualBase).toFixed(1)} pts above manual</div></div>
-        <div class="rollup-c" title="Share of agent-produced artifacts a human reviewer sent back for rework."><small>HUMAN OVERRIDE</small><b class="num gold">${p.qc.override.toFixed(1)}%</b><div class="sub muted">${p.qc.overridden} of ${p.qc.artifacts.toLocaleString()} sent back</div></div>
-        <div class="rollup-c" title="Defects found after the QC gate — the ones that got past the fleet's own checks — per thousand lines of code."><small>ESCAPED DEFECTS</small><b class="num tealc">${p.qc.escape.toFixed(2)}</b><div class="sub muted">per 1k LOC</div></div>
+        <div class="rollup-c" data-tip="Rate at which this project's agent output clears the QC gate."><small>QC PASS RATE</small><b class="num passc">${p.qc.qcPass.toFixed(1)}%</b><div class="sub passc">${(p.qc.qcPass-p.qc.manualBase).toFixed(1)} pts above manual</div></div>
+        <div class="rollup-c" data-tip="Share of agent-produced artifacts a human reviewer sent back for rework."><small>HUMAN OVERRIDE</small><b class="num gold">${p.qc.override.toFixed(1)}%</b><div class="sub muted">${p.qc.overridden} of ${p.qc.artifacts.toLocaleString()} sent back</div></div>
+        <div class="rollup-c" data-tip="Defects found after the QC gate — the ones that got past the fleet's own checks — per thousand lines of code."><small>ESCAPED DEFECTS</small><b class="num tealc">${p.qc.escape.toFixed(2)}</b><div class="sub muted">per 1k LOC</div></div>
       </div>
       <div class="foot">These three numbers are computed here, from this release's evidence, and flow straight into the portfolio console's <b>Output Quality</b> tab. The saving story upstairs is only credible because this layer holds the line: agents move fast, humans still approve every change, and quality stays above the manual baseline.</div></div>
-    <div class="panel"><div class="panel-hd" title="Which owner — an agent role, or a human scope decision — each open failure currently sits with."><h3>Failures by owner${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name+" test gate":""}</h3><span class="slo">${failuresInScope.length} root-cause item${failuresInScope.length===1?"":"s"}</span></div>
+    <div class="panel"><div class="panel-hd" data-tip="Which owner — an agent role, or a human scope decision — each open failure currently sits with."><h3>Failures by owner${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name+" test gate":""}</h3><span class="slo">${failuresInScope.length} root-cause item${failuresInScope.length===1?"":"s"}</span></div>
       <div style="padding:15px">${ownerRows}
       <div class="foot" style="border-top:1px solid var(--hair);margin-top:6px;padding:11px 0 0">Every agent fix is a pull request a human must approve — the review &amp; governance overlay costed on the portfolio.</div></div></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd" title="Executed / passed / failed / skipped case counts for each of the six test gates."><h3>Test gate summary${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name:""}</h3><span class="slo">promotion blocked until every required test gate clears</span></div>
-    <table><thead><tr><th title="Unit → Component → SIT → UAT → Performance → Security, in promotion order.">Test Gate</th><th class="r" title="Test cases run so far in this gate.">Executed</th><th class="r" title="Executed cases that passed.">Passed</th><th class="r" title="Executed cases that failed.">Failed</th><th class="r" title="Cases skipped this run.">Skipped</th><th class="r">Duration</th><th class="r" title="Passed / Failed / Warnings / Blocked / Not started.">Status</th></tr></thead>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Executed / passed / failed / skipped case counts for each of the six test gates."><h3>Test gate summary${gateFilter?" · "+p.gates.find(g=>g.id===gateFilter).name:""}</h3><span class="slo">promotion blocked until every required test gate clears</span></div>
+    <table><thead><tr><th data-tip="Unit → Component → SIT → UAT → Performance → Security, in promotion order.">Test Gate</th><th class="r" data-tip="Test cases run so far in this gate.">Executed</th><th class="r" data-tip="Executed cases that passed.">Passed</th><th class="r" data-tip="Executed cases that failed.">Failed</th><th class="r" data-tip="Cases skipped this run.">Skipped</th><th class="r">Duration</th><th class="r" data-tip="Passed / Failed / Warnings / Blocked / Not started.">Status</th></tr></thead>
     <tbody>${gateRows}</tbody>
     ${gateFilter?"":`<tfoot class="tfoot"><tr><td>Release</td><td class="r num">${totCases.toLocaleString()}</td><td class="r num">${(totCases-totFail).toLocaleString()}</td><td class="r num failc">${totFail}</td><td class="r num">—</td><td class="r num">—</td><td class="r"><span class="tag ${STAMP_TAG[p.stampTone]}">${p.stampLabel.split(" · ")[0]}</span></td></tr></tfoot>`}</table></div>`;
 }
 function paneSuites(p){
   const list=p.suites.filter(s=>!state.gate||s.gate===state.gate);
   if(!list.length) return `<div class="panel"><div class="empty">No test suites ${state.gate?"in the "+p.gates.find(g=>g.id===state.gate).name+" test gate":"recorded"} yet.</div></div>`;
-  return `<div class="panel"><div class="panel-hd" title="Test suites group individual test cases by feature area. Click a suite to expand its child cases."><h3>Test suites${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} suites · select a row to expand</span></div>
+  return `<div class="panel"><div class="panel-hd" data-tip="Test suites group individual test cases by feature area. Click a suite to expand its child cases."><h3>Test suites${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} suites · select a row to expand</span></div>
     <div>${list.map((s,i)=>`<div class="suite" data-suite="${i}">
       <div class="suite-hd"><span class="caret">▶</span><span class="nm">${esc(s.name)}</span>
         <span class="ct">${s.total.toLocaleString()} cases</span>
@@ -805,9 +831,9 @@ function paneLatency(p){
       <td class="r num ${s.err>0.1?'failc':s.err>0?'warnc':'muted'}">${s.err.toFixed(2)}%</td>
       <td class="r">${spark(s.spark,s.slo)}</td>
       <td class="r"><span class="tag ${breach?'t-fail':'t-pass'}">${breach?'SLO breach':'within SLO'}</span></td></tr>`;}).join("");
-  const th=(k,l,tip)=>`<th class="r sortable" data-sort="${k}"${tip?` title="${esc(tip)}"`:""}>${l}${key===k?(dir<0?" ↓":" ↑"):""}</th>`;
-  return `<div class="panel"><div class="panel-hd" title="Latency of each service exercised by this project's test suite, measured during test execution."><h3>Service latency under test${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${breaches} of ${services.length} services breaching p99 SLO · ms</span></div>
-    <table><thead><tr><th>Service</th>${th("p50","p50","Median response time — half of requests are faster than this.")}${th("p95","p95","95th-percentile response time.")}${th("p99","p99","99th-percentile response time — the tail latency compared against the SLO.")}<th class="r" title="The p99 objective this service is held to.">SLO</th>${th("err","Error","Error rate observed during the test run.")}<th class="r" title="p99 trend over the last several runs, against the SLO (dashed line).">Trend</th><th class="r" title="Whether the latest p99 sits within or breaches the SLO.">Status</th></tr></thead><tbody>${rows}</tbody></table>
+  const th=(k,l,tip)=>`<th class="r sortable" data-sort="${k}"${tip?` data-tip="${esc(tip)}"`:""}>${l}${key===k?(dir<0?" ↓":" ↑"):""}</th>`;
+  return `<div class="panel"><div class="panel-hd" data-tip="Latency of each service exercised by this project's test suite, measured during test execution."><h3>Service latency under test${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${breaches} of ${services.length} services breaching p99 SLO · ms</span></div>
+    <table><thead><tr><th>Service</th>${th("p50","p50","Median response time — half of requests are faster than this.")}${th("p95","p95","95th-percentile response time.")}${th("p99","p99","99th-percentile response time — the tail latency compared against the SLO.")}<th class="r" data-tip="The p99 objective this service is held to.">SLO</th>${th("err","Error","Error rate observed during the test run.")}<th class="r" data-tip="p99 trend over the last several runs, against the SLO (dashed line).">Trend</th><th class="r" data-tip="Whether the latest p99 sits within or breaches the SLO.">Status</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="foot">Services are tagged to the test gate that exercises them, so filtering by gate above narrows this list too.</div></div>`;
 }
 function paneFailures(p){
@@ -816,15 +842,15 @@ function paneFailures(p){
     const msg=state.gate?`No failures in the ${p.gates.find(g=>g.id===state.gate).name} test gate. Clear the filter to see the others.`:"No open failures on this release.";
     return `<div class="panel"><div class="empty">${msg}</div></div>`;
   }
-  return `<div class="panel"><div class="panel-hd" title="Root-cause failure items, each of which can span several failing test cases. Click a row for the agent's full triage notes."><h3>Failures${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} items · select one for the agent's triage</span></div>
-    <table><thead><tr><th>ID</th><th>Test</th><th title="The agent role — or Human, for a scope decision — currently responsible for resolving this.">Owner</th><th class="r" title="Fix proposed = a pull request awaits approval. Investigating = root cause not yet found. Needs decision = requires a human scope call.">State</th></tr></thead>
+  return `<div class="panel"><div class="panel-hd" data-tip="Root-cause failure items, each of which can span several failing test cases. Click a row for the agent's full triage notes."><h3>Failures${state.gate?" · "+p.gates.find(g=>g.id===state.gate).name+" test gate":""}</h3><span class="slo">${list.length} items · select one for the agent's triage</span></div>
+    <table><thead><tr><th>ID</th><th>Test</th><th data-tip="The agent role — or Human, for a scope decision — currently responsible for resolving this.">Owner</th><th class="r" data-tip="Fix proposed = a pull request awaits approval. Investigating = root cause not yet found. Needs decision = requires a human scope call.">State</th></tr></thead>
     <tbody>${list.map(f=>{const cls=f.state==="fix proposed"?"t-agent":f.state==="investigating"?"t-run":"t-warn";
       return `<tr class="clickable" data-fail="${f.id}"><td class="mono">${f.id}</td><td><div style="font-weight:600">${esc(f.test)}</div><div class="muted" style="font-size:10.5px">${esc(f.suite)}</div></td><td style="font-size:11.5px">${esc(f.owner)}</td><td class="r"><span class="tag ${cls}">${f.state}</span></td></tr>`;}).join("")}</tbody></table></div>`;
 }
 function paneAgents(p){
   const agents=buildAgents(p);
-  return `<div class="panel"><div class="panel-hd" title="The subset of the delivery fleet doing test & release-assurance work on this project. Click a card for detail."><h3>Assurance agents on this release</h3><span class="slo">a subset of the 40-agent delivery fleet, scoped to test &amp; release</span></div>
-    <div class="agrid">${agents.map(a=>`<div class="acard" data-agent="${esc(a.name)}" title="${a.state==='running'?'Running':a.state==='block'?'Blocked':'Idle'} · ${esc(a.runs)} · last active ${a.last}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
+  return `<div class="panel"><div class="panel-hd" data-tip="The subset of the delivery fleet doing test & release-assurance work on this project. Click a card for detail."><h3>Assurance agents on this release</h3><span class="slo">a subset of the 40-agent delivery fleet, scoped to test &amp; release</span></div>
+    <div class="agrid">${agents.map(a=>`<div class="acard" data-agent="${esc(a.name)}" data-tip="${a.state==='running'?'Running':a.state==='block'?'Blocked':'Idle'} · ${esc(a.runs)} · last active ${a.last}"><div class="ah"><b>${esc(a.name)}</b><span class="statedot sd-${a.state==='running'?'run':a.state==='block'?'block':'idle'}"></span></div><div class="ao">${esc(a.out)}</div><div class="am">${esc(a.runs)} · last ${a.last}</div></div>`).join("")}</div>
     <div class="foot">These are the same named agents that appear on the portfolio console's fleet — here you see them working ${esc(p.name)}. The Debug &amp; Remediation, Refactoring &amp; Performance and Security &amp; Vulnerability agents propose changes; a human approves every pull request before it merges.</div></div>`;
 }
 function buildAgents(p){
@@ -850,7 +876,7 @@ const PANES={overview:paneOverview,suites:paneSuites,latency:paneLatency,failure
 function panePortfolioSummary(){
   const rows=PROJECT_ORDER.map(code=>{
     const p=PROJECTS[code];
-    const pills=p.gates.map(g=>{const s=GST[g.status];return `<span class="gpill ${s[0]}" title="${esc(g.name)} test gate · ${s[1]}">${g.seq}</span>`;}).join("");
+    const pills=p.gates.map(g=>{const s=GST[g.status];return `<span class="gpill ${s[0]}" data-tip="${esc(g.name)} test gate · ${s[1]}">${g.seq}</span>`;}).join("");
     const totFail=p.gates.reduce((a,g)=>a+g.fail,0);
     return `<tr class="clickable" data-viewproject="${code}">
       <td><div style="font-weight:600">${esc(p.name)}</div><div class="muted mono" style="font-size:10px">${p.code} · ${esc(p.lead)}</div></td>
@@ -862,8 +888,8 @@ function panePortfolioSummary(){
       <td class="r"><button class="viewbtn" data-viewproject="${code}">View →</button></td>
     </tr>`;
   }).join("");
-  return `<div class="panel"><div class="panel-hd" title="One row per project. Hover the gate pills for each gate's status, or click a row to open that project's full console."><h3>All projects — test gate status</h3><span class="slo">click a project for its full release-assurance console</span></div>
-    <table><thead><tr><th>Project</th><th title="Current lifecycle phase and build completion.">Phase</th><th title="01 Unit · 02 Component · 03 SIT · 04 UAT · 05 Performance · 06 Security — hover a pill for its status.">Test gates (01–06)</th><th class="r" title="Sum of failing test cases across all six gates.">Open defects</th><th class="r" title="Quality-control pass rate of this project's agent output.">QC pass</th><th class="r" title="Overall promotion verdict for this release.">Verdict</th><th class="r"></th></tr></thead>
+  return `<div class="panel"><div class="panel-hd" data-tip="One row per project. Hover the gate pills for each gate's status, or click a row to open that project's full console."><h3>All projects — test gate status</h3><span class="slo">click a project for its full release-assurance console</span></div>
+    <table><thead><tr><th>Project</th><th data-tip="Current lifecycle phase and build completion.">Phase</th><th data-tip="01 Unit · 02 Component · 03 SIT · 04 UAT · 05 Performance · 06 Security — hover a pill for its status.">Test gates (01–06)</th><th class="r" data-tip="Sum of failing test cases across all six gates.">Open defects</th><th class="r" data-tip="Quality-control pass rate of this project's agent output.">QC pass</th><th class="r" data-tip="Overall promotion verdict for this release.">Verdict</th><th class="r"></th></tr></thead>
     <tbody>${rows}</tbody></table>
     <div class="gpills-key"><span><span class="gpill g-pass">01</span>Passed</span><span><span class="gpill g-fail">•</span>Failed</span><span><span class="gpill g-warn">•</span>Warnings</span><span><span class="gpill g-block">•</span>Blocked</span><span><span class="gpill g-pending">•</span>Not started</span></div>
     <div class="foot">Test gates, left to right: 01 Unit · 02 Component · 03 SIT · 04 UAT · 05 Performance · 06 Security. Every project runs the same six; a project that hasn't reached a gate yet shows it as "not started" rather than passed.</div></div>`;

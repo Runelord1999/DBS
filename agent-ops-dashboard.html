@@ -173,6 +173,10 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 .agent-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-2);padding:3px 0}
 .agent-chip .qn{margin-left:auto;font-family:var(--mono);font-size:10px}
 
+/* custom tooltip — anchored so the cursor sits at its bottom-left corner, never covering the text */
+.tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.5);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
+.tt.show{opacity:1}
+
 @media (max-width:1240px){.kpis,.tokrow{grid-template-columns:repeat(3,1fr)}.grid2,.grid2e,.grid3{grid-template-columns:1fr}.fleetgrid{grid-template-columns:repeat(2,1fr)}.swarm{grid-template-columns:1fr}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis,.tokrow{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -185,18 +189,18 @@ tbody tr.clickable:hover{background:var(--panel-2)}
     <div>
       <label class="field"><span class="eyebrow">Portfolio</span>
         <select id="s1"><option>GFM — all projects</option><option>FX &amp; Rates</option><option>Credit &amp; Derivs</option></select></label>
-      <div class="field" title="The traditional-delivery cost estimate is deliberately cut by this percentage before it's compared to agent spend, so the saving figure stays conservative rather than best-case."><span class="eyebrow">Baseline (conservative)</span>
+      <div class="field" data-tip="The traditional-delivery cost estimate is deliberately cut by this percentage before it's compared to agent spend, so the saving figure stays conservative rather than best-case."><span class="eyebrow">Baseline (conservative)</span>
         <div class="railread"><span>Traditional SDLC</span><b class="num" id="rr-base">−40%</b></div></div>
       <label class="field"><span class="eyebrow">Period</span>
         <select id="s3"><option>FY2026 to date</option><option>This quarter</option><option>Rolling 12 months</option></select></label>
     </div>
     <div class="railcard">
       <div class="eyebrow">Fleet status</div>
-      <div class="live" title="Total agents deployed across the delivery lifecycle, and how many are actively working right now."><span class="dot"></span><span id="m-total">40</span> agents live · <span class="num" id="m-active" style="margin-left:4px">&nbsp;</span></div>
-      <div class="rrow" style="margin-top:9px" title="Combined task throughput across the live fleet, all projects."><span>Tasks / hour</span><b class="num">1,884</b></div>
-      <div class="rrow" title="Live token consumption rate across the fleet right now."><span>Tokens / min</span><b class="num" id="m-tokmin">42.6M</b></div>
-      <div class="rrow" title="Tokens / min converted to dollars at the current blended token rate. Reacts to the Portfolio filter and to token pricing."><span>Token cost / min</span><b class="num cyanc" id="m-tokcost">S$—</b></div>
-      <div class="rrow" title="Headcount currently reviewing and approving agent output across the portfolio."><span>Human reviewers</span><b class="num">18</b></div>
+      <div class="live" data-tip="Total agents deployed across the delivery lifecycle, and how many are actively working right now."><span class="dot"></span><span id="m-total">40</span> agents live · <span class="num" id="m-active" style="margin-left:4px">&nbsp;</span></div>
+      <div class="rrow" style="margin-top:9px" data-tip="Combined task throughput across the live fleet, all projects."><span>Tasks / hour</span><b class="num">1,884</b></div>
+      <div class="rrow" data-tip="Live token consumption rate across the fleet right now."><span>Tokens / min</span><b class="num" id="m-tokmin">42.6M</b></div>
+      <div class="rrow" data-tip="Tokens / min converted to dollars at the current blended token rate. Reacts to the Portfolio filter and to token pricing."><span>Token cost / min</span><b class="num cyanc" id="m-tokcost">S$—</b></div>
+      <div class="rrow" data-tip="Headcount currently reviewing and approving agent output across the portfolio."><span>Human reviewers</span><b class="num">18</b></div>
       <div class="rrow"><span>Updated</span><b class="num" id="clock">—</b></div>
     </div>
     <div class="mininote">Baseline is the traditional 12-month SDLC cost, deliberately discounted 40% to stay conservative. All figures are modelled planning estimates for management review, not booked actuals.</div>
@@ -210,22 +214,22 @@ tbody tr.clickable:hover{background:var(--panel-2)}
         <p id="hero-p">A small team steering 40 agents is delivering the current book of work for roughly half the traditional cost and in two-thirds of the time — and the agent compute behind it is under 8% of spend. Quality holds above the manual baseline.</p>
       </div>
       <div class="heroright">
-        <div class="effcard" title="Traditional baseline cost ÷ actual modelled spend. 2.16× means the same scope costs less than half as much to deliver with agents."><small>Cost efficiency</small><b class="num gold" id="eff1">2.16×</b></div>
-        <div class="effcard" title="Traditional 12-month schedule ÷ actual delivery time. Reflects agents completing the same scope in less calendar time — not affected by the sliders below."><small>Speed</small><b class="num tealc">1.5×</b></div>
-        <div class="effcard" title="Token compute cost as a share of total spend (labour + tokens + platform + governance). Shows how small a slice of the bill is actual AI usage."><small>Token share</small><b class="num cyanc" id="eff2">7.9%</b></div>
+        <div class="effcard" data-tip="Traditional baseline cost ÷ actual modelled spend. 2.16× means the same scope costs less than half as much to deliver with agents."><small>Cost efficiency</small><b class="num gold" id="eff1">2.16×</b></div>
+        <div class="effcard" data-tip="Traditional 12-month schedule ÷ actual delivery time. Reflects agents completing the same scope in less calendar time — not affected by the sliders below."><small>Speed</small><b class="num tealc">1.5×</b></div>
+        <div class="effcard" data-tip="Token compute cost as a share of total spend (labour + tokens + platform + governance). Shows how small a slice of the bill is actual AI usage."><small>Token share</small><b class="num cyanc" id="eff2">7.9%</b></div>
       </div>
     </div>
 
     <div class="assump" id="assump">
       <div class="assump-hd">
         <div><span class="eyebrow">Assumptions · drag to stress-test</span>
-          <div class="assump-live" title="Total saving expected at 100% completion under the current assumptions, versus the discounted traditional baseline.">Projected saving <b class="num grad" id="a-save">S$12.3M</b> <span class="num" id="a-delta" title="Change in projected saving versus the default slider settings."></span></div></div>
+          <div class="assump-live" data-tip="Total saving expected at 100% completion under the current assumptions, versus the discounted traditional baseline.">Projected saving <b class="num grad" id="a-save">S$12.3M</b> <span class="num" id="a-delta" data-tip="Change in projected saving versus the default slider settings."></span></div></div>
         <button class="reset" id="a-reset">Reset to base case</button>
       </div>
       <div class="ctrls">
-        <div class="ctrl" title="Fully-loaded cost per person per month. Applied to both the traditional baseline headcount and the agent-run team, so it scales both sides of the comparison together."><div class="ctrl-top"><span>Loaded rate</span><b class="num" id="v-rate">S$10k</b></div>
+        <div class="ctrl" data-tip="Fully-loaded cost per person per month. Applied to both the traditional baseline headcount and the agent-run team, so it scales both sides of the comparison together."><div class="ctrl-top"><span>Loaded rate</span><b class="num" id="v-rate">S$10k</b></div>
           <input type="range" id="sl-rate" min="8" max="30" step="0.5" value="10"><div class="ctrl-sub">per person-month</div></div>
-        <div class="ctrl" title="Scales the size of the human team steering the agents, as a multiple of the currently planned headcount."><div class="ctrl-top"><span>Target team size</span><b class="num" id="v-team">×1.00</b></div>
+        <div class="ctrl" data-tip="Scales the size of the human team steering the agents, as a multiple of the currently planned headcount."><div class="ctrl-top"><span>Target team size</span><b class="num" id="v-team">×1.00</b></div>
           <input type="range" id="sl-team" min="60" max="160" step="5" value="100"><div class="ctrl-sub">vs planned headcount</div></div>
       </div>
     </div>
@@ -253,6 +257,28 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 "use strict";
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* custom tooltip engine — reads data-tip, positions the box so the cursor sits at its bottom-left corner */
+(function(){
+  let box=null,lastEl=null;
+  function ensure(){ if(!box){box=document.createElement("div");box.className="tt";document.body.appendChild(box);} return box; }
+  function place(x,y){
+    const el=ensure(),pad=14;
+    let left=x+pad, top=y-el.offsetHeight-pad;
+    if(left+el.offsetWidth>window.innerWidth-8) left=Math.max(8,x-el.offsetWidth-pad);
+    if(top<8) top=y+pad;
+    el.style.left=left+"px"; el.style.top=top+"px";
+  }
+  document.addEventListener("mousemove",e=>{
+    const t=e.target.closest("[data-tip]");
+    const el=ensure();
+    if(!t){el.classList.remove("show");lastEl=null;return;}
+    if(t!==lastEl){el.textContent=t.getAttribute("data-tip");lastEl=t;}
+    el.classList.add("show");
+    place(e.clientX,e.clientY);
+  });
+  document.addEventListener("mouseleave",()=>{if(box)box.classList.remove("show");lastEl=null;});
+})();
 const M=v=>"S$"+v.toFixed(2)+"M";
 const M1=v=>"S$"+v.toFixed(1)+"M";
 const K=v=>"S$"+Math.round(v)+"k";
@@ -410,7 +436,7 @@ function renderKpis(){
     ["Output quality",T.quality.toFixed(1)+"%","QC pass · base 94.0%","var(--pass)","passc","▲","Baseline-weighted average QC pass rate of agent output across the visible projects, versus the 94% manual baseline."],
     ["Cost / 1k LOC","S$"+(T.agentCostK/1000).toFixed(1)+"k","vs S$"+(T.tradCostK/1000).toFixed(1)+"k traditional","var(--run)","runc","","Modelled spend per thousand lines of code delivered by the agent-run team, versus the traditional-team equivalent."],
   ];
-  $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap,tip])=>`<div class="kpi" style="--accent:${acc}" title="${esc(tip)}"><span class="cap ${c}">${cap||""}</span><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
+  $("#kpis").innerHTML=k.map(([l,v,s,acc,c,cap,tip])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}"><span class="cap ${c}">${cap||""}</span><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("");
 }
 
 function cumulativeCurve(){
@@ -450,17 +476,17 @@ function panePortfolio(){
   const {k,dir}=state.sort;
   const rows=[...P].sort((a,b)=>((typeof a[k]==="string")?a[k].localeCompare(b[k]):a[k]-b[k])*dir).map(p=>{const st=STAT[p.status];
     return `<tr class="clickable" data-p="${p.code}"><td><div class="pname">${esc(p.name)}</div><div class="pcode">${p.code} · ${esc(p.lead)}</div></td><td><span class="phase">${p.phase}</span></td><td><div class="progwrap"><div class="prog"><i style="width:${p.pct}%"></i></div><span class="num">${p.pct}%</span></div></td><td class="r num">${M1(p.spend)}</td><td class="r num muted">${M1(p.baseline)}</td><td class="r num cyanc">${K(p.tokCost*1000)}</td><td class="r num gold">${M1(p.savings)}</td><td class="r num passc">${p.savePct.toFixed(0)}%</td><td class="r num">${p.quality.toFixed(1)}%</td><td class="r"><span class="tag ${st[0]}">${st[1]}</span></td></tr>`;}).join("");
-  const th=(key,l,cls="",tip="")=>`<th class="${cls} sortable" data-sort="${key}"${tip?` title="${esc(tip)}"`:""}>${l}${k===key?(dir<0?" ↓":" ↑"):""}</th>`;
+  const th=(key,l,cls="",tip="")=>`<th class="${cls} sortable" data-sort="${key}"${tip?` data-tip="${esc(tip)}"`:""}>${l}${k===key?(dir<0?" ↓":" ↑"):""}</th>`;
   return `<div class="panel"><div class="panel-hd"><h3>Projects in flight</h3><span class="slo">Select a project for its agent swarm, token spend and cost breakdown</span></div>
-    <table><thead><tr>${th("name","Project")}${th("phase","Phase")}<th title="Share of planned scope delivered so far.">Build completion</th>${th("spend","Est. spend","r","Modelled agent-run spend: labour + tokens + platform + review & governance.")}${th("baseline","Baseline","r","Traditional-delivery cost estimate for the same scope, after the conservative 40% discount.")}<th class="r" title="Combined input + output tokens consumed, fiscal year to date.">Tokens</th>${th("savings","Saving","r","Baseline minus estimated spend.")}${th("savePct","%","r","Saving as a percentage of baseline.")}${th("quality","Quality","r","QC pass rate of this project's agent output.")}${th("status","Status","r","On track / at risk / blocked, from the project's own test gates.")}</tr></thead>
+    <table><thead><tr>${th("name","Project")}${th("phase","Phase")}<th data-tip="Share of planned scope delivered so far.">Build completion</th>${th("spend","Est. spend","r","Modelled agent-run spend: labour + tokens + platform + review & governance.")}${th("baseline","Baseline","r","Traditional-delivery cost estimate for the same scope, after the conservative 40% discount.")}<th class="r" data-tip="Combined input + output tokens consumed, fiscal year to date.">Tokens</th>${th("savings","Saving","r","Baseline minus estimated spend.")}${th("savePct","%","r","Saving as a percentage of baseline.")}${th("quality","Quality","r","QC pass rate of this project's agent output.")}${th("status","Status","r","On track / at risk / blocked, from the project's own test gates.")}</tr></thead>
       <tbody>${rows}</tbody>
       <tfoot class="tfoot"><tr><td>Portfolio · ${P.length} project${P.length===1?"":"s"}</td><td></td><td><div class="progwrap"><div class="prog"><i style="width:${T.avgPct}%"></i></div><span class="num">${T.avgPct.toFixed(0)}%</span></div></td><td class="r num">${M1(T.spend)}</td><td class="r num">${M1(T.baseline)}</td><td class="r num cyanc">${K(T.tokCost*1000)}</td><td class="r num gold">${M1(T.savings)}</td><td class="r num passc">${T.savePct.toFixed(0)}%</td><td class="r num">${T.quality.toFixed(1)}%</td><td></td></tr></tfoot></table>
     <div class="foot">Baseline = the same scope under the traditional 12-month SDLC at S$${CTRL.rate%1?CTRL.rate.toFixed(1):CTRL.rate.toFixed(0)}k / person-month, then <b>discounted 40%</b> to stay conservative. Est. spend = agent-run labour + token compute + platform + review &amp; governance.</div></div>`;
 }
 function paneSavings(){
-  return `<div class="grid2"><div class="panel"><div class="panel-hd" title="Realized = saving to date, pro-rated by completion. Projected = the dashed line, saving at 100% completion under the current assumptions."><h3>Cumulative savings</h3><span class="slo">Realized vs projected · S$M</span></div><div class="chart-body">${cumulativeCurve()}</div><div class="legend"><span><i style="background:var(--gold)"></i>Realized (${M1(T.realized)})</span><span><i style="background:var(--ink-3)"></i>Projected (${M1(T.savings)})</span></div></div>
-    <div class="panel"><div class="panel-hd" title="Traditional labour cost avoided, minus what it costs to run the agents: tokens, platform/tooling, and review & governance overhead."><h3>Where the saving comes from</h3><span class="slo">Portfolio · at completion</span></div><div class="chart-body">${driverWaterfall()}</div><div class="foot">Removing head-count is the entire saving; tokens, platform and governance give a little back. The net — on an already-conservative baseline — is the number to quote.</div></div></div>
-  <div class="panel mt14"><div class="panel-hd" title="Each project's modelled spend broken into labour, tokens, platform and governance (coloured segments), against its traditional baseline (grey bar)."><h3>Cost composition, by project</h3><span class="slo"><span style="color:var(--agent)">▬</span> labour <span style="color:var(--cyan)">▬</span> tokens <span style="color:var(--run)">▬</span> platform <span style="color:var(--warn)">▬</span> governance</span></div><div class="chart-body">${costCompositionBars()}</div></div>`;
+  return `<div class="grid2"><div class="panel"><div class="panel-hd" data-tip="Realized = saving to date, pro-rated by completion. Projected = the dashed line, saving at 100% completion under the current assumptions."><h3>Cumulative savings</h3><span class="slo">Realized vs projected · S$M</span></div><div class="chart-body">${cumulativeCurve()}</div><div class="legend"><span><i style="background:var(--gold)"></i>Realized (${M1(T.realized)})</span><span><i style="background:var(--ink-3)"></i>Projected (${M1(T.savings)})</span></div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Traditional labour cost avoided, minus what it costs to run the agents: tokens, platform/tooling, and review & governance overhead."><h3>Where the saving comes from</h3><span class="slo">Portfolio · at completion</span></div><div class="chart-body">${driverWaterfall()}</div><div class="foot">Removing head-count is the entire saving; tokens, platform and governance give a little back. The net — on an already-conservative baseline — is the number to quote.</div></div></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Each project's modelled spend broken into labour, tokens, platform and governance (coloured segments), against its traditional baseline (grey bar)."><h3>Cost composition, by project</h3><span class="slo"><span style="color:var(--agent)">▬</span> labour <span style="color:var(--cyan)">▬</span> tokens <span style="color:var(--run)">▬</span> platform <span style="color:var(--warn)">▬</span> governance</span></div><div class="chart-body">${costCompositionBars()}</div></div>`;
 }
 function paneTokens(){
   const tiles=[
@@ -475,15 +501,15 @@ function paneTokens(){
   const costDonut=donut(MODELS.map(m=>({label:m.name,v:m.costPct,color:m.color})),M(T.tokCost),"token cost");
   const dl=key=>MODELS.map(m=>`<div class="dl"><span class="sw" style="background:${m.color}"></span>${m.name}<span class="v">${m[key]}%</span></div>`).join("");
   const priceRows=[["Haiku 4.5","0.25","1.25","62%","S$0.14M"],["Sonnet 5","3.00","15.00","31%","S$0.46M"],["Opus 4.8","15.00","75.00","7%","S$0.24M"]];
-  return `<div class="tokrow">${tiles.map(([l,v,s,c,tip])=>`<div class="toktile" title="${esc(tip)}"><div class="eyebrow">${l}</div><b class="num ${c||''}">${v}</b><small>${s}</small></div>`).join("")}</div>
+  return `<div class="tokrow">${tiles.map(([l,v,s,c,tip])=>`<div class="toktile" data-tip="${esc(tip)}"><div class="eyebrow">${l}</div><b class="num ${c||''}">${v}</b><small>${s}</small></div>`).join("")}</div>
     <div class="grid3">
-      <div class="panel"><div class="panel-hd" title="Share of total tokens consumed by each model tier, weighted by actual routing decisions."><h3>Token volume by model</h3></div><div class="donutwrap">${modelDonut}<div class="donut-legend">${dl('tokPct')}</div></div></div>
-      <div class="panel"><div class="panel-hd" title="Share of total token spend by each model tier. Diverges from volume share because models are priced very differently."><h3>Token cost by model</h3></div><div class="donutwrap">${costDonut}<div class="donut-legend">${dl('costPct')}</div></div><div class="foot" style="border-top:0;padding-top:0">Haiku carries 62% of volume for 17% of cost. Opus is 7% of tokens but 28% of cost — reserved for the hard reasoning.</div></div>
-      <div class="panel"><div class="panel-hd" title="Modelled token spend by calendar month, fiscal year to date."><h3>Monthly token spend</h3><span class="slo">S$k realized</span></div><div class="chart-body">${tokenMonthChart()}</div></div>
+      <div class="panel"><div class="panel-hd" data-tip="Share of total tokens consumed by each model tier, weighted by actual routing decisions."><h3>Token volume by model</h3></div><div class="donutwrap">${modelDonut}<div class="donut-legend">${dl('tokPct')}</div></div></div>
+      <div class="panel"><div class="panel-hd" data-tip="Share of total token spend by each model tier. Diverges from volume share because models are priced very differently."><h3>Token cost by model</h3></div><div class="donutwrap">${costDonut}<div class="donut-legend">${dl('costPct')}</div></div><div class="foot" style="border-top:0;padding-top:0">Haiku carries 62% of volume for 17% of cost. Opus is 7% of tokens but 28% of cost — reserved for the hard reasoning.</div></div>
+      <div class="panel"><div class="panel-hd" data-tip="Modelled token spend by calendar month, fiscal year to date."><h3>Monthly token spend</h3><span class="slo">S$k realized</span></div><div class="chart-body">${tokenMonthChart()}</div></div>
     </div>
     <div class="grid2e mt14">
-      <div class="panel"><div class="panel-hd" title="Where in the software delivery lifecycle the token volume is being spent."><h3>Tokens by lifecycle stage</h3><span class="slo">Billions · FY to date</span></div><div class="chart-body">${hbars(TOKGRP.map(t=>({label:t.g,v:t.tok,color:t.color})),v=>v+"B")}</div><div class="foot" style="border-top:0;padding-top:0">Code generation dominates consumption — also where labour displacement is largest, so the spend is well-aimed.</div></div>
-      <div class="panel"><div class="panel-hd" title="List price per model, and this fleet's current volume/cost split across the tiers."><h3>Model pricing &amp; allocation</h3><span class="slo">Illustrative list pricing, S$ / 1M tokens</span></div>
+      <div class="panel"><div class="panel-hd" data-tip="Where in the software delivery lifecycle the token volume is being spent."><h3>Tokens by lifecycle stage</h3><span class="slo">Billions · FY to date</span></div><div class="chart-body">${hbars(TOKGRP.map(t=>({label:t.g,v:t.tok,color:t.color})),v=>v+"B")}</div><div class="foot" style="border-top:0;padding-top:0">Code generation dominates consumption — also where labour displacement is largest, so the spend is well-aimed.</div></div>
+      <div class="panel"><div class="panel-hd" data-tip="List price per model, and this fleet's current volume/cost split across the tiers."><h3>Model pricing &amp; allocation</h3><span class="slo">Illustrative list pricing, S$ / 1M tokens</span></div>
         <table><thead><tr><th>Model</th><th class="r">Input</th><th class="r">Output</th><th class="r">Share</th><th class="r">Cost</th></tr></thead>
         <tbody>${priceRows.map(r=>`<tr><td>${r[0]}</td><td class="r num">${r[1]}</td><td class="r num">${r[2]}</td><td class="r num muted">${r[3]}</td><td class="r num cyanc">${r[4]}</td></tr>`).join("")}</tbody>
         <tfoot class="tfoot"><tr><td>Blended</td><td class="r num" colspan="2">S$${T.blended.toFixed(2)} / 1M</td><td class="r num">${T.totTok.toFixed(0)}B</td><td class="r num">${M(T.tokCost)}</td></tr></tfoot></table>
@@ -492,13 +518,13 @@ function paneTokens(){
 }
 function paneFleet(){
   const groups=FLEET.map(g=>{const gt=g.items.reduce((a,i)=>a+i[5],0);
-    return `<div class="fgroup"><h4>${g.g}<span>${gt}B tok</span></h4>${g.items.map(([n,u,st,q,ov,tok])=>`<div class="arow" data-agent="${esc(n)}" data-q="${q}" data-ov="${ov}" data-u="${u}" data-tok="${tok}" title="Utilisation ${u}% (share of the last hour on live work) · QC pass ${q}% · override ${ov}% · ${tok}B tokens FY-to-date"><div class="an"><span>${esc(n)}</span><span class="statedot sd-${st==="running"?"run":st==="blocked"?"block":"idle"}"></span></div><div class="as"><span>util ${u}% · ${tok}B tok</span><span class="num">QC ${q}%</span></div><div class="bar-mini" style="margin-top:6px;width:100%"><i style="width:${u}%;background:${u>85?'var(--run)':'var(--agent)'}"></i></div></div>`).join("")}</div>`;}).join("");
-  return `<div class="panel"><div class="panel-hd" title="Every agent currently deployed across the delivery lifecycle, grouped by stage. Hover an agent for its utilisation, QC pass rate and override rate."><h3>Agent fleet · ${TOTAL_AGENTS} agents across the end-to-end lifecycle</h3><span class="slo">${activeCount} running now · each major task is served by a team of agents</span></div><div class="fleetgrid">${groups}</div><div class="foot">Utilisation is share of the last hour on live work; token figures are FY-to-date consumption. Agents above 85% (Code Generation, Test Execution, Orchestrator) are the throughput constraints and the first candidates for horizontal scaling.</div></div>`;
+    return `<div class="fgroup"><h4>${g.g}<span>${gt}B tok</span></h4>${g.items.map(([n,u,st,q,ov,tok])=>`<div class="arow" data-agent="${esc(n)}" data-q="${q}" data-ov="${ov}" data-u="${u}" data-tok="${tok}" data-tip="Utilisation ${u}% (share of the last hour on live work) · QC pass ${q}% · override ${ov}% · ${tok}B tokens FY-to-date"><div class="an"><span>${esc(n)}</span><span class="statedot sd-${st==="running"?"run":st==="blocked"?"block":"idle"}"></span></div><div class="as"><span>util ${u}% · ${tok}B tok</span><span class="num">QC ${q}%</span></div><div class="bar-mini" style="margin-top:6px;width:100%"><i style="width:${u}%;background:${u>85?'var(--run)':'var(--agent)'}"></i></div></div>`).join("")}</div>`;}).join("");
+  return `<div class="panel"><div class="panel-hd" data-tip="Every agent currently deployed across the delivery lifecycle, grouped by stage. Hover an agent for its utilisation, QC pass rate and override rate."><h3>Agent fleet · ${TOTAL_AGENTS} agents across the end-to-end lifecycle</h3><span class="slo">${activeCount} running now · each major task is served by a team of agents</span></div><div class="fleetgrid">${groups}</div><div class="foot">Utilisation is share of the last hour on live work; token figures are FY-to-date consumption. Agents above 85% (Code Generation, Test Execution, Orchestrator) are the throughput constraints and the first candidates for horizontal scaling.</div></div>`;
 }
 function paneQuality(){
   const rows=[...P].sort((a,b)=>b.quality-a.quality).map(p=>`<tr><td><div class="pname">${esc(p.name)}</div><div class="pcode">${p.code}</div></td><td class="r"><span class="bar-mini"><i style="width:${p.quality}%;background:var(--pass)"></i></span> <span class="num">${p.quality.toFixed(1)}%</span></td><td class="r num ${p.override>5?'warnc':'muted'}">${p.override.toFixed(1)}%</td><td class="r num ${p.escape>0.15?'warnc':'muted'}">${p.escape.toFixed(2)}</td><td class="r">${p.quality>=98?'<span class="tag t-track">Above base</span>':p.quality>=96?'<span class="tag t-track">On base</span>':'<span class="tag t-risk">Watch</span>'}</td></tr>`).join("");
-  return `<div class="grid2e"><div class="panel"><div class="panel-hd" title="QC pass, override and defect-escape rate for each project's agent output, against the 94% manual baseline."><h3>Output quality by project</h3><span class="slo">QC pass · manual baseline 94.0%</span></div><table><thead><tr><th>Project</th><th class="r" title="Rate at which agent output clears the QC gate.">QC pass</th><th class="r" title="Share of agent output a human reviewer sent back for rework.">Override</th><th class="r" title="Defects found after the QC gate, per thousand lines of code.">Defects /kLOC</th><th class="r" title="Above base ≥98% QC · On base ≥96% · Watch <96%.">Verdict</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Override = share of agent output a reviewer sent back. Defects /kLOC = defects found after the QC gate, per thousand lines. These guardrails stop "faster and cheaper" from meaning "worse".</div></div>
-    <div class="panel"><div class="panel-hd" title="Portfolio-wide guardrails that keep speed and savings from coming at the cost of quality."><h3>Quality guardrails</h3><span class="slo">Portfolio</span></div><div style="display:flex;justify-content:center;padding:12px 0 2px" title="Baseline-weighted average QC pass rate (needle) versus the 94% manual baseline (dashed marker).">${gauge(T.quality,94)}</div><div class="chart-body" style="padding-top:4px"><div class="wf"><div class="wfrow" title="Share of agent output a reviewer sent back across the portfolio. Rising override means agents are producing work humans trust less."><div class="lbl">Human override</div><div class="track"><i style="left:0;width:${T.override*7}%;background:var(--warn)"></i></div><div class="val warnc">${T.override.toFixed(1)}%</div></div><div class="wfrow" title="Average number of times a task is sent back for rework before it clears review."><div class="lbl">Rework loops / task</div><div class="track"><i style="left:0;width:22%;background:var(--run)"></i></div><div class="val num">0.37</div></div><div class="wfrow" title="Defects found after the QC gate, per thousand lines of code — the quality that got past the fleet's own checks."><div class="lbl">Defects /kLOC</div><div class="track"><i style="left:0;width:14%;background:var(--pass)"></i></div><div class="val num">0.12</div></div></div><div class="foot" style="border-top:0;padding:2px 0 0">Quality sits <b class="passc">${(T.quality-94).toFixed(1)} points above</b> the manual baseline. Watch the override rate: if it climbs, agents are producing work humans don't trust and the savings stop being real.</div></div></div></div>`;
+  return `<div class="grid2e"><div class="panel"><div class="panel-hd" data-tip="QC pass, override and defect-escape rate for each project's agent output, against the 94% manual baseline."><h3>Output quality by project</h3><span class="slo">QC pass · manual baseline 94.0%</span></div><table><thead><tr><th>Project</th><th class="r" data-tip="Rate at which agent output clears the QC gate.">QC pass</th><th class="r" data-tip="Share of agent output a human reviewer sent back for rework.">Override</th><th class="r" data-tip="Defects found after the QC gate, per thousand lines of code.">Defects /kLOC</th><th class="r" data-tip="Above base ≥98% QC · On base ≥96% · Watch <96%.">Verdict</th></tr></thead><tbody>${rows}</tbody></table><div class="foot">Override = share of agent output a reviewer sent back. Defects /kLOC = defects found after the QC gate, per thousand lines. These guardrails stop "faster and cheaper" from meaning "worse".</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Portfolio-wide guardrails that keep speed and savings from coming at the cost of quality."><h3>Quality guardrails</h3><span class="slo">Portfolio</span></div><div style="display:flex;justify-content:center;padding:12px 0 2px" data-tip="Baseline-weighted average QC pass rate (needle) versus the 94% manual baseline (dashed marker).">${gauge(T.quality,94)}</div><div class="chart-body" style="padding-top:4px"><div class="wf"><div class="wfrow" data-tip="Share of agent output a reviewer sent back across the portfolio. Rising override means agents are producing work humans trust less."><div class="lbl">Human override</div><div class="track"><i style="left:0;width:${T.override*7}%;background:var(--warn)"></i></div><div class="val warnc">${T.override.toFixed(1)}%</div></div><div class="wfrow" data-tip="Average number of times a task is sent back for rework before it clears review."><div class="lbl">Rework loops / task</div><div class="track"><i style="left:0;width:22%;background:var(--run)"></i></div><div class="val num">0.37</div></div><div class="wfrow" data-tip="Defects found after the QC gate, per thousand lines of code — the quality that got past the fleet's own checks."><div class="lbl">Defects /kLOC</div><div class="track"><i style="left:0;width:14%;background:var(--pass)"></i></div><div class="val num">0.12</div></div></div><div class="foot" style="border-top:0;padding:2px 0 0">Quality sits <b class="passc">${(T.quality-94).toFixed(1)} points above</b> the manual baseline. Watch the override rate: if it climbs, agents are producing work humans don't trust and the savings stop being real.</div></div></div></div>`;
 }
 const PANES={portfolio:panePortfolio,savings:paneSavings,tokens:paneTokens,fleet:paneFleet,quality:paneQuality};
 function render(){$("#pane").innerHTML=PANES[state.tab]();document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));}
