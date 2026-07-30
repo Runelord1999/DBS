@@ -758,15 +758,32 @@ function paneOverviewPortfolio(){
   const utilByCust=[...list].map(c=>Math.min(1,custUtilCur(c))*c.limitM).sort((a,b)=>b-a);
   const top5Share=utilizedRaw?utilByCust.slice(0,5).reduce((a,b)=>a+b,0)/utilizedRaw:0;
   const top10Share=utilizedRaw?utilByCust.slice(0,10).reduce((a,b)=>a+b,0)/utilizedRaw:0;
-  const wtdUtil=total?utilizedRaw/total:0;
+
+  /* ONE denominator for every utilization rate on this page: approved limits.
+     Utilization is conventionally drawn ÷ limit — the reserved buffer is unallocated
+     capacity, so folding it into the denominator understates how hard the book is
+     working. The pie chart is the deliberate exception: it is a composition of the
+     whole pool and must total 100%, so its slices are labelled "share of pool". */
+  const utilRate  = total?utilizedRaw/total:0;
+  const availRate = total?available/total:0;
+
+  // Period high-water mark, so the current rate reads against how close the book has come.
+  const days=state.dateRangeDays;
+  const hist=[];
+  for(let off=days-1; off>=0; off--){
+    let num=0,den=0;
+    list.forEach(c=>{ const idx=c.series.length-1-off; if(idx>=0){num+=c.series[idx]*c.limitM; den+=c.limitM;} });
+    hist.push(den?num/den:0);
+  }
+  const peakUtil=hist.length?Math.max(...hist):0;
 
   const kpis=[
-    ["Total SR pool",fmtM(grand),"limits + reserved buffer","var(--run)","runc","Total settlement-risk capacity in scope: approved customer limits plus the unallocated reserved buffer."],
-    ["Utilized",fmtM(utilizedRaw),grand?fmtPct(utilizedRaw/grand)+" of pool":"0%","var(--fail)","failc","Drawn exposure against approved limits, capped at 100% per customer. Amounts above a customer's limit are shown separately as Excess exposure."],
-    ["Available",fmtM(available),grand?fmtPct(available/grand)+" of pool":"0%","var(--pass)","passc","Unused headroom inside already-approved customer limits — capacity that can be drawn today without any new approval."],
-    ["Reserved",fmtM(reserved),"held back, unallocated","var(--gold)","gold","Capacity deliberately held back at portfolio level and not yet allocated to any customer."],
-    ["Weighted utilization",fmtPct(wtdUtil),"limit-weighted, not simple avg","var(--cyan)","cyanc","Utilized ÷ total approved limits. Limit-weighted, so large exposures move it more than small ones — the truer measure of how hard the book is working."],
-    ["Excess exposure",fmtM(excessM),breachCount+" customer"+(breachCount===1?"":"s")+" over limit","var(--fail)","failc","Total drawn amount sitting ABOVE approved limits. This is unapproved risk and is excluded from the pool figures above."],
+    ["Total SR pool",fmtM(grand),fmtM(total)+" limits + "+fmtM(reserved)+" reserved","var(--run)","runc","Total settlement-risk capacity in scope: approved customer limits plus the unallocated reserved buffer."],
+    ["Utilized",fmtM(utilizedRaw),fmtPct(utilRate)+" of approved limits","var(--fail)","failc","Drawn exposure against approved limits, capped at 100% per customer. The percentage is limit-weighted: drawn ÷ total approved limits ("+fmtM(utilizedRaw)+" ÷ "+fmtM(total)+"). Amounts above a customer's limit are shown separately as Excess exposure."],
+    ["Available",fmtM(available),fmtPct(availRate)+" of approved limits","var(--pass)","passc","Unused headroom inside already-approved customer limits — drawable today without any new approval. Same denominator as Utilized, so the two add to 100%."],
+    ["Reserved",fmtM(reserved),"unallocated buffer, on top","var(--gold)","gold","Capacity deliberately held back at portfolio level and not yet allocated to any customer. It sits outside the utilization calculation — that is why Utilized and Available add to 100% without it."],
+    ["Peak utilization",fmtPct(peakUtil),"high-water mark, last "+days+"d","var(--cyan)","cyanc","The highest limit-weighted utilization reached during the selected date range. Read against the current rate to see how much of the book's peak demand today's headroom would absorb."],
+    ["Excess exposure",fmtM(excessM),breachCount+" customer"+(breachCount===1?"":"s")+" over limit","var(--fail)","failc","Total drawn amount sitting ABOVE approved limits. This is unapproved risk and is excluded from the pool and utilization figures."],
     ["Dormant capital",fmtM(dormantM),dormantList.length+" limits at 0% util.","var(--violet)","violetc","Approved limits with zero current utilization — capacity that is committed on paper but earning nothing. Prime candidates for recycling or reduction."],
     ["Top-5 concentration",fmtPct(top5Share),"top-10: "+fmtPct(top10Share),"var(--warn)","warnc","Share of total utilized exposure held by the five largest names. A standard single-name concentration check — the higher it is, the more the book depends on a few counterparties."],
   ];
@@ -777,14 +794,7 @@ function paneOverviewPortfolio(){
     return {key:seg,label:SEGMENT_LABEL[seg],a:segCust.filter(c=>c.hasLimit).length,b:segCust.filter(c=>!c.hasLimit).length};
   });
 
-  // trend: aggregate utilization % across filtered with-limit customers, weighted by limit, hist + 30d forecast
-  const days=state.dateRangeDays;
-  const hist=[];
-  for(let off=days-1; off>=0; off--){
-    let num=0,den=0;
-    list.forEach(c=>{ const idx=c.series.length-1-off; if(idx>=0){num+=c.series[idx]*c.limitM; den+=c.limitM;} });
-    hist.push(den?num/den:0);
-  }
+  // forward projection off the trailing 14-day trend (hist is built above, with peakUtil)
   const recent=hist.slice(-14);
   const slope = recent.length>1 ? (recent[recent.length-1]-recent[0])/(recent.length-1) : 0;
   const fcast=[]; let lastV=hist[hist.length-1]||0;
@@ -827,10 +837,12 @@ function paneOverviewPortfolio(){
     <div class="panel"><div class="panel-hd" data-tip="Total SR pool split into Utilized (drawn against customer limits, capped at 100% per customer), Available (unused allocated capacity) and Reserved (held back, not yet allocated)."><h3>SR pool composition</h3><span class="slo">Utilized · Available · Reserved</span></div>
       <div class="panel-body"><div class="chart-well donut-well">
         ${donut(pieSegs,fmtM(grand),"total pool")}
-        <div style="flex:1;min-width:190px">${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num muted" style="margin-right:10px">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="num" style="font-weight:700;width:46px;text-align:right">${s.v.toFixed(1)}%</span></div>`).join("")}
+        <div style="flex:1;min-width:210px">
+        <div class="colhd" style="margin-bottom:9px"><div style="width:18px"></div><div style="flex:1"></div><div style="width:62px;text-align:right">Amount</div><div style="width:60px;text-align:right">Share of pool</div></div>
+        ${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num muted" style="width:62px;text-align:right">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="num" style="font-weight:700;width:60px;text-align:right">${s.v.toFixed(1)}%</span></div>`).join("")}
         ${excessM>0?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
       </div></div>
-      <div class="foot">Utilized is capped at each customer's own limit; amounts drawn beyond 100% are excess exposure, shown separately rather than inflating the pool.</div></div>
+      <div class="foot">Slices are <b>share of the total pool</b> (limits + reserved), so they sum to 100%. The Utilized and Available KPIs above are <b>utilization rates</b> against approved limits only — a different, deliberately narrower denominator.</div></div>
     <div class="panel"><div class="panel-hd" data-tip="Coverage is the share of each segment that already holds an SR limit — the remainder is the Sales whitespace. Click a bar to drill into that segment below."><h3>Customers with vs without SR limits</h3><span class="slo">by segment · coverage %</span></div>
       <div class="panel-body"><div class="chart-well">${groupedBar(segCats)}</div></div>
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
