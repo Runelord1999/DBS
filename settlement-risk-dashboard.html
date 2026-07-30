@@ -54,6 +54,7 @@ select,.dinput{width:100%;background:var(--panel-2);border:1px solid var(--hair)
 .rrow{display:flex;justify-content:space-between;font-size:0.71875rem;margin-bottom:6px;color:var(--ink-2)}
 .rrow:last-child{margin-bottom:0}
 .rrow b{color:var(--ink);font-weight:600}
+.dotk{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:middle}
 .fsrow{display:flex;align-items:center;gap:8px}
 .fsrow input[type=range]{flex:1}
 .fsrow .fA{font-weight:700;color:var(--ink-3)}
@@ -61,12 +62,14 @@ select,.dinput{width:100%;background:var(--panel-2);border:1px solid var(--hair)
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:var(--hair);outline:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer}
 input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer}
-.mininote{font-size:0.65625rem;color:var(--ink-3);line-height:1.55;margin-top:auto;padding-top:10px;border-top:1px solid var(--hair)}
+.mininote{font-size:0.65625rem;color:var(--ink-3);line-height:1.55;padding-top:10px;border-top:1px solid var(--hair)}
 .mininote b{color:var(--agent)}
+.rail-spacer{flex:1 1 auto;min-height:4px}
 
 .main{padding:20px 26px 48px;min-width:0}
 
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:18px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px}
+.toprow:hover{background:var(--panel-2);border-radius:5px}
 .kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
 .kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
 .kpi b{display:block;font-size:1.3125rem;font-weight:750;margin-top:6px}
@@ -84,17 +87,29 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .fsrow.mini input[type=range]{width:64px;flex:0 0 auto}
 .fsrow.mini .fA{font-size:0.6875rem}
 
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-.grid2b{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
-.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start}
+/* Rows stretch so every panel on a row shares one height — no ragged bottom edges.
+   Panels are flex columns so the body absorbs slack and the foot pins to the bottom. */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid2b{display:grid;grid-template-columns:1.35fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .mt14{margin-top:14px}
 
-.panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
-.panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;flex:0 0 auto;min-height:47px}
 .panel-hd h3{margin:0;font-size:0.8125rem;font-weight:700}
 .slo{font-size:0.65625rem;color:var(--ink-3)}
-.panel-body{padding:14px 16px}
+.panel-body{padding:14px 16px;flex:1 1 auto;min-height:0}
+.panel .foot{flex:0 0 auto;margin-top:auto}
+/* Chart wells: one fixed height per row so sibling charts optically match,
+   with the SVG scaled to fit and centred rather than letterboxed at the top. */
+.chart-well{display:flex;align-items:center;justify-content:center;height:252px}
+.chart-well svg{width:100%;height:100%;display:block}
+.chart-well.donut-well{gap:22px;flex-wrap:wrap}
+.chart-well.donut-well svg.donut{width:auto;height:auto;flex:0 0 auto}
+/* Evenly distributed stat lists so 5-row and 10-row panels still end flush. */
+.dist-list{display:flex;flex-direction:column;justify-content:space-between;height:252px}
+.dist-list>div{margin-bottom:0 !important}
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:0.625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
 th.r,td.r{text-align:right}
@@ -174,7 +189,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:0.9375rem;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.5);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
 
-@media (max-width:1240px){.kpis{grid-template-columns:repeat(3,1fr)}.grid2,.grid2b,.grid3,.grid4,.formgrid{grid-template-columns:1fr}}
+@media (max-width:1240px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2,.grid2b,.grid3,.grid4,.formgrid{grid-template-columns:1fr}.chart-well,.dist-list{height:auto;min-height:200px}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.rail{position:static;max-height:none}.kpis{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -207,6 +222,14 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
       <div class="rrow"><span>Reserved</span><b class="num gold" id="rc-reserved">—</b></div>
       <div class="rrow"><span>Customers w/ limit</span><b class="num" id="rc-custcount">—</b></div>
     </div>
+    <div class="railcard" id="posturecard">
+      <div class="eyebrow">Risk posture</div>
+      <div class="rrow"><span><span class="dotk" style="background:var(--fail)"></span>Breach (&gt;100%)</span><b class="num failc" id="rc-breach">—</b></div>
+      <div class="rrow"><span><span class="dotk" style="background:var(--warn)"></span>Critical (90–100%)</span><b class="num warnc" id="rc-crit">—</b></div>
+      <div class="rrow"><span><span class="dotk" style="background:var(--agent)"></span>Watch (75–90%)</span><b class="num tealc" id="rc-watch">—</b></div>
+      <div class="rrow"><span><span class="dotk" style="background:var(--ink-3)"></span>Dormant (0%)</span><b class="num" id="rc-dormant">—</b></div>
+    </div>
+    <div class="rail-spacer"></div>
     <div class="mininote" id="mininote">All figures are modelled mock data for demonstration — not booked positions. Fictional bank/customer names are used throughout.</div>
   </aside>
 
@@ -534,44 +557,50 @@ function donut(segs,cTop,cBot,size=168,thick=26){
   const r=(size-thick)/2,cx=size/2,cy=size/2,C=2*Math.PI*r;let off=0,arcs="";
   segs.forEach(s=>{const len=Math.max(0,s.v)/100*C;
     arcs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${thick}" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.label)} ${s.v.toFixed(1)}%</title></circle>`;off+=len;});
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hair)" stroke-width="${thick}" opacity=".4"/>${arcs}<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--ink)" font-size="17" font-weight="750" font-family="var(--mono)">${cTop}</text><text x="${cx}" y="${cy+16}" text-anchor="middle" fill="var(--ink-3)" font-size="10">${cBot}</text></svg>`;
+  return `<svg class="donut" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hair)" stroke-width="${thick}" opacity=".4"/>${arcs}<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--ink)" font-size="17" font-weight="750" font-family="var(--mono)">${cTop}</text><text x="${cx}" y="${cy+16}" text-anchor="middle" fill="var(--ink-3)" font-size="10">${cBot}</text></svg>`;
 }
 
 /* ============================================================
    Grouped bar chart (with-limit vs without, per segment)
 ============================================================ */
 function groupedBar(cats){ // cats: [{label,a,b}] a=with,b=without
-  const W=560,pad=88,rowH=34,gap=8;
+  const W=560,pad=92,rowH=34,gap=8,covW=46;
   const max=Math.max(1,...cats.map(c=>Math.max(c.a,c.b)));
-  const barW=W-pad-40;
-  let y=8,svg="";
+  const barW=W-pad-34-covW;
+  let y=10,svg=`<text x="${W-4}" y="6" fill="var(--ink-3)" font-size="8.5" letter-spacing=".05em" text-anchor="end">COVERAGE</text>`;
   cats.forEach(c=>{
     const wa=c.a/max*barW, wb=c.b/max*barW;
+    const tot=c.a+c.b, cov=tot?c.a/tot:0;
     svg+=`<text x="0" y="${y+11}" fill="var(--ink-2)" font-size="11">${esc(c.label)}</text>`;
     svg+=`<rect x="${pad}" y="${y}" width="${wa.toFixed(1)}" height="13" rx="3" fill="var(--pass)" style="cursor:pointer" data-segclick="${esc(c.key)}"><title>${esc(c.label)}: ${c.a} with SR limit</title></rect>`;
     svg+=`<text x="${pad+wa+6}" y="${y+10.5}" fill="var(--pass)" font-size="10" font-family="var(--mono)">${c.a}</text>`;
     svg+=`<rect x="${pad}" y="${y+16}" width="${wb.toFixed(1)}" height="13" rx="3" fill="var(--ink-3)" opacity=".55" style="cursor:pointer" data-segclick="${esc(c.key)}"><title>${esc(c.label)}: ${c.b} without SR limit</title></rect>`;
     svg+=`<text x="${pad+wb+6}" y="${y+26.5}" fill="var(--ink-3)" font-size="10" font-family="var(--mono)">${c.b}</text>`;
+    // coverage = share of the segment that already holds a limit; the gap is the Sales whitespace
+    svg+=`<text x="${W-4}" y="${y+19}" fill="${cov>=0.6?'var(--pass)':cov>=0.4?'var(--warn)':'var(--fail)'}" font-size="11" font-family="var(--mono)" font-weight="700" text-anchor="end">${Math.round(cov*100)}%</text>`;
     y+=rowH+gap;
   });
-  return `<svg width="100%" viewBox="0 0 ${W} ${y}" role="img" aria-label="Customers with and without SR limits by segment">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${y}" role="img" aria-label="Customers with and without SR limits by segment">${svg}</svg>`;
 }
 
 /* ============================================================
    Trend line chart with forward-looking forecast — month labels + week ticks on X-axis
 ============================================================ */
-function trendChart(hist,fcast,days,w=560,h=210){
-  const pad=34, botPad=34;
+function trendChart(hist,fcast,days,w=560,h=202){
+  const pad=32, botPad=30, topPad=14;
   const all=hist.concat(fcast);
-  const max=Math.max(1.05,...all)*1.05;
+  const max=Math.max(1.12,...all)*1.04;
   const n=hist.length, m=fcast.length, total=n+m;
   const X=i=>pad+i/(total-1)*(w-pad-10);
   const baseline=h-botPad;
-  const Y=v=>baseline-(v/max)*(baseline-16);
+  const Y=v=>baseline-(v/max)*(baseline-topPad);
   const histPts=hist.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
   const fcastPts=[X(n-1).toFixed(1)+","+Y(hist[n-1]).toFixed(1)].concat(fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v).toFixed(1))).join(" ");
   let grid="";
-  for(let g=0.25;g<=1;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-10}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
+  for(let g=0.25;g<=0.75;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-10}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
+  // 100% is the limit, not just another gridline — call it out explicitly.
+  const y100=Y(1).toFixed(1);
+  grid+=`<line x1="${pad}" y1="${y100}" x2="${w-10}" y2="${y100}" stroke="var(--fail)" stroke-width="1" stroke-dasharray="4 3" opacity=".75"/><text x="0" y="${(Y(1)+3).toFixed(1)}" fill="var(--fail)" font-size="9" font-family="var(--mono)">100%</text>`;
   const nowX=X(n-1).toFixed(1);
   let weekTicks="",monthLbls="",lastMonth=null;
   for(let k=0;k<total;k++){
@@ -579,14 +608,14 @@ function trendChart(hist,fcast,days,w=560,h=210){
     if(k%7===0){ const xx=X(k).toFixed(1); weekTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+4).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".6"/>`; }
     if(d.getMonth()!==lastMonth){
       const xx=X(k).toFixed(1);
-      monthLbls+=`<text x="${xx}" y="${(baseline+16).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" text-anchor="start">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
+      monthLbls+=`<text x="${xx}" y="${(baseline+17).toFixed(1)}" fill="var(--ink-2)" font-size="10" text-anchor="start">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
       lastMonth=d.getMonth();
     }
   }
-  return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forecast">${grid}
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forecast">${grid}
     <line x1="${pad}" y1="${baseline}" x2="${w-10}" y2="${baseline}" stroke="var(--hair)"/>
-    <line x1="${nowX}" y1="10" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
-    <text x="${nowX}" y="10" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
+    <line x1="${nowX}" y1="${topPad-4}" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
+    <text x="${nowX}" y="${topPad-6}" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
     ${weekTicks}
     <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="2"/>
     <polyline points="${fcastPts}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-dasharray="5 4"/>
@@ -598,18 +627,21 @@ function trendChart(hist,fcast,days,w=560,h=210){
    Histogram — with headroom reserved above bars so count labels
    never clip against the top of the viewBox
 ============================================================ */
-function histogram(buckets,w=560,h=160){
-  const pad=8, topPad=20, botPad=24;
+/* viewBox aspect is kept close to the panel well it sits in (~2:1) so the chart
+   fills the space instead of letterboxing into a thin strip with dead air below. */
+function histogram(buckets,w=560,h=272){
+  const pad=10, topPad=26, botPad=34;
   const bw=(w-pad*2)/buckets.length, max=Math.max(1,...buckets.map(b=>b.count));
   const maxBarH=h-botPad-topPad;
-  let svg="";
+  const baseY=h-botPad;
+  let svg=`<line x1="${pad}" y1="${baseY}" x2="${w-pad}" y2="${baseY}" stroke="var(--hair)"/>`;
   buckets.forEach((b,i)=>{
-    const barH=b.count/max*maxBarH, x=pad+i*bw+bw*0.12, y=h-botPad-barH;
-    svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.76).toFixed(1)}" height="${barH.toFixed(1)}" rx="2" fill="${b.color||'var(--agent)'}"><title>${esc(b.label)}: ${b.count} customers</title></rect>`;
-    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${h-botPad+14}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${esc(b.label)}</text>`;
-    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${(y-6).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" text-anchor="middle" font-family="var(--mono)">${b.count}</text>`;
+    const barH=b.count/max*maxBarH, x=pad+i*bw+bw*0.14, y=baseY-barH;
+    svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.72).toFixed(1)}" height="${Math.max(barH,1).toFixed(1)}" rx="3" fill="${b.color||'var(--agent)'}"><title>${esc(b.label)}: ${b.count} customers</title></rect>`;
+    svg+=`<text x="${(x+bw*0.36).toFixed(1)}" y="${baseY+16}" fill="var(--ink-3)" font-size="11" text-anchor="middle">${esc(b.label)}</text>`;
+    svg+=`<text x="${(x+bw*0.36).toFixed(1)}" y="${(y-8).toFixed(1)}" fill="var(--ink-2)" font-size="12" text-anchor="middle" font-family="var(--mono)" font-weight="700">${b.count}</text>`;
   });
-  return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization distribution">${svg}</svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization distribution">${svg}</svg>`;
 }
 
 /* ============================================================
@@ -670,6 +702,11 @@ function renderSidebarStats(){
   $("#rc-avail").textContent=fmtM(available);
   $("#rc-reserved").textContent=fmtM(reserved);
   $("#rc-custcount").textContent=list.length;
+  const u=c=>custUtilCur(c);
+  $("#rc-breach").textContent=list.filter(c=>u(c)>1).length;
+  $("#rc-crit").textContent=list.filter(c=>u(c)>=0.9&&u(c)<=1).length;
+  $("#rc-watch").textContent=list.filter(c=>u(c)>=0.75&&u(c)<0.9).length;
+  $("#rc-dormant").textContent=list.filter(c=>u(c)<0.001).length;
 }
 function renderChips(){
   const f=state.filters;const chips=[];
@@ -712,13 +749,26 @@ function paneOverviewPortfolio(){
   ];
   if(reserved) pieSegs.push({label:"Reserved",v:grand?reserved/grand*100:0,color:"var(--gold)"});
 
+  // Risk metrics a Credit Risk / Sales head would ask for but that weren't surfaced before:
+  // excess exposure above limit, capital locked in dormant limits, and single-name concentration.
+  const excessM=list.reduce((a,c)=>a+Math.max(0,custUtilCur(c)-1)*c.limitM,0);
+  const breachCount=list.filter(c=>custUtilCur(c)>1).length;
+  const dormantList=list.filter(c=>custUtilCur(c)<0.001);
+  const dormantM=dormantList.reduce((a,c)=>a+c.limitM,0);
+  const utilByCust=[...list].map(c=>Math.min(1,custUtilCur(c))*c.limitM).sort((a,b)=>b-a);
+  const top5Share=utilizedRaw?utilByCust.slice(0,5).reduce((a,b)=>a+b,0)/utilizedRaw:0;
+  const top10Share=utilizedRaw?utilByCust.slice(0,10).reduce((a,b)=>a+b,0)/utilizedRaw:0;
+  const wtdUtil=total?utilizedRaw/total:0;
+
   const kpis=[
-    ["Total SR pool",fmtM(grand),"limits + reserved buffer","var(--run)","runc"],
-    ["Utilized",fmtM(utilizedRaw),grand?fmtPct(utilizedRaw/grand):"0%","var(--fail)","failc"],
-    ["Available",fmtM(available),grand?fmtPct(available/grand):"0%","var(--pass)","passc"],
-    ["Reserved",fmtM(reserved),"held back, unallocated","var(--gold)","gold"],
-    ["Customers w/ limit",String(list.length),noLimitList.length+" without a limit yet","var(--agent)","tealc"],
-    ["Avg utilization",fmtPct(list.length?list.reduce((a,c)=>a+custUtilCur(c),0)/list.length:0),"across filtered customers","var(--cyan)","cyanc"],
+    ["Total SR pool",fmtM(grand),"limits + reserved buffer","var(--run)","runc","Total settlement-risk capacity in scope: approved customer limits plus the unallocated reserved buffer."],
+    ["Utilized",fmtM(utilizedRaw),grand?fmtPct(utilizedRaw/grand)+" of pool":"0%","var(--fail)","failc","Drawn exposure against approved limits, capped at 100% per customer. Amounts above a customer's limit are shown separately as Excess exposure."],
+    ["Available",fmtM(available),grand?fmtPct(available/grand)+" of pool":"0%","var(--pass)","passc","Unused headroom inside already-approved customer limits — capacity that can be drawn today without any new approval."],
+    ["Reserved",fmtM(reserved),"held back, unallocated","var(--gold)","gold","Capacity deliberately held back at portfolio level and not yet allocated to any customer."],
+    ["Weighted utilization",fmtPct(wtdUtil),"limit-weighted, not simple avg","var(--cyan)","cyanc","Utilized ÷ total approved limits. Limit-weighted, so large exposures move it more than small ones — the truer measure of how hard the book is working."],
+    ["Excess exposure",fmtM(excessM),breachCount+" customer"+(breachCount===1?"":"s")+" over limit","var(--fail)","failc","Total drawn amount sitting ABOVE approved limits. This is unapproved risk and is excluded from the pool figures above."],
+    ["Dormant capital",fmtM(dormantM),dormantList.length+" limits at 0% util.","var(--violet)","violetc","Approved limits with zero current utilization — capacity that is committed on paper but earning nothing. Prime candidates for recycling or reduction."],
+    ["Top-5 concentration",fmtPct(top5Share),"top-10: "+fmtPct(top10Share),"var(--warn)","warnc","Share of total utilized exposure held by the five largest names. A standard single-name concentration check — the higher it is, the more the book depends on a few counterparties."],
   ];
 
   // segment with/without chart
@@ -765,44 +815,56 @@ function paneOverviewPortfolio(){
   const segFilterNote = state.overviewSegClick ? `<div class="filterchip">Drilled into <b style="color:var(--ink);margin:0 2px">${esc(SEGMENT_LABEL[state.overviewSegClick])}</b> <button id="clearsegdrill">×</button></div>` : "";
   const drillList = state.overviewSegClick ? CUSTOMERS.filter(c=>c.segment===state.overviewSegClick && matchesFilters(c)) : list;
 
-  return `<div class="kpis">${kpis.map(([l,v,s,acc,c])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("")}</div>
+  const maxCountryTotal=Math.max(1,...byCountry.map(x=>x.total));
+  const maxTypeTotal=Math.max(1,...byType.map(x=>x.total));
+  const hotCountry=[...byCountry].filter(x=>x.total>0).sort((a,b)=>b.pct-a.pct)[0];
+  const hotType=[...byType].filter(x=>x.total>0).sort((a,b)=>b.pct-a.pct)[0];
+  const tailCount=buckets[4].count+buckets[5].count;
+
+  return `<div class="kpis">${kpis.map(([l,v,s,acc,c,tip])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}"><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("")}</div>
 
   <div class="grid2b">
     <div class="panel"><div class="panel-hd" data-tip="Total SR pool split into Utilized (drawn against customer limits, capped at 100% per customer), Available (unused allocated capacity) and Reserved (held back, not yet allocated)."><h3>SR pool composition</h3><span class="slo">Utilized · Available · Reserved</span></div>
-      <div class="panel-body" style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+      <div class="panel-body"><div class="chart-well donut-well">
         ${donut(pieSegs,fmtM(grand),"total pool")}
-        <div style="flex:1;min-width:180px">${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num" style="font-weight:700">${s.v.toFixed(1)}%</span></div>`).join("")}</div>
-      </div>
-      <div class="foot">Utilized is capped at each customer's own limit; amounts drawn beyond 100% are excess/breach exposure, tracked separately in Rankings &amp; Alerts rather than expanding the pool.</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="Click a bar to drill into that segment's customer list below."><h3>Customers with vs without SR limits</h3><span class="slo">by segment</span></div>
-      <div class="panel-body">${groupedBar(segCats)}</div>
+        <div style="flex:1;min-width:190px">${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num muted" style="margin-right:10px">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="num" style="font-weight:700;width:46px;text-align:right">${s.v.toFixed(1)}%</span></div>`).join("")}
+        ${excessM>0?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
+      </div></div>
+      <div class="foot">Utilized is capped at each customer's own limit; amounts drawn beyond 100% are excess exposure, shown separately rather than inflating the pool.</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Coverage is the share of each segment that already holds an SR limit — the remainder is the Sales whitespace. Click a bar to drill into that segment below."><h3>Customers with vs without SR limits</h3><span class="slo">by segment · coverage %</span></div>
+      <div class="panel-body"><div class="chart-well">${groupedBar(segCats)}</div></div>
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
   </div>
 
   <div class="grid2b mt14">
-    <div class="panel"><div class="panel-hd" data-tip="Solid line = actual weighted-average utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
-      <div class="panel-body">${trendChart(hist,fcast,days)}</div>
+    <div class="panel"><div class="panel-hd" data-tip="Solid blue line = actual limit-weighted utilization over the selected date range. Dashed gold line = a 30-day forward projection from the trailing 14-day trend. The red dashed line is the 100% limit."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
+      <div class="panel-body"><div class="chart-well">${trendChart(hist,fcast,days)}</div></div>
       <div class="foot">Projected utilization in 30 days: <b>${fmtPct(projected30)}</b>. ${daysTo100!==null?`At the current trend, pool-wide utilization reaches <b>100%</b> in approximately <b>${daysTo100} days</b> — a capacity-planning flag for Credit Risk.`:"Utilization is flat or declining at the current trend — no near-term capacity concern."}</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="How many filtered customers fall into each utilization band right now."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
-      <div class="panel-body">${histogram(buckets)}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
+      <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div>
+      <div class="foot"><b>${tailCount}</b> customer${tailCount===1?"":"s"} in the 90%+ risk tail · <b>${buckets[0].count}</b> fully dormant at 0%.</div></div>
   </div>
 
   <div class="grid3 mt14">
-    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit, utilized amount, and utilization % by booking country, for the currently filtered customers."><h3>Concentration by country</h3></div>
-      <div class="panel-body"><div class="colhd"><div style="width:76px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Total</div><div style="width:58px;text-align:right">Utilized</div><div style="width:38px;text-align:right">%</div></div>
-      ${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:76px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${(x.pct*100).toFixed(0)}%;background:var(--run)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:38px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit, utilized amount, and utilization % by product limit type, for the currently filtered customers."><h3>Concentration by limit type</h3></div>
-      <div class="panel-body"><div class="colhd"><div style="width:56px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Total</div><div style="width:58px;text-align:right">Utilized</div><div style="width:38px;text-align:right">%</div></div>
-      ${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:56px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${(x.pct*100).toFixed(0)}%;background:var(--violet)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:38px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="The ten customers currently drawing the largest utilized dollar amount — the biggest absolute exposures in the filtered pool."><h3>Top 10 exposures</h3></div>
-      <div class="panel-body" style="padding:8px 0">${top10.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:0.71875rem"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2)">${esc(c.name)}</span><span class="num failc">${fmtM(Math.min(1,custUtilCur(c))*c.limitM)}</span></div>`).join("")}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
+      <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
+      <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
+      <div class="foot">${hotCountry?`Most stretched: <b>${esc(hotCountry.label)}</b> at ${fmtPct(hotCountry.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by product limit type. The bar shows utilization rate."><h3>Concentration by limit type</h3><span class="slo">limit · drawn · rate</span></div>
+      <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
+      <div class="dist-list">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
+      <div class="foot">${hotType?`Most stretched: <b>${esc(hotType.label)}</b> at ${fmtPct(hotType.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
+      <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
+      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div>
+      <div class="foot">Top 5 = <b>${fmtPct(top5Share)}</b> of all drawn exposure · top 10 = <b>${fmtPct(top10Share)}</b>.</div></div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Customers${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3><span class="slo">${drillList.length} customers in current view</span></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Customers${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3><span class="slo">${drillList.length} in current view · click a row for detail</span></div>
     ${segFilterNote?`<div style="padding:10px 16px 0">${segFilterNote}</div>`:""}
-    <table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">SR limit</th><th class="r">Current util.</th><th class="r">Status</th></tr></thead>
-    <tbody>${drillList.slice(0,25).map(c=>{const [lbl,cls]=custStatusTag(c);return `<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${c.hasLimit?fmtM(c.limitM):"—"}</td><td class="r num">${c.hasLimit?fmtPct(custUtilCur(c)):"—"}</td><td class="r"><span class="tag ${cls}">${lbl}</span></td></tr>`;}).join("")}</tbody></table>
-    ${drillList.length>25?`<div class="foot">Showing first 25 of ${drillList.length} — refine filters or open the Customers tab for the full sortable list.</div>`:""}</div>`;
+    <table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">SR limit</th><th class="r">Drawn</th><th class="r">Headroom</th><th class="r">Current util.</th><th class="r">Status</th></tr></thead>
+    <tbody>${drillList.slice(0,12).map(c=>{const [lbl,cls]=custStatusTag(c);const u=custUtilCur(c);const drawn=Math.min(1,u)*c.limitM;return `<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${c.hasLimit?fmtM(c.limitM):"—"}</td><td class="r num">${c.hasLimit?fmtM(drawn):"—"}</td><td class="r num ${c.hasLimit&&u>=1?'failc':'passc'}">${c.hasLimit?fmtM(Math.max(0,c.limitM-drawn)):"—"}</td><td class="r num">${c.hasLimit?fmtPct(u):"—"}</td><td class="r"><span class="tag ${cls}">${lbl}</span></td></tr>`;}).join("")}</tbody></table>
+    ${drillList.length>12?`<div class="foot">Showing 12 of ${drillList.length} — open the Customers tab for the full sortable list.</div>`:""}</div>`;
 }
 function paneOverviewCustomer(c){
   const days=state.dateRangeDays;
@@ -828,22 +890,22 @@ function paneOverviewCustomer(c){
   for(let i=1;i<=30;i++){ lastV=Math.max(0,Math.min(1.3,lastV+slope)); fcast.push(lastV); }
   const typeRows=LIMIT_TYPES.map(t=>{
     const amt=custLimitTypeM(c,t), utilAmt=Math.min(1,cur)*amt;
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:56px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:var(--violet)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(utilAmt)}</div></div>`;
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:${cur>=0.9?'var(--fail)':cur>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
   }).join("");
   const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,10);
   return `<div class="kpis">${kpis.map(([l,v,s2,acc,cls])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${cls}">${v}</b><small>${s2}</small></div>`).join("")}</div>
   <div class="grid2b">
     <div class="panel"><div class="panel-hd"><h3>SR limit composition — ${esc(c.name)}</h3><span class="slo">Utilized · Available</span></div>
-      <div class="panel-body" style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+      <div class="panel-body"><div class="chart-well donut-well">
         ${donut(pieSegs,fmtM(c.limitM),"SR limit")}
-        <div style="flex:1;min-width:180px">${pieSegs.map(sg=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${sg.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${sg.label}</span><span class="num" style="font-weight:700">${sg.v.toFixed(1)}%</span></div>`).join("")}
-        ${cur>1?`<span class="tag t-fail">Breach — ${fmtPct(cur-1)} over limit</span>`:""}</div>
-      </div></div>
+        <div style="flex:1;min-width:190px">${pieSegs.map(sg=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${sg.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${sg.label}</span><span class="num muted" style="margin-right:10px">${fmtM(sg.label==="Utilized"?Math.min(1,cur)*c.limitM:Math.max(0,1-Math.min(1,cur))*c.limitM)}</span><span class="num" style="font-weight:700;width:46px;text-align:right">${sg.v.toFixed(1)}%</span></div>`).join("")}
+        ${cur>1?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Breach</span><span style="flex:1;color:var(--ink-2)">${fmtPct(cur-1)} over approved limit</span><span class="num failc" style="font-weight:700">${fmtM((cur-1)*c.limitM)}</span></div>`:""}</div>
+      </div></div></div>
     <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation of the ${fmtM(c.limitM)} limit</span></div>
-      <div class="panel-body"><div class="colhd"><div style="width:56px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Amount</div><div style="width:58px;text-align:right">Utilized</div></div>${typeRows}</div></div>
+      <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd" data-tip="Solid line = actual utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
-    <div class="panel-body">${trendChart(hist,fcast,days)}</div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid line = actual utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend. The red dashed line is the 100% limit."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
+    <div class="panel-body"><div class="chart-well" style="height:236px">${trendChart(hist,fcast,days)}</div></div>
     <div class="foot">Projected utilization in 30 days: <b>${fmtPct(fcast[fcast.length-1]||0)}</b>.</div></div>
   <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
@@ -913,8 +975,12 @@ function paneBlotter(){
 ============================================================ */
 function paneRankings(){
   const list=filteredWithLimit();
-  const near100=[...list].sort((a,b)=>custUtilCur(b)-custUtilCur(a)).slice(0,15);
-  const dormant=list.map(c=>({c,days:daysSinceNonZero(c.series)})).filter(x=>x.days>0).sort((a,b)=>b.days-a.days).slice(0,15);
+  // Both ranking tables are capped to the same length so the two panels end flush.
+  const RANK_N=12;
+  const near100=[...list].sort((a,b)=>custUtilCur(b)-custUtilCur(a)).slice(0,RANK_N);
+  const dormantAll=list.map(c=>({c,days:daysSinceNonZero(c.series)})).filter(x=>x.days>0).sort((a,b)=>b.days-a.days);
+  const dormant=dormantAll.slice(0,RANK_N);
+  const dormantCapital=dormantAll.reduce((a,x)=>a+x.c.limitM,0);
   const breaches=list.filter(c=>custUtilCur(c)>1.0).sort((a,b)=>custUtilCur(b)-custUtilCur(a));
   const custThresholdAlerts=[];
   THRESHOLDS.forEach(th=>{
@@ -923,12 +989,15 @@ function paneRankings(){
     if(cur>=+th.value) custThresholdAlerts.push({c,th,cur});
   });
   return `<div class="grid2 mt0">
-    <div class="panel"><div class="panel-hd" data-tip="Customers currently closest to fully drawing their SR limit."><h3>Nearest to 100% utilization</h3><span class="slo">top 15</span></div>
-      <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Current util.</th></tr></thead>
-      <tbody>${near100.map((c,i)=>`<tr class="clickable" data-cust="${c.id}"><td class="muted">${i+1}</td><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num ${custUtilCur(c)>1?'failc':custUtilCur(c)>=0.9?'warnc':''}">${fmtPct(custUtilCur(c))}</td></tr>`).join("")}</tbody></table></div>
-    <div class="panel"><div class="panel-hd" data-tip="Customers whose SR limit has recorded zero utilization for the longest continuous stretch — candidates for limit recycling or review."><h3>Longest period with zero utilization</h3><span class="slo">top 15, dormant limits</span></div>
+    <div class="panel"><div class="panel-hd" data-tip="Customers currently closest to fully drawing their SR limit. Headroom is what is left before the limit binds."><h3>Nearest to 100% utilization</h3><span class="slo">top ${RANK_N}</span></div>
+      <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Headroom</th><th class="r">Current util.</th></tr></thead>
+      <tbody>${near100.map((c,i)=>{const u=custUtilCur(c);const head=Math.max(0,c.limitM-Math.min(1,u)*c.limitM);return `<tr class="clickable" data-cust="${c.id}"><td class="muted">${i+1}</td><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num ${u>=1?'failc':'passc'}">${u>=1?"none":fmtM(head)}</td><td class="r num ${u>1?'failc':u>=0.9?'warnc':''}">${fmtPct(u)}</td></tr>`;}).join("")}</tbody></table>
+      <div class="foot">These names bind first if flow picks up — the front of the queue for pre-emptive limit reviews.</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Customers whose SR limit has recorded zero utilization for the longest continuous stretch — candidates for limit recycling or reduction."><h3>Longest period with zero utilization</h3><span class="slo">top ${RANK_N}, dormant limits</span></div>
       <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Days at zero</th></tr></thead>
-      <tbody>${dormant.map((x,i)=>`<tr class="clickable" data-cust="${x.c.id}"><td class="muted">${i+1}</td><td>${esc(x.c.name)}</td><td class="muted">${SEGMENT_LABEL[x.c.segment]}</td><td class="r num">${fmtM(x.c.limitM)}</td><td class="r num warnc">${x.days}</td></tr>`).join("")}</tbody></table></div>
+      <tbody>${dormant.map((x,i)=>`<tr class="clickable" data-cust="${x.c.id}"><td class="muted">${i+1}</td><td>${esc(x.c.name)}</td><td class="muted">${SEGMENT_LABEL[x.c.segment]}</td><td class="r num">${fmtM(x.c.limitM)}</td><td class="r num warnc">${x.days}</td></tr>`).join("")}
+      ${dormant.length<RANK_N?Array.from({length:RANK_N-dormant.length}).map(()=>`<tr><td colspan="5">&nbsp;</td></tr>`).join(""):""}</tbody></table>
+      <div class="foot"><b>${fmtM(dormantCapital)}</b> of approved limit is sitting idle across ${dormantAll.length} dormant customer${dormantAll.length===1?"":"s"} — recyclable capacity.</div></div>
   </div>
   <div class="panel mt14"><div class="panel-hd" data-tip="Customers currently drawing more than 100% of their approved SR limit."><h3>Limit breach alerts</h3><span class="slo">${breaches.length} customers over 100% utilization</span></div>
     ${breaches.length?`<table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">Limit</th><th class="r">Current util.</th><th class="r">Excess</th></tr></thead>
