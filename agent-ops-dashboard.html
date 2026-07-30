@@ -5,29 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Delivery Operations — Portfolio, Savings & Token Economics</title>
 <style>
-:root{
+:root,[data-theme="dark"]{
   --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
-  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F;
+  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F; --brand-ink:#06131A;
   --pass:#2FD39A; --fail:#FF5470; --warn:#F5B23C; --run:#5B8CFF;
   --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
   --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
   --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
 }
+[data-theme="light"]{
+  --ground:#F3F5FA; --panel:#FFFFFF; --panel-2:#F0F2F8; --panel-3:#E7EAF3; --hair:#DDE2ED;
+  --ink:#12182B; --ink-2:#48506B; --ink-3:#78819E; --brand-ink:#FFFFFF;
+  --pass:#0E8F5C; --fail:#D1293F; --warn:#B06A00; --run:#2E58D8;
+  --agent:#0E8C80; --gold:#9C6B08; --violet:#6C57C4; --pink:#C23E77; --cyan:#0E829C;
+}
+[data-theme="dbs"]{
+  --ground:#FFFFFF; --panel:#FFFFFF; --panel-2:#F8F3F2; --panel-3:#F1E7E5; --hair:#E6DAD8;
+  --ink:#181818; --ink-2:#57534F; --ink-3:#756F6B; --brand-ink:#FFFFFF;
+  --pass:#1E8A4C; --fail:#B8102C; --warn:#A9660A; --run:#1F4E9C;
+  --agent:#E4002B; --gold:#B8860B; --violet:#6E5CC4; --pink:#C23E77; --cyan:#0E7C86;
+}
+[data-theme="superman"]{
+  --ground:#0A1554; --panel:#0F1D66; --panel-2:#132373; --panel-3:#182B85; --hair:#2E3E9E;
+  --ink:#FFFFFF; --ink-2:#C9D3FF; --ink-3:#8593D9; --brand-ink:#0A1554;
+  --pass:#2FD37A; --fail:#E62429; --warn:#FFC72C; --run:#3E7BFA;
+  --agent:#FFC72C; --gold:#FFD447; --violet:#9B87D8; --pink:#FF6FA0; --cyan:#4FD8FF;
+}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{background:
-  radial-gradient(1200px 600px at 80% -10%,rgba(0,214,190,.06),transparent 60%),
-  radial-gradient(900px 500px at -5% 10%,rgba(91,140,255,.06),transparent 55%),
-  var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  radial-gradient(1200px 600px at 80% -10%,color-mix(in srgb,var(--agent) 6%,transparent),transparent 60%),
+  radial-gradient(900px 500px at -5% 10%,color-mix(in srgb,var(--run) 6%,transparent),transparent 55%),
+  var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;transition:background-color .2s ease,color .2s ease}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--agent);outline-offset:2px;border-radius:3px}
 
 .shell{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
-.rail{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.6));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
+.rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
 .brand{display:flex;align-items:center;gap:10px}
-.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--agent),var(--run));display:grid;place-items:center;color:#06131A;font-weight:800;font-size:11px;box-shadow:0 4px 14px rgba(0,214,190,.35)}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--agent),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:11px;box-shadow:0 4px 14px color-mix(in srgb,var(--agent) 35%,transparent)}
 .brand h1{font-size:13px;margin:0;font-weight:700;letter-spacing:-.01em}
 .brand p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3)}
 .field{display:block;margin-bottom:10px}
@@ -69,12 +87,12 @@ select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:v
 .ctrl-top b{font-size:14px;color:var(--ink)}
 .ctrl-sub{font-size:10px;color:var(--ink-3);margin-top:5px}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:var(--hair);outline:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer;box-shadow:0 1px 5px rgba(0,214,190,.5)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer;box-shadow:0 1px 5px color-mix(in srgb,var(--agent) 50%,transparent)}
 input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer}
 @media (max-width:900px){.ctrls{grid-template-columns:repeat(2,1fr)}}
 
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:20px}
-.kpi{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.55));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
+.kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
 .kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
 .kpi .cap{position:absolute;right:11px;top:12px;font-size:10px;font-weight:700}
 .kpi b{display:block;font-size:21px;font-weight:750;margin-top:6px}
@@ -86,7 +104,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 .tab:hover{color:var(--ink-2)}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agent)}
 
-.panel{background:linear-gradient(180deg,var(--panel),rgba(20,28,47,.5));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
+.panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
 .panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .panel-hd h3{margin:0;font-size:13px;font-weight:700}
 .slo{font-size:10.5px;color:var(--ink-3)}
@@ -94,16 +112,16 @@ table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--hair);white-space:nowrap}
 th.r,td.r{text-align:right}
 th.sortable{cursor:pointer}th.sortable:hover{color:var(--ink-2)}
-td{padding:11px 16px;border-bottom:1px solid rgba(38,51,83,.5);font-size:12.5px;vertical-align:middle}
+td{padding:11px 16px;border-bottom:1px solid var(--hair);font-size:12.5px;vertical-align:middle}
 tr:last-child td{border-bottom:0}
 tbody tr.clickable{cursor:pointer}
 tbody tr.clickable:hover{background:var(--panel-2)}
 .pname{font-weight:600}.pcode{font-size:10px;color:var(--ink-3);font-family:var(--mono)}
 .tag{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2.5px 7px;border-radius:4px;white-space:nowrap}
-.t-track{background:rgba(47,211,154,.15);color:var(--pass)}
-.t-risk{background:rgba(245,178,60,.16);color:var(--warn)}
-.t-block{background:rgba(255,84,112,.15);color:var(--fail)}
-.t-done{background:rgba(0,214,190,.15);color:var(--agent)}
+.t-track{background:color-mix(in srgb,var(--pass) 15%,transparent);color:var(--pass)}
+.t-risk{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.t-block{background:color-mix(in srgb,var(--fail) 15%,transparent);color:var(--fail)}
+.t-done{background:color-mix(in srgb,var(--agent) 15%,transparent);color:var(--agent)}
 .phase{font-size:10px;color:var(--ink-2)}
 .prog{position:relative;height:7px;background:var(--hair);border-radius:4px;overflow:hidden;min-width:88px}
 .prog i{position:absolute;left:0;top:0;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--agent),var(--pass))}
@@ -137,9 +155,9 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 
 .fleetgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;padding:16px}
 .fgroup{border:1px solid var(--hair);border-radius:9px;overflow:hidden;background:var(--panel-2)}
-.fgroup h4{margin:0;padding:9px 12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--agent);background:rgba(0,214,190,.07);border-bottom:1px solid var(--hair);display:flex;justify-content:space-between}
+.fgroup h4{margin:0;padding:9px 12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--agent);background:color-mix(in srgb,var(--agent) 7%,transparent);border-bottom:1px solid var(--hair);display:flex;justify-content:space-between}
 .fgroup h4 span{color:var(--ink-3);font-family:var(--mono)}
-.arow{padding:8px 12px;border-bottom:1px solid rgba(38,51,83,.5);cursor:pointer}
+.arow{padding:8px 12px;border-bottom:1px solid var(--hair);cursor:pointer}
 .arow:last-child{border-bottom:0}.arow:hover{background:var(--panel-3)}
 .arow .an{font-size:11.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .arow .as{font-size:10px;color:var(--ink-3);margin-top:3px;display:flex;justify-content:space-between}
@@ -187,6 +205,8 @@ tbody tr.clickable:hover{background:var(--panel-2)}
     <div class="brand"><div class="brand-mark">GFM</div>
       <div><h1>Agent Delivery Ops</h1><p>Portfolio · Savings · Tokens</p></div></div>
     <div>
+      <label class="field"><span class="eyebrow">Theme</span>
+        <select id="theme-sel"><option value="dark">Dark</option><option value="light">Light</option><option value="dbs">DBS</option><option value="superman">Superman</option></select></label>
       <label class="field"><span class="eyebrow">Portfolio</span>
         <select id="s1"><option>GFM — all projects</option><option>FX &amp; Rates</option><option>Credit &amp; Derivs</option></select></label>
       <div class="field" data-tip="The traditional-delivery cost estimate is deliberately cut by this percentage before it's compared to agent spend, so the saving figure stays conservative rather than best-case."><span class="eyebrow">Baseline (conservative)</span>
@@ -278,6 +298,20 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
     place(e.clientX,e.clientY);
   });
   document.addEventListener("mouseleave",()=>{if(box)box.classList.remove("show");lastEl=null;});
+})();
+
+/* theme selector — dark/light/dbs/superman, remembered per browser via localStorage */
+const THEME_KEY="dbs-dashboard-theme";
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  try{localStorage.setItem(THEME_KEY,t);}catch(e){}
+}
+(function initTheme(){
+  let t="dark";
+  try{t=localStorage.getItem(THEME_KEY)||"dark";}catch(e){}
+  applyTheme(t);
+  const sel=document.getElementById("theme-sel");
+  if(sel){sel.value=t;sel.addEventListener("change",e=>applyTheme(e.target.value));}
 })();
 const M=v=>"S$"+v.toFixed(2)+"M";
 const M1=v=>"S$"+v.toFixed(1)+"M";
