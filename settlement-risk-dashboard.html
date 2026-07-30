@@ -65,12 +65,6 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .mininote b{color:var(--agent)}
 
 .main{padding:20px 26px 48px;min-width:0}
-.crumb{font-size:0.6875rem;color:var(--ink-3);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.crumb b{color:var(--ink-2);font-weight:600}
-.crumb .sep{color:var(--hair)}
-.pagehd{margin-bottom:16px}
-.pagehd h2{margin:3px 0 6px;font-size:1.4375rem;font-weight:750;letter-spacing:-.02em}
-.pagehd p{margin:0;color:var(--ink-2);font-size:0.78125rem;max-width:86ch}
 
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:18px}
 .kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
@@ -79,15 +73,21 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .kpi small{display:block;color:var(--ink-3);font-size:0.625rem;margin-top:2px}
 .gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
 
-.tabs{display:flex;gap:3px;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap}
+.tabs{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.tabs-left{display:flex;gap:3px;flex-wrap:wrap}
+.tabs-right{display:flex;align-items:center;gap:10px;flex:0 0 auto;padding-bottom:6px}
 .tab{padding:9px 16px;font-size:0.78125rem;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--ink-2)}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agent)}
+.mini-sel{width:auto;padding:4px 8px;font-size:0.65625rem;border-radius:5px}
+.fsrow.mini{gap:5px}
+.fsrow.mini input[type=range]{width:64px;flex:0 0 auto}
+.fsrow.mini .fA{font-size:0.6875rem}
 
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.grid2b{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.grid2b{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start}
 .mt14{margin-top:14px}
 
 .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
@@ -119,6 +119,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .bar-mini i{display:block;height:100%;border-radius:3px}
 .empty{padding:26px;text-align:center;color:var(--ink-3)}
 .spark{display:inline-block;vertical-align:middle}
+.colhd{display:flex;gap:8px;font-size:0.625rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 
 .filterchip{display:inline-flex;align-items:center;gap:7px;font-size:0.6875rem;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:20px;padding:4px 12px;margin:0 6px 6px 0}
 .filterchip button{color:var(--ink-3);font-size:0.875rem;line-height:1}
@@ -138,9 +139,21 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .btn-ghost:hover{color:var(--ink);border-color:var(--agent)}
 .btn-danger{color:var(--fail)}
 
-.heatgrid{display:grid;gap:3px}
-.heatcell{padding:8px 6px;text-align:center;border-radius:4px;font-size:0.6875rem;font-family:var(--mono);color:var(--ink)}
-.heatlbl{font-size:0.625rem;color:var(--ink-3);display:flex;align-items:center;padding:0 6px}
+.msel-btn{width:100%;text-align:left;background:var(--panel-2);border:1px solid var(--hair);color:var(--ink);padding:7px 8px;border-radius:6px;font-size:0.75rem;font-family:var(--mono);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.msel-btn::after{content:"▾";color:var(--ink-3);font-size:0.65em}
+.msel-btn:hover{border-color:var(--agent)}
+.msel-btn[aria-expanded="true"]{border-color:var(--agent)}
+.msel-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* one shared dropdown panel, always anchored below all three filter buttons — never overlaps
+   a sibling trigger button the way three separately-positioned panels would in a narrow rail */
+.msel-shared-wrap{position:relative;height:0}
+.msel-panel{display:none;position:absolute;top:2px;left:0;right:0;background:var(--panel-3);border:1px solid var(--hair);border-radius:8px;padding:6px;z-index:70;max-height:230px;overflow-y:auto;box-shadow:0 12px 28px rgba(0,0,0,.4)}
+.msel-panel.open{display:block}
+.msel-item{display:flex;align-items:center;gap:7px;font-size:0.75rem;padding:5px 6px;border-radius:5px;cursor:pointer}
+.msel-item:hover{background:var(--panel-2)}
+.msel-item input{accent-color:var(--agent)}
+.msel-actions{display:flex;justify-content:space-between;padding:5px 6px 2px;border-top:1px solid var(--hair);margin-top:4px}
+.msel-actions button{font-size:0.625rem;color:var(--agent);font-weight:700}
 
 .gpills-key{display:flex;gap:14px;flex-wrap:wrap;padding:0 16px 13px;font-size:0.65625rem;color:var(--ink-2)}
 
@@ -171,19 +184,13 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
     <div class="brand"><div class="brand-mark">GFM</div>
       <div><h1>Settlement Risk</h1><p>Limits · Utilization · Alerts</p></div></div>
 
-    <label class="field"><span class="eyebrow">Theme</span>
-      <select id="theme-sel"><option value="dark">Dark</option><option value="light">Light</option><option value="dbs">DBS</option></select></label>
-
-    <label class="field"><span class="eyebrow">Font size</span>
-      <div class="fsrow"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="4" step="1" value="2"><span class="fA big">A</span></div></label>
-
-    <hr class="hr">
-    <label class="field"><span class="eyebrow">Country</span>
-      <select id="f-country"><option value="">All countries</option></select></label>
-    <label class="field"><span class="eyebrow">Customer segment</span>
-      <select id="f-segment"><option value="">All segments</option></select></label>
-    <label class="field"><span class="eyebrow">Limit type</span>
-      <select id="f-limittype"><option value="">All limit types</option></select></label>
+    <div class="field"><span class="eyebrow">Country</span>
+      <button type="button" class="msel-btn" id="msel-btn-country" data-msel="country" aria-expanded="false"><span>All countries</span></button></div>
+    <div class="field"><span class="eyebrow">Customer segment</span>
+      <button type="button" class="msel-btn" id="msel-btn-segment" data-msel="segment" aria-expanded="false"><span>All segments</span></button></div>
+    <div class="field"><span class="eyebrow">Limit type</span>
+      <button type="button" class="msel-btn" id="msel-btn-limitType" data-msel="limitType" aria-expanded="false"><span>All limit types</span></button></div>
+    <div class="msel-shared-wrap"><div class="msel-panel" id="msel-panel-shared"></div></div>
     <label class="field"><span class="eyebrow">Date range</span>
       <select id="f-daterange">
         <option value="30">Last 30 days</option>
@@ -204,19 +211,19 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
   </aside>
 
   <main class="main">
-    <div class="crumb" id="crumb"></div>
-    <div class="pagehd">
-      <h2>Settlement Risk Dashboard</h2>
-      <p>Global settlement-risk limit pool across countries, customer segments and product limit types — utilization, forward-looking capacity, transaction consumption, and limit-management workflows.</p>
-    </div>
-
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
-      <button class="tab" role="tab" data-tab="customers" aria-selected="false">Customers</button>
-      <button class="tab" role="tab" data-tab="blotter" aria-selected="false">Transaction Blotter</button>
-      <button class="tab" role="tab" data-tab="rankings" aria-selected="false">Rankings &amp; Alerts</button>
-      <button class="tab" role="tab" data-tab="carveouts" aria-selected="false">SR Carve-Outs</button>
-      <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
+      <div class="tabs-left">
+        <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+        <button class="tab" role="tab" data-tab="customers" aria-selected="false">Customers</button>
+        <button class="tab" role="tab" data-tab="blotter" aria-selected="false">Transaction Blotter</button>
+        <button class="tab" role="tab" data-tab="rankings" aria-selected="false">Rankings &amp; Alerts</button>
+        <button class="tab" role="tab" data-tab="carveouts" aria-selected="false">SR Carve-Outs</button>
+        <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
+      </div>
+      <div class="tabs-right">
+        <select id="theme-sel" class="mini-sel"><option value="dark">Dark</option><option value="light">Light</option><option value="dbs">DBS</option></select>
+        <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="4" step="1" value="2"><span class="fA big">A</span></div>
+      </div>
     </div>
     <div id="chiprow" class="chiprow"></div>
     <section id="pane"></section>
@@ -323,6 +330,10 @@ const dayMs=86400000;
 const TODAY=new Date(2026,6,30); // fixed "today" so the mock dataset reads consistently
 function dateAt(offsetFromEnd){ // offsetFromEnd: 0 = most recent day
   return new Date(TODAY.getTime()-offsetFromEnd*dayMs);
+}
+function dateForIdx(k,days){ // k: index into a hist(0..days-1)+forecast(days..) combined array
+  if(k<days) return new Date(TODAY.getTime()-(days-1-k)*dayMs);
+  const j=k-days; return new Date(TODAY.getTime()+(j+1)*dayMs);
 }
 
 /* ============================================================
@@ -474,8 +485,8 @@ const TXNS=[];
 /* ============================================================
    Application state
 ============================================================ */
-const state={tab:"overview",filters:{country:"",segment:"",limitType:""},dateRangeDays:90,
-  custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:""};
+const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
+  custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null};
 function loadLS(key,def){ try{const v=localStorage.getItem(key); return v?JSON.parse(v):def;}catch(e){return def;} }
 function saveLS(key,val){ try{localStorage.setItem(key,JSON.stringify(val));}catch(e){} }
 let CARVEOUTS=loadLS("sr-dash-carveouts",[]);
@@ -484,11 +495,12 @@ let THRESHOLDS=loadLS("sr-dash-thresholds",[]);
 
 function matchesFilters(c){
   const f=state.filters;
-  if(f.country && c.country!==f.country) return false;
-  if(f.segment && c.segment!==f.segment) return false;
-  if(f.limitType && !(c.hasLimit && c.typeAlloc[f.limitType]>0.001)) return false;
+  if(f.country.size && !f.country.has(c.country)) return false;
+  if(f.segment.size && !f.segment.has(c.segment)) return false;
+  if(f.limitType.size && !(c.hasLimit && [...f.limitType].some(t=>c.typeAlloc[t]>0.001))) return false;
   return true;
 }
+function filtersActive(){ return state.filters.country.size||state.filters.segment.size||state.filters.limitType.size; }
 function filteredCustomers(){ return CUSTOMERS.filter(matchesFilters); }
 function filteredWithLimit(){ return filteredCustomers().filter(c=>c.hasLimit); }
 
@@ -546,60 +558,112 @@ function groupedBar(cats){ // cats: [{label,a,b}] a=with,b=without
 }
 
 /* ============================================================
-   Trend line chart with forward-looking forecast
+   Trend line chart with forward-looking forecast — month labels + week ticks on X-axis
 ============================================================ */
-function trendChart(hist,fcast,w=560,h=190){
-  const pad=34;
+function trendChart(hist,fcast,days,w=560,h=210){
+  const pad=34, botPad=34;
   const all=hist.concat(fcast);
   const max=Math.max(1.05,...all)*1.05;
   const n=hist.length, m=fcast.length, total=n+m;
   const X=i=>pad+i/(total-1)*(w-pad-10);
-  const Y=v=>h-24-(v/max)*(h-40);
+  const baseline=h-botPad;
+  const Y=v=>baseline-(v/max)*(baseline-16);
   const histPts=hist.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
   const fcastPts=[X(n-1).toFixed(1)+","+Y(hist[n-1]).toFixed(1)].concat(fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v).toFixed(1))).join(" ");
   let grid="";
-  for(let g=0;g<=1;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-10}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
+  for(let g=0.25;g<=1;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-10}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
   const nowX=X(n-1).toFixed(1);
+  let weekTicks="",monthLbls="",lastMonth=null;
+  for(let k=0;k<total;k++){
+    const d=dateForIdx(k,days);
+    if(k%7===0){ const xx=X(k).toFixed(1); weekTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+4).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".6"/>`; }
+    if(d.getMonth()!==lastMonth){
+      const xx=X(k).toFixed(1);
+      monthLbls+=`<text x="${xx}" y="${(baseline+16).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" text-anchor="start">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
+      lastMonth=d.getMonth();
+    }
+  }
   return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forecast">${grid}
-    <line x1="${nowX}" y1="10" x2="${nowX}" y2="${h-24}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
+    <line x1="${pad}" y1="${baseline}" x2="${w-10}" y2="${baseline}" stroke="var(--hair)"/>
+    <line x1="${nowX}" y1="10" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
     <text x="${nowX}" y="10" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
+    ${weekTicks}
     <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="2"/>
     <polyline points="${fcastPts}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-dasharray="5 4"/>
+    ${monthLbls}
     </svg>`;
 }
 
 /* ============================================================
-   Histogram
+   Histogram — with headroom reserved above bars so count labels
+   never clip against the top of the viewBox
 ============================================================ */
-function histogram(buckets,w=560,h=150){
-  const pad=8,bw=(w-pad*2)/buckets.length,max=Math.max(1,...buckets.map(b=>b.count));
+function histogram(buckets,w=560,h=160){
+  const pad=8, topPad=20, botPad=24;
+  const bw=(w-pad*2)/buckets.length, max=Math.max(1,...buckets.map(b=>b.count));
+  const maxBarH=h-botPad-topPad;
   let svg="";
   buckets.forEach((b,i)=>{
-    const barH=b.count/max*(h-30),x=pad+i*bw+bw*0.12,y=h-22-barH;
+    const barH=b.count/max*maxBarH, x=pad+i*bw+bw*0.12, y=h-botPad-barH;
     svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.76).toFixed(1)}" height="${barH.toFixed(1)}" rx="2" fill="${b.color||'var(--agent)'}"><title>${esc(b.label)}: ${b.count} customers</title></rect>`;
-    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${h-8}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${esc(b.label)}</text>`;
-    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${(y-4).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" text-anchor="middle" font-family="var(--mono)">${b.count}</text>`;
+    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${h-botPad+14}" fill="var(--ink-3)" font-size="9" text-anchor="middle">${esc(b.label)}</text>`;
+    svg+=`<text x="${(x+bw*0.38).toFixed(1)}" y="${(y-6).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" text-anchor="middle" font-family="var(--mono)">${b.count}</text>`;
   });
   return `<svg width="100%" viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization distribution">${svg}</svg>`;
 }
 
 /* ============================================================
-   Sidebar renders
+   Multi-select filter widgets — one shared dropdown panel used by
+   all three trigger buttons, so an open panel never covers a
+   sibling trigger the way three independently-positioned panels
+   stacked in a narrow sidebar would.
 ============================================================ */
-function populateSelect(sel,items,labelFn){
-  labelFn=labelFn||(x=>x);
-  Array.from(sel.querySelectorAll("option:not(:first-child)")).forEach(o=>o.remove());
-  items.forEach(it=>{const o=document.createElement("option");o.value=it;o.textContent=labelFn(it);sel.appendChild(o);});
+const MSEL_OPTS={country:COUNTRIES,segment:SEGMENTS,limitType:LIMIT_TYPES};
+const MSEL_LABELFN={country:null,segment:s=>SEGMENT_LABEL[s],limitType:null};
+const MSEL_ALLLABEL={country:"All countries",segment:"All segments",limitType:"All limit types"};
+let openMselKey=null;
+function buildMultiSelect(key){
+  const options=MSEL_OPTS[key], labelFn=MSEL_LABELFN[key]||(x=>x);
+  const panel=$("#msel-panel-shared"), set=state.filters[key];
+  panel.innerHTML = options.map(o=>`<label class="msel-item"><input type="checkbox" value="${esc(o)}" ${set.has(o)?"checked":""}> ${esc(labelFn(o))}</label>`).join("")
+    + `<div class="msel-actions"><button type="button" data-mselall="${key}">Select all</button><button type="button" data-mselclear="${key}">Clear</button></div>`;
+  panel.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      if(cb.checked) set.add(cb.value); else set.delete(cb.value);
+      if(key==="segment") state.overviewSegClick="";
+      updateMselLabel(key); render();
+    });
+  });
 }
-populateSelect($("#f-country"),COUNTRIES);
-populateSelect($("#f-segment"),SEGMENTS,s=>SEGMENT_LABEL[s]);
-populateSelect($("#f-limittype"),LIMIT_TYPES);
+function updateMselLabel(key){
+  const labelFn=MSEL_LABELFN[key]||(x=>x);
+  const btn=$("#msel-btn-"+key+" span"), set=state.filters[key];
+  if(!set.size) btn.textContent=MSEL_ALLLABEL[key];
+  else if(set.size<=2) btn.textContent=[...set].map(labelFn).join(", ");
+  else btn.textContent=set.size+" selected";
+}
+function refreshMsel(key){ if(openMselKey===key) buildMultiSelect(key); updateMselLabel(key); }
+function openMsel(key){
+  openMselKey=key;
+  buildMultiSelect(key);
+  $("#msel-panel-shared").classList.add("open");
+  $$(".msel-btn").forEach(b=>b.setAttribute("aria-expanded",String(b.dataset.msel===key)));
+}
+function closeMsel(){
+  openMselKey=null;
+  $("#msel-panel-shared").classList.remove("open");
+  $$(".msel-btn").forEach(b=>b.setAttribute("aria-expanded","false"));
+}
+["country","segment","limitType"].forEach(k=>updateMselLabel(k));
 
+/* ============================================================
+   Sidebar / chip renders
+============================================================ */
 function renderSidebarStats(){
   const list=filteredWithLimit();
   const total=list.reduce((a,c)=>a+c.limitM,0);
   const utilized=list.reduce((a,c)=>a+Math.min(1,custUtilCur(c))*c.limitM,0);
-  const reserved= state.filters.country||state.filters.segment||state.filters.limitType ? 0 : RESERVED_M;
+  const reserved= filtersActive() ? 0 : RESERVED_M;
   const available=total-utilized;
   $("#rc-total").textContent=fmtM(total+reserved);
   $("#rc-util").textContent=fmtM(utilized);
@@ -609,22 +673,37 @@ function renderSidebarStats(){
 }
 function renderChips(){
   const f=state.filters;const chips=[];
-  if(f.country) chips.push(["country","Country: "+f.country]);
-  if(f.segment) chips.push(["segment","Segment: "+SEGMENT_LABEL[f.segment]]);
-  if(f.limitType) chips.push(["limitType","Limit type: "+f.limitType]);
+  const chipText=(set,labelFn)=>[...set].length<=2?[...set].map(labelFn||(x=>x)).join(", "):set.size+" selected";
+  if(f.country.size) chips.push(["country","Country: "+chipText(f.country)]);
+  if(f.segment.size) chips.push(["segment","Segment: "+chipText(f.segment,s=>SEGMENT_LABEL[s])]);
+  if(f.limitType.size) chips.push(["limitType","Limit type: "+chipText(f.limitType)]);
   $("#chiprow").innerHTML=chips.map(([k,l])=>`<span class="filterchip">${esc(l)} <button data-clearchip="${k}" aria-label="Clear">×</button></span>`).join("");
-  $("#crumb").innerHTML=`<b>Settlement Risk</b><span class="sep">›</span><span class="muted">${chips.length? chips.length+" filter"+(chips.length===1?"":"s")+" active":"All countries · all segments · all limit types"}</span><span class="sep">›</span><span class="muted">Range: last ${state.dateRangeDays} days</span>`;
 }
 
 /* ============================================================
-   TAB: Overview
+   TAB: Overview — dispatches to portfolio view or a single
+   customer's own view when a customer is picked in the search box
 ============================================================ */
+function custSearchControl(){
+  const c = state.customerView ? CUST_BY_ID[state.customerView] : null;
+  return `<div class="panel mt14" style="margin-top:0;margin-bottom:14px"><div class="panel-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="eyebrow" style="flex:0 0 auto">Customer view</div>
+    <input class="dinput" id="ov-cust-search" list="ov-cust-list" style="max-width:300px" placeholder="Search a customer to view their SR data…" value="${c?esc(c.name):''}">
+    <datalist id="ov-cust-list">${WITH_LIMIT.map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
+    ${c?`<button type="button" class="btn-ghost" id="ov-cust-clear">← Back to portfolio overview</button>`:`<span class="muted" style="font-size:0.71875rem">Showing the overall SR pool. Pick a customer to pivot the whole page to their data (independent of the sidebar filters).</span>`}
+  </div></div>`;
+}
 function paneOverview(){
+  const search=custSearchControl();
+  if(state.customerView && CUST_BY_ID[state.customerView]) return search+paneOverviewCustomer(CUST_BY_ID[state.customerView]);
+  return search+paneOverviewPortfolio();
+}
+function paneOverviewPortfolio(){
   const list=filteredWithLimit();
   const noLimitList=filteredCustomers().filter(c=>!c.hasLimit);
   const total=list.reduce((a,c)=>a+c.limitM,0);
   const utilizedRaw=list.reduce((a,c)=>a+Math.min(1,custUtilCur(c))*c.limitM,0);
-  const reserved= state.filters.country||state.filters.segment||state.filters.limitType ? 0 : RESERVED_M;
+  const reserved= filtersActive() ? 0 : RESERVED_M;
   const available=total-utilizedRaw;
   const grand=total+reserved;
   const pieSegs=[
@@ -644,7 +723,7 @@ function paneOverview(){
 
   // segment with/without chart
   const segCats=SEGMENTS.map(seg=>{
-    const segCust=CUSTOMERS.filter(c=>c.segment===seg && (!state.filters.country||c.country===state.filters.country));
+    const segCust=CUSTOMERS.filter(c=>c.segment===seg && (!state.filters.country.size||state.filters.country.has(c.country)));
     return {key:seg,label:SEGMENT_LABEL[seg],a:segCust.filter(c=>c.hasLimit).length,b:segCust.filter(c=>!c.hasLimit).length};
   });
 
@@ -663,11 +742,17 @@ function paneOverview(){
   const projected30=fcast[fcast.length-1]||0;
   const daysTo100 = slope>0.0002 ? Math.max(0,Math.round((1-(hist[hist.length-1]||0))/slope)) : null;
 
-  // concentration by country / limit type
-  const byCountry=COUNTRIES.map(co=>({label:co,v:CUSTOMERS.filter(c=>c.hasLimit&&c.country===co && matchesFilters(c)).reduce((a,c)=>a+c.limitM,0)}));
-  const byType=LIMIT_TYPES.map(t=>({label:t,v:list.reduce((a,c)=>a+custLimitTypeM(c,t),0)}));
-  const maxCountry=Math.max(1,...byCountry.map(x=>x.v));
-  const maxType=Math.max(1,...byType.map(x=>x.v));
+  // concentration by country / limit type — total, utilized and %
+  const byCountry=COUNTRIES.map(co=>{
+    const cs=CUSTOMERS.filter(c=>c.hasLimit&&c.country===co&&matchesFilters(c));
+    const t=cs.reduce((a,c)=>a+c.limitM,0), u=cs.reduce((a,c)=>a+Math.min(1,custUtilCur(c))*c.limitM,0);
+    return {label:co,total:t,utilized:u,pct:t?u/t:0};
+  });
+  const byType=LIMIT_TYPES.map(t=>{
+    const total=list.reduce((a,c)=>a+custLimitTypeM(c,t),0);
+    const utilized=list.reduce((a,c)=>a+Math.min(1,custUtilCur(c))*custLimitTypeM(c,t),0);
+    return {label:t,total,utilized,pct:total?utilized/total:0};
+  });
 
   // utilization distribution histogram
   const bandDefs=[[0,0.001,"0%"],[0.001,0.5,"0-50%"],[0.5,0.75,"50-75%"],[0.75,0.9,"75-90%"],[0.9,1.0,"90-100%"],[1.0,99,">100%"]];
@@ -696,17 +781,19 @@ function paneOverview(){
 
   <div class="grid2b mt14">
     <div class="panel"><div class="panel-hd" data-tip="Solid line = actual weighted-average utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
-      <div class="panel-body">${trendChart(hist,fcast)}</div>
+      <div class="panel-body">${trendChart(hist,fcast,days)}</div>
       <div class="foot">Projected utilization in 30 days: <b>${fmtPct(projected30)}</b>. ${daysTo100!==null?`At the current trend, pool-wide utilization reaches <b>100%</b> in approximately <b>${daysTo100} days</b> — a capacity-planning flag for Credit Risk.`:"Utilization is flat or declining at the current trend — no near-term capacity concern."}</div></div>
     <div class="panel"><div class="panel-hd" data-tip="How many filtered customers fall into each utilization band right now."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
       <div class="panel-body">${histogram(buckets)}</div></div>
   </div>
 
   <div class="grid3 mt14">
-    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit by booking country, for the currently filtered customers."><h3>Concentration by country</h3></div>
-      <div class="panel-body">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:76px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${x.v/maxCountry*100}%;background:var(--run)"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.v)}</div></div>`).join("")}</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit by product limit type, for the currently filtered customers."><h3>Concentration by limit type</h3></div>
-      <div class="panel-body">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:56px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${x.v/maxType*100}%;background:var(--violet)"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.v)}</div></div>`).join("")}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit, utilized amount, and utilization % by booking country, for the currently filtered customers."><h3>Concentration by country</h3></div>
+      <div class="panel-body"><div class="colhd"><div style="width:76px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Total</div><div style="width:58px;text-align:right">Utilized</div><div style="width:38px;text-align:right">%</div></div>
+      ${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:76px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${(x.pct*100).toFixed(0)}%;background:var(--run)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:38px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="Total allocated SR limit, utilized amount, and utilization % by product limit type, for the currently filtered customers."><h3>Concentration by limit type</h3></div>
+      <div class="panel-body"><div class="colhd"><div style="width:56px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Total</div><div style="width:58px;text-align:right">Utilized</div><div style="width:38px;text-align:right">%</div></div>
+      ${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:56px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${(x.pct*100).toFixed(0)}%;background:var(--violet)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:38px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
     <div class="panel"><div class="panel-hd" data-tip="The ten customers currently drawing the largest utilized dollar amount — the biggest absolute exposures in the filtered pool."><h3>Top 10 exposures</h3></div>
       <div class="panel-body" style="padding:8px 0">${top10.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:0.71875rem"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2)">${esc(c.name)}</span><span class="num failc">${fmtM(Math.min(1,custUtilCur(c))*c.limitM)}</span></div>`).join("")}</div></div>
   </div>
@@ -716,6 +803,51 @@ function paneOverview(){
     <table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">SR limit</th><th class="r">Current util.</th><th class="r">Status</th></tr></thead>
     <tbody>${drillList.slice(0,25).map(c=>{const [lbl,cls]=custStatusTag(c);return `<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${c.hasLimit?fmtM(c.limitM):"—"}</td><td class="r num">${c.hasLimit?fmtPct(custUtilCur(c)):"—"}</td><td class="r"><span class="tag ${cls}">${lbl}</span></td></tr>`;}).join("")}</tbody></table>
     ${drillList.length>25?`<div class="foot">Showing first 25 of ${drillList.length} — refine filters or open the Customers tab for the full sortable list.</div>`:""}</div>`;
+}
+function paneOverviewCustomer(c){
+  const days=state.dateRangeDays;
+  const s=custStats(c);
+  const cur=custUtilCur(c);
+  const [statusLbl]=custStatusTag(c);
+  const pieSegs=[
+    {label:"Utilized",v:Math.min(1,cur)*100,color:"var(--fail)"},
+    {label:"Available",v:Math.max(0,1-Math.min(1,cur))*100,color:"var(--pass)"},
+  ];
+  const kpis=[
+    ["SR limit",fmtM(c.limitM),(c.rank?"Global rank #"+c.rank+" · ":"")+SEGMENT_LABEL[c.segment],"var(--run)","runc"],
+    ["Current utilization",fmtPct(cur),statusLbl,cur>1?"var(--fail)":cur>=0.75?"var(--warn)":"var(--pass)",cur>1?"failc":cur>=0.75?"warnc":"passc"],
+    ["Avg utilization",fmtPct(s.avg),"last "+days+" days","var(--cyan)","cyanc"],
+    ["Max utilization",fmtPct(s.max),"last "+days+" days","var(--warn)","warnc"],
+    ["Min utilization",fmtPct(s.min),"last "+days+" days","var(--pass)","passc"],
+    ["Days since zero util.",String(daysSinceNonZero(c.series)),"consecutive days at 0%","var(--gold)","gold"],
+  ];
+  const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
+  const recent=hist.slice(-14);
+  const slope = recent.length>1 ? (recent[recent.length-1]-recent[0])/(recent.length-1) : 0;
+  const fcast=[]; let lastV=hist[hist.length-1]||0;
+  for(let i=1;i<=30;i++){ lastV=Math.max(0,Math.min(1.3,lastV+slope)); fcast.push(lastV); }
+  const typeRows=LIMIT_TYPES.map(t=>{
+    const amt=custLimitTypeM(c,t), utilAmt=Math.min(1,cur)*amt;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.71875rem"><div style="width:56px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:var(--violet)"></i></div><div class="num" style="width:58px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:58px;text-align:right">${fmtM(utilAmt)}</div></div>`;
+  }).join("");
+  const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,10);
+  return `<div class="kpis">${kpis.map(([l,v,s2,acc,cls])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${cls}">${v}</b><small>${s2}</small></div>`).join("")}</div>
+  <div class="grid2b">
+    <div class="panel"><div class="panel-hd"><h3>SR limit composition — ${esc(c.name)}</h3><span class="slo">Utilized · Available</span></div>
+      <div class="panel-body" style="display:flex;align-items:center;gap:22px;flex-wrap:wrap">
+        ${donut(pieSegs,fmtM(c.limitM),"SR limit")}
+        <div style="flex:1;min-width:180px">${pieSegs.map(sg=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${sg.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${sg.label}</span><span class="num" style="font-weight:700">${sg.v.toFixed(1)}%</span></div>`).join("")}
+        ${cur>1?`<span class="tag t-fail">Breach — ${fmtPct(cur-1)} over limit</span>`:""}</div>
+      </div></div>
+    <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation of the ${fmtM(c.limitM)} limit</span></div>
+      <div class="panel-body"><div class="colhd"><div style="width:56px"></div><div style="flex:1"></div><div style="width:58px;text-align:right">Amount</div><div style="width:58px;text-align:right">Utilized</div></div>${typeRows}</div></div>
+  </div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid line = actual utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
+    <div class="panel-body">${trendChart(hist,fcast,days)}</div>
+    <div class="foot">Projected utilization in 30 days: <b>${fmtPct(fcast[fcast.length-1]||0)}</b>.</div></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
+    ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
+    <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer in the last 30 days.</div>`}</div>`;
 }
 
 /* ============================================================
@@ -890,7 +1022,8 @@ function custDrawer(c){
      <div class="block"><div class="lbl">Utilization — last ${state.dateRangeDays} days</div>
        <div style="display:flex;gap:16px;align-items:center">${spark(c.series.slice(-state.dateRangeDays),200,44)}<div style="font-size:0.78125rem;line-height:1.9"><div>Avg <b class="num">${fmtPct(s.avg)}</b></div><div>Max <b class="num">${fmtPct(s.max)}</b></div><div>Min <b class="num">${fmtPct(s.min)}</b></div></div></div></div>
      <div class="block"><div class="lbl">Limit type breakdown</div>${typeRows}</div>
-     <div class="block"><div class="lbl">Recent transactions</div>${recentTxns.length?recentTxns.map(t=>`<div class="rrow"><span>${fmtDate(t.date)} · ${t.assetClass} · ${t.product}</span><b>${fmtM(t.srConsumedM)} SR</b></div>`).join(""):'<div class="muted" style="font-size:0.78125rem">No recent transactions.</div>'}</div>`);
+     <div class="block"><div class="lbl">Recent transactions</div>${recentTxns.length?recentTxns.map(t=>`<div class="rrow"><span>${fmtDate(t.date)} · ${t.assetClass} · ${t.product}</span><b>${fmtM(t.srConsumedM)} SR</b></div>`).join(""):'<div class="muted" style="font-size:0.78125rem">No recent transactions.</div>'}</div>
+     <div class="mt14"><button type="button" class="btn-ghost" id="drawer-viewcust" data-viewcust="${c.id}">Open in Overview customer view →</button></div>`);
 }
 
 /* ============================================================
@@ -909,28 +1042,51 @@ function render(){
 /* ============================================================
    Events
 ============================================================ */
-$("#f-country").addEventListener("change",e=>{state.filters.country=e.target.value;render();});
-$("#f-segment").addEventListener("change",e=>{state.filters.segment=e.target.value;state.overviewSegClick="";render();});
-$("#f-limittype").addEventListener("change",e=>{state.filters.limitType=e.target.value;render();});
 $("#f-daterange").addEventListener("change",e=>{state.dateRangeDays=+e.target.value;render();});
 
 document.addEventListener("click",e=>{
+  const mbtn=e.target.closest(".msel-btn");
+  if(mbtn){ const key=mbtn.dataset.msel; if(openMselKey===key) closeMsel(); else openMsel(key); return; }
+  const mselall=e.target.closest("[data-mselall]"); if(mselall){const key=mselall.dataset.mselall; state.filters[key]=new Set(MSEL_OPTS[key]); if(key==="segment") state.overviewSegClick=""; refreshMsel(key); render(); return;}
+  const mselclear=e.target.closest("[data-mselclear]"); if(mselclear){const key=mselclear.dataset.mselclear; state.filters[key]=new Set(); if(key==="segment") state.overviewSegClick=""; refreshMsel(key); render(); return;}
   const tab=e.target.closest(".tab"); if(tab){state.tab=tab.dataset.tab;render();return;}
-  const clr=e.target.closest("[data-clearchip]"); if(clr){state.filters[clr.dataset.clearchip]=clr.dataset.clearchip==="limitType"?"":"";state.filters[clr.dataset.clearchip]="";$("#f-"+(clr.dataset.clearchip==="limitType"?"limittype":clr.dataset.clearchip)).value="";render();return;}
+  const clr=e.target.closest("[data-clearchip]"); if(clr){const k=clr.dataset.clearchip; state.filters[k]=new Set(); if(k==="segment") state.overviewSegClick=""; refreshMsel(k); render(); return;}
   const segdrill=e.target.closest("[data-segclick]"); if(segdrill){state.overviewSegClick=state.overviewSegClick===segdrill.dataset.segclick?"":segdrill.dataset.segclick;render();return;}
   const clearsegdrill=e.target.closest("#clearsegdrill"); if(clearsegdrill){state.overviewSegClick="";render();return;}
+  const ovclear=e.target.closest("#ov-cust-clear"); if(ovclear){state.customerView=null;render();return;}
+  const viewcust=e.target.closest("[data-viewcust]"); if(viewcust){state.customerView=viewcust.dataset.viewcust;state.tab="overview";closeDrawer();render();return;}
   const cust=e.target.closest("[data-cust]"); if(cust){custDrawer(CUST_BY_ID[cust.dataset.cust]);return;}
   const sortth=e.target.closest("[data-sort]"); if(sortth){const k=sortth.dataset.sort;state.custSort={key:k,dir:state.custSort.key===k?-state.custSort.dir:(k==='name'||k==='segment'||k==='country'?1:-1)};render();return;}
   const assetclick=e.target.closest("[data-assetclick]"); if(assetclick){const ac=assetclick.dataset.assetclick;state.blotterFilter.assetClass=state.blotterFilter.assetClass===ac?"":ac;render();return;}
   const delco=e.target.closest("[data-delco]"); if(delco){CARVEOUTS.splice(+delco.dataset.delco,1);saveLS("sr-dash-carveouts",CARVEOUTS);THRESHOLDS=CARVEOUTS.map(co=>({customerId:co.customerId,mode:co.mode,value:co.value,country:co.country,limitType:co.limitType}));saveLS("sr-dash-thresholds",THRESHOLDS);render();return;}
   const reqapprove=e.target.closest("[data-reqapprove]"); if(reqapprove){REQUESTS[+reqapprove.dataset.reqapprove].status="Approved";saveLS("sr-dash-requests",REQUESTS);render();return;}
   const reqreject=e.target.closest("[data-reqreject]"); if(reqreject){REQUESTS[+reqreject.dataset.reqreject].status="Rejected";saveLS("sr-dash-requests",REQUESTS);render();return;}
-  if(e.target.closest("#d-close")||e.target.id==="scrim")closeDrawer();
+  if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
+  if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
 });
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeDrawer();closeMsel();}});
 document.addEventListener("input",e=>{
   if(e.target.id==="cust-search"){state.custSearch=e.target.value;render();
     requestAnimationFrame(()=>{const el=$("#cust-search");if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}});
+  }
+  if(e.target.id==="ov-cust-search"){
+    const name=e.target.value.trim();
+    const found=WITH_LIMIT.find(c=>c.name===name);
+    if(found && found.id!==state.customerView){
+      state.customerView=found.id; render();
+      requestAnimationFrame(()=>{const el=$("#ov-cust-search"); if(el){el.focus(); el.selectionStart=el.selectionEnd=el.value.length;}});
+    } else if(!name && state.customerView){
+      state.customerView=null; render();
+      requestAnimationFrame(()=>{const el=$("#ov-cust-search"); if(el) el.focus();});
+    }
+  }
+});
+document.addEventListener("change",e=>{
+  if(e.target.id==="ov-cust-search"){
+    const name=e.target.value.trim();
+    const found=WITH_LIMIT.find(c=>c.name===name);
+    const newView=found?found.id:null;
+    if(newView!==state.customerView){ state.customerView=newView; render(); }
   }
 });
 
