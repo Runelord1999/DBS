@@ -229,7 +229,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 
 .scrim{position:fixed;inset:0;background:rgba(5,9,17,.66);opacity:0;pointer-events:none;transition:opacity .18s;z-index:40}
 .scrim.open{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;height:100%;width:min(640px,96vw);background:var(--panel);border-left:1px solid var(--hair);transform:translateX(100%);transition:transform .22s ease;z-index:50;display:flex;flex-direction:column}
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(820px,97vw);background:var(--panel);border-left:1px solid var(--hair);transform:translateX(100%);transition:transform .22s ease;z-index:50;display:flex;flex-direction:column}
 .drawer.open{transform:none}
 .drawer-hd{padding:16px 18px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .drawer-hd h3{margin:4px 0 0;font-size:0.9375rem;font-weight:700;line-height:1.3}
@@ -240,6 +240,27 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .kv b{color:var(--ink)}
 .block{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:12px 14px;margin-bottom:12px}
 .block .lbl{font-size:0.59375rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:600}
+/* Compact blotter-style table for the drawer */
+.dtable{width:100%;border-collapse:collapse;font-size:0.6875rem}
+.dtable th{font-size:0.5625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:5px 6px;border-bottom:1px solid var(--hair);white-space:nowrap;text-align:left}
+.dtable td{padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--hair) 60%,transparent);white-space:nowrap;vertical-align:middle}
+.dtable td .tag{font-size:0.5rem;padding:1px 5px}
+.dtable tr:last-child td{border-bottom:0}
+.dtable th.r,.dtable td.r{text-align:right}
+.dtable tfoot td{font-weight:700;color:var(--ink);border-top:1px solid var(--hair);background:color-mix(in srgb,var(--panel-3) 55%,transparent)}
+.dtable .scope-pill{font-size:0.5rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700;padding:2px 5px;border-radius:3px}
+.dtable td.mono,.dtable td.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.dtable tr.grp td{padding:9px 8px 4px;font-size:0.5625rem;letter-spacing:.07em;text-transform:uppercase;font-weight:700;color:var(--ink-2);border-bottom:1px solid var(--hair);background:color-mix(in srgb,var(--panel-3) 40%,transparent)}
+.dtable tr.sub td{font-weight:700;color:var(--ink);border-top:1px solid color-mix(in srgb,var(--hair) 80%,transparent);background:color-mix(in srgb,var(--panel-3) 35%,transparent)}
+.dtable tr.unalloc td{color:var(--ink-3)}
+.dtable .swatch{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:baseline;flex:none}
+.dtable .settled{color:var(--ink-3)}
+.dtable .dbar{display:inline-block;width:46px;height:5px;border-radius:3px;background:var(--panel-3);overflow:hidden;vertical-align:middle;margin-left:6px}
+.dtable .dbar i{display:block;height:100%;border-radius:3px;background:var(--run)}
+.dtable .dbar i.warn{background:var(--warn)} .dtable .dbar i.fail{background:var(--fail)}
+.dwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.dwrap .dtable{min-width:560px}
+.dsub{font-size:0.625rem;color:var(--ink-3);margin-top:7px;line-height:1.5}
 
 .tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:0.9375rem;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.5);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
@@ -595,9 +616,16 @@ const TXNS=[];
     const srPct=rand(0.02,0.09);
     const srConsumed=+(notional*srPct).toFixed(1);
     const dayOffset=randInt(0,364);
-    const status= dayOffset<=2 ? weightedChoice([["Settled",0.45],["Pending",0.5],["Failed",0.05]])
-                               : weightedChoice([["Settled",0.93],["Pending",0.02],["Failed",0.05]]);
-    TXNS.push({id:"T-"+(tid++),date:dateAt(dayOffset),customer:c,assetClass,product,limitType,notionalM:notional,srConsumedM:srConsumed,status});
+    // Maturity = trade date + the product's settlement lag. SR is live until then.
+    const lag=SETTLE_DAYS[product]||5;
+    const tradeDate=dateAt(dayOffset);
+    const maturity=new Date(tradeDate.getTime()+lag*dayMs);
+    const daysToMaturity=Math.ceil((maturity.getTime()-TODAY.getTime())/dayMs);
+    // Status follows maturity — a trade cannot settle before its value date, so
+    // anything still short of maturity is Pending and its SR is still consumed.
+    const status = rng()<0.03 ? "Failed" : (daysToMaturity>0 ? "Pending" : "Settled");
+    TXNS.push({id:"T-"+(tid++),date:tradeDate,customer:c,assetClass,product,limitType,notionalM:notional,srConsumedM:srConsumed,status,
+      settleLag:lag, maturity, daysToMaturity});
   }
   TXNS.sort((a,b)=>b.date-a.date);
 })();
@@ -1437,14 +1465,96 @@ function srFreeUpOutlook(c,proj,cur){
     : "";
   return `${head}As the current book settles, utilization runs off to <b>${fmtPct(in30)}</b> by day 30, releasing <b class="passc">${fmtM(released)}</b> of SR back (total available then: <b class="passc">${freeAt(in30)}</b>)${marks.length?` — ${marks.join(", ")}`:""}. Assumes no new trades are booked.`;
 }
+/* Breakdown table for the drawer. Rows are sourced from the SAME carve-outs that
+   drive the allocation bars above it, so the two always agree — country carve-outs
+   AND limit-type carve-outs, each with its unallocated remainder. Falls back to the
+   notional limit-type split only when the customer has no carve-outs at all. */
+function utilBar(up){
+  const cls=up>=1?"fail":up>=0.75?"warn":"";
+  return `<span class="dbar"><i class="${cls}" style="width:${Math.min(100,up*100).toFixed(1)}%"></i></span>`;
+}
+function drawerBreakdownTable(c){
+  const all=carveoutsFor(c.id);
+  const cur=custUtilCur(c), drawnTotal=Math.min(1,cur)*c.limitM;
+  const money=v=>fmtM(v);
+  const head=`<thead><tr><th>Allocation</th><th class="r">Total SR</th><th class="r">% of limit</th><th class="r">Utilized SR</th><th class="r">Utilized %</th><th class="r">Headroom</th></tr></thead>`;
+
+  if(all.length){
+    const scopes=["country","limitType"].filter(s=>all.some(co=>co.scope===s));
+    const body=scopes.map(scope=>{
+      const meta=CARVE_SCOPES[scope];
+      const list=all.filter(co=>co.scope===scope).sort((a,b)=>b.amountM-a.amountM);
+      const allocated=list.reduce((a,co)=>a+co.amountM,0);
+      const drawn=list.reduce((a,co)=>a+carveDrawn(co),0);
+      const rem=Math.max(0,c.limitM-allocated);
+      const rows=list.map((co,i)=>{
+        const up=carveUtilPct(co), d=carveDrawn(co);
+        return `<tr><td><span class="swatch" style="background:${ALLOC_PALETTE[i%ALLOC_PALETTE.length]}"></span>${esc(co.label)}</td>
+          <td class="r num">${money(co.amountM)}</td><td class="r num">${(co.amountM/c.limitM*100).toFixed(0)}%</td>
+          <td class="r num">${money(d)}</td>
+          <td class="r num"><b class="${up>=1?'failc':up>=0.75?'warnc':'passc'}">${fmtPct(up)}</b>${utilBar(up)}</td>
+          <td class="r num">${money(Math.max(0,co.amountM-d))}</td></tr>`;
+      }).join("");
+      const remRow=rem>0.005
+        ? `<tr class="unalloc"><td><span class="swatch" style="background:var(--panel-3)"></span>Unallocated</td><td class="r num">${money(rem)}</td><td class="r num">${(rem/c.limitM*100).toFixed(0)}%</td><td class="r num">—</td><td class="r num">—</td><td class="r num">${money(rem)}</td></tr>`
+        : "";
+      return `<tr class="grp"><td colspan="6">${meta.label} carve-outs · ${list.length} allocated</td></tr>${rows}${remRow}
+        <tr class="sub"><td>${meta.label} subtotal</td><td class="r num">${money(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num">${money(drawn)}</td><td class="r num">${fmtPct(allocated?drawn/allocated:0)}</td><td class="r num">${money(Math.max(0,allocated-drawn))}</td></tr>`;
+    }).join("");
+    return `<div class="block"><div class="lbl">Carve-out breakdown — total SR vs utilized SR</div>
+      <div class="dwrap"><table class="dtable">${head}<tbody>${body}</tbody>
+      <tfoot><tr><td>Customer SR limit</td><td class="r num">${money(c.limitM)}</td><td class="r num">100%</td><td class="r num"><b class="${cur>1?'failc':''}">${money(cur*c.limitM)}</b></td><td class="r num"><b class="${cur>1?'failc':cur>=0.75?'warnc':'passc'}">${fmtPct(cur)}</b></td><td class="r num">${money(Math.max(0,c.limitM-cur*c.limitM))}</td></tr></tfoot></table></div>
+      <div class="dsub">Each scope allocates the same ${money(c.limitM)} limit a different way, so the two subtotals are alternative cuts of one limit — not additive. Rows and colours match the allocation bars above.${cur>1?` Utilization is <b class="failc">${fmtPct(cur)}</b> of the limit; the ${money((cur-1)*c.limitM)} excess sits above every carve-out and is not attributable to one label.`:""}</div></div>`;
+  }
+
+  // No carve-outs: fall back to the notional limit-type split, with utilized SR
+  // apportioned by the customer's outstanding (unsettled) transactions.
+  const live=TXNS.filter(t=>t.customer.id===c.id && t.daysToMaturity>0);
+  const byType={}; LIMIT_TYPES.forEach(t=>byType[t]=0);
+  live.forEach(t=>{ byType[t.limitType]=(byType[t.limitType]||0)+t.srConsumedM; });
+  const rawSum=LIMIT_TYPES.reduce((a,t)=>a+byType[t],0);
+  const rows=LIMIT_TYPES.map(t=>{
+    const total=custLimitTypeM(c,t);
+    const util=rawSum ? drawnTotal*byType[t]/rawSum : drawnTotal*c.typeAlloc[t];
+    const up=total?util/total:0;
+    return `<tr><td>${t}</td><td class="r num">${money(total)}</td><td class="r num">${(c.typeAlloc[t]*100).toFixed(0)}%</td>
+      <td class="r num">${money(util)}</td><td class="r num"><b class="${up>=1?'failc':up>=0.75?'warnc':'passc'}">${fmtPct(up)}</b>${utilBar(up)}</td>
+      <td class="r num">${money(Math.max(0,total-util))}</td></tr>`;
+  }).join("");
+  return `<div class="block"><div class="lbl">Limit type breakdown — total SR vs utilized SR</div>
+    <div class="dwrap"><table class="dtable">${head}<tbody>${rows}</tbody>
+    <tfoot><tr><td>Total</td><td class="r num">${money(c.limitM)}</td><td class="r num">100%</td><td class="r num"><b class="${cur>1?'failc':''}">${money(cur*c.limitM)}</b></td><td class="r num"><b class="${cur>1?'failc':cur>=0.75?'warnc':'passc'}">${fmtPct(cur)}</b></td><td class="r num">${money(Math.max(0,c.limitM-cur*c.limitM))}</td></tr></tfoot></table></div>
+    <div class="dsub">No carve-outs are in place for this customer, so the limit is shown against its notional limit-type split. Utilized SR is apportioned across types by outstanding, unsettled trades.</div></div>`;
+}
+/* Drawer transaction blotter — aligned columns, maturity date and days to maturity. */
+function drawerTxnTable(c){
+  const list=TXNS.filter(t=>t.customer.id===c.id).slice(0,10);
+  if(!list.length) return `<div class="block"><div class="lbl">Recent transactions</div><div class="muted" style="font-size:0.78125rem">No transactions recorded for this customer.</div></div>`;
+  const liveSR=list.filter(t=>t.daysToMaturity>0).reduce((a,t)=>a+t.srConsumedM,0);
+  const totalSR=list.reduce((a,t)=>a+t.srConsumedM,0);
+  const rows=list.map(t=>{
+    const d=t.daysToMaturity;
+    const matured=d<=0;
+    const dayCell=matured
+      ? `<span class="settled">matured</span>`
+      : `<b class="${d<=2?'passc':d<=7?'warnc':''}">${d}d</b>`;
+    return `<tr><td class="mono">${t.id}</td><td class="mono">${fmtDate(t.date)}</td><td>${t.assetClass}</td><td>${t.product}</td>
+      <td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td>
+      <td class="mono${matured?" settled":""}">${fmtDate(t.maturity)}</td><td class="r num">${dayCell}</td>
+      <td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`;
+  }).join("");
+  return `<div class="block"><div class="lbl">Recent transactions — SR consumption &amp; maturity</div>
+    <div class="dwrap"><table class="dtable"><thead><tr><th>Trade ID</th><th>Trade date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Maturity</th><th class="r">Days to mat.</th><th class="r">Status</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="5">${list.length} most recent trades</td><td class="r num">${fmtM(totalSR)}</td><td colspan="2" class="r num">${fmtM(liveSR)} still outstanding</td><td></td></tr></tfoot></table></div>
+    <div class="dsub">Maturity = trade date + the product's settlement lag. SR stays consumed until maturity, then releases back to the limit — that release is what drives the forward curve above.</div></div>`;
+}
 function custDrawer(c){
   if(!c.hasLimit){
     openDrawer("Customer",c.name,`<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">Status <b>No SR limit</b></span></div><div class="block">This customer does not currently hold a Settlement Risk limit. Use the Limit Increase Requests tab to initiate an onboarding request.</div>`);
     return;
   }
   const s=custStats(c);
-  const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,8);
-  const typeRows=LIMIT_TYPES.map(t=>`<div class="rrow"><span>${t}</span><b>${fmtM(custLimitTypeM(c,t))} (${(c.typeAlloc[t]*100).toFixed(0)}%)</b></div>`).join("");
   const days=state.dateRangeDays;
   const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
   const cur=custUtilCur(c);
@@ -1464,8 +1574,8 @@ function custDrawer(c){
        <div class="foot" style="border:0;padding:0;color:var(--ink-3)">${freed}</div></div>
      ${hasCarve?`<div class="block"><div class="lbl">Carve-out allocation &amp; utilization</div>${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}
        <div class="alloclegend" style="margin-bottom:0"><span><span class="lgd-split"></span>Solid = drawn · pale = unused headroom</span></div></div>`:""}
-     <div class="block"><div class="lbl">Limit type breakdown</div>${typeRows}</div>
-     <div class="block"><div class="lbl">Recent transactions</div>${recentTxns.length?recentTxns.map(t=>`<div class="rrow"><span>${fmtDate(t.date)} · ${t.assetClass} · ${t.product}</span><b>${fmtM(t.srConsumedM)} SR</b></div>`).join(""):'<div class="muted" style="font-size:0.78125rem">No recent transactions.</div>'}</div>
+     ${drawerBreakdownTable(c)}
+     ${drawerTxnTable(c)}
      <div class="mt14" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn-ghost" id="drawer-viewcust" data-viewcust="${c.id}">Open in Overview customer view →</button><button type="button" class="btn-ghost" data-carvecust="${c.id}">Manage carve-outs →</button></div>`);
 }
 
