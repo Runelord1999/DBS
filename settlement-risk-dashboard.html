@@ -113,7 +113,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:0.625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
 th.r,td.r{text-align:right}
-th.sortable{cursor:pointer}th.sortable:hover{color:var(--ink-2)}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--ink-2)}
+th.sorted{color:var(--ink)}
+.sortcaret{margin-left:5px;font-size:0.8em;opacity:.45}
+th.sorted .sortcaret{opacity:1;color:var(--agent)}
 td{padding:10px 14px;border-bottom:1px solid var(--hair);font-size:0.78125rem;vertical-align:middle}
 tr:last-child td{border-bottom:0}
 tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--panel-2)}
@@ -490,7 +493,10 @@ const TXNS=[];
     return pool[pool.length-1];
   }
   let tid=10000;
-  for(let i=0;i<260;i++){
+  // Trades span the full 365-day history so the sidebar date-range selector has
+  // something to filter — previously they were bunched into the last 30 days only,
+  // which is why the blotter said "30d" while the range selector said 90.
+  for(let i=0;i<1500;i++){
     const c=pickCustomer();
     const assetClass=choice(ASSET_CLASSES);
     const product=choice(PRODUCTS[assetClass]);
@@ -498,23 +504,110 @@ const TXNS=[];
     const notional=Math.round(rand(2,450)*(assetClass==="Fixed Income"?2:1));
     const srPct=rand(0.02,0.09);
     const srConsumed=+(notional*srPct).toFixed(1);
-    const dayOffset=randInt(0,29);
-    const status=weightedChoice([["Settled",0.82],["Pending",0.13],["Failed",0.05]]);
+    const dayOffset=randInt(0,364);
+    const status= dayOffset<=2 ? weightedChoice([["Settled",0.45],["Pending",0.5],["Failed",0.05]])
+                               : weightedChoice([["Settled",0.93],["Pending",0.02],["Failed",0.05]]);
     TXNS.push({id:"T-"+(tid++),date:dateAt(dayOffset),customer:c,assetClass,product,limitType,notionalM:notional,srConsumedM:srConsumed,status});
   }
   TXNS.sort((a,b)=>b.date-a.date);
 })();
+function txnsInRange(){
+  const cutoff=TODAY.getTime()-(state.dateRangeDays-1)*dayMs;
+  return TXNS.filter(t=>t.date.getTime()>=cutoff);
+}
 
 /* ============================================================
    Application state
 ============================================================ */
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
-  custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null};
+  custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
+  carveCustomer:null, carveScope:"country"};
+
+/* ============================================================
+   Shared column-sort engine — every table registers here and uses
+   sortTh() for headers + applySort() for rows, so sorting behaves
+   identically across the blotter, rankings and carve-out tables.
+============================================================ */
+const SORTS={
+  blotter:{key:"date",dir:-1},
+  near100:{key:"util",dir:-1},
+  dormant:{key:"days",dir:-1},
+  breach:{key:"util",dir:-1},
+  carveouts:{key:"amount",dir:-1},
+  allcarve:{key:"customer",dir:1},
+};
+const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold"]);
+function sortTh(table,key,label,cls=""){
+  const s=SORTS[table];
+  const on=s.key===key;
+  return `<th class="${cls} sortable${on?" sorted":""}" data-sorttable="${table}" data-sortkey="${key}">${label}<span class="sortcaret">${on?(s.dir<0?"▼":"▲"):"↕"}</span></th>`;
+}
+function applySort(rows,table,acc){
+  const s=SORTS[table], f=acc[s.key];
+  if(!f) return rows;
+  return [...rows].sort((a,b)=>{
+    const av=f(a), bv=f(b);
+    if(typeof av==="string") return av.localeCompare(bv)*s.dir;
+    return ((av||0)-(bv||0))*s.dir;
+  });
+}
+function toggleSort(table,key){
+  const s=SORTS[table];
+  if(s.key===key) s.dir=-s.dir;
+  else { s.key=key; s.dir=TEXT_KEYS.has(key)?1:-1; }
+}
 function loadLS(key,def){ try{const v=localStorage.getItem(key); return v?JSON.parse(v):def;}catch(e){return def;} }
 function saveLS(key,val){ try{localStorage.setItem(key,JSON.stringify(val));}catch(e){} }
-let CARVEOUTS=loadLS("sr-dash-carveouts",[]);
+/* ============================================================
+   Carve-outs — a carve-out allocates part of a customer's SR limit to
+   ONE label, which is either a country entity or a product limit type.
+   Country and limit-type allocations are tracked as separate ladders,
+   each measured against the customer's total limit.
+============================================================ */
+const CARVE_SCOPES={country:{label:"Country",options:CARVEOUT_COUNTRIES},limitType:{label:"Limit type",options:LIMIT_TYPES}};
+function shuffled(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function allocShares(n,totalShare){
+  const raw=Array.from({length:n},()=>rand(0.5,1));
+  const sum=raw.reduce((a,b)=>a+b,0);
+  return raw.map(r=>r/sum*totalShare);
+}
+let COID=1;
+function seedCarveouts(){
+  const out=[];
+  WITH_LIMIT.forEach(c=>{
+    Object.keys(CARVE_SCOPES).forEach(scope=>{
+      const opts=CARVE_SCOPES[scope].options;
+      const n=Math.min(opts.length,scope==="country"?randInt(1,3):randInt(1,3));
+      const picks=shuffled(opts).slice(0,n);
+      const shares=allocShares(n,rand(0.55,0.92)); // never fully allocated — leaves visible headroom
+      picks.forEach((label,i)=>{
+        const amountM=Math.max(1,Math.round(c.limitM*shares[i]));
+        const thMode=rng()<0.75?"pct":"amt";
+        out.push({id:"CO-"+String(COID++).padStart(4,"0"),customerId:c.id,scope,label,amountM,
+          thMode, thValue: thMode==="pct" ? randInt(70,95) : Math.max(1,Math.round(amountM*rand(0.7,0.92))),
+          created:fmtDate(dateAt(randInt(20,300)))});
+      });
+    });
+  });
+  return out;
+}
+const SEED_CARVEOUTS=seedCarveouts();
+let CARVEOUTS=loadLS("sr-dash-carveouts-v2",SEED_CARVEOUTS);
 let REQUESTS=loadLS("sr-dash-requests",[]);
-let THRESHOLDS=loadLS("sr-dash-thresholds",[]);
+
+/* Drawn against a carve-out is modelled as the customer's current utilization
+   rate applied to that carve-out's allocated amount. */
+function carveDrawn(co){
+  const c=CUST_BY_ID[co.customerId]; if(!c) return 0;
+  return Math.min(1,custUtilCur(c))*co.amountM;
+}
+function carveUtilPct(co){ return co.amountM ? carveDrawn(co)/co.amountM : 0; }
+function carveThresholdBreached(co){
+  const drawn=carveDrawn(co);
+  return co.thMode==="pct" ? carveUtilPct(co)*100 >= +co.thValue : drawn >= +co.thValue;
+}
+function carveThresholdLabel(co){ return co.thMode==="pct" ? co.thValue+"% of carve-out" : fmtM(+co.thValue)+" drawn"; }
+function carveoutsFor(custId){ return CARVEOUTS.filter(co=>co.customerId===custId); }
 
 function matchesFilters(c){
   const f=state.filters;
@@ -944,7 +1037,7 @@ function paneCustomers(){
     return 0;
   };
   rows.sort((a,b)=>{const av=val(a),bv=val(b); if(typeof av==="string") return av.localeCompare(bv)*dir; return (av-bv)*dir;});
-  const th=(k,l,cls="")=>`<th class="${cls} sortable" data-sort="${k}">${l}${key===k?(dir<0?" ↓":" ↑"):""}</th>`;
+  const th=(k,l,cls="")=>`<th class="${cls} sortable${key===k?" sorted":""}" data-sort="${k}">${l}<span class="sortcaret">${key===k?(dir<0?"▼":"▲"):"↕"}</span></th>`;
   return `<div class="panel"><div class="panel-hd">
       <h3>Customer limits &amp; utilization</h3>
       <span class="slo">${rows.length} customers · range: last ${state.dateRangeDays} days · click a row for detail</span>
@@ -962,24 +1055,32 @@ function paneCustomers(){
    TAB: Blotter
 ============================================================ */
 function paneBlotter(){
-  let rows=TXNS.filter(t=>matchesFilters(t.customer));
+  const days=state.dateRangeDays;
+  let rows=txnsInRange().filter(t=>matchesFilters(t.customer));
   if(state.blotterFilter.assetClass) rows=rows.filter(t=>t.assetClass===state.blotterFilter.assetClass);
   const totalNotional=rows.reduce((a,t)=>a+t.notionalM,0);
   const totalSR=rows.reduce((a,t)=>a+t.srConsumedM,0);
+  const failed=rows.filter(t=>t.status==="Failed");
   const byClass=ASSET_CLASSES.map(ac=>({label:ac,v:rows.filter(t=>t.assetClass===ac).reduce((a,t)=>a+t.srConsumedM,0)}));
   const maxClass=Math.max(1,...byClass.map(x=>x.v));
-  const chips=ASSET_CLASSES.map(ac=>`<button class="btn-ghost" data-assetclick="${ac}" style="${state.blotterFilter.assetClass===ac?'border-color:var(--agent);color:var(--ink)':''}">${ac}</button>`).join(" ");
+  const chips=ASSET_CLASSES.map(ac=>`<button class="btn-ghost" data-assetclick="${ac}" style="${state.blotterFilter.assetClass===ac?'border-color:var(--agent);color:var(--ink)':''}">${ac}</button>`).join(" ")
+    +(state.blotterFilter.assetClass?` <button class="btn-ghost" data-assetclick="${state.blotterFilter.assetClass}" style="color:var(--ink-3)">Clear</button>`:"");
+  const sorted=applySort(rows,"blotter",{
+    id:t=>t.id, date:t=>t.date.getTime(), customer:t=>t.customer.name, assetClass:t=>t.assetClass,
+    product:t=>t.product, notional:t=>t.notionalM, sr:t=>t.srConsumedM, limitType:t=>t.limitType, status:t=>t.status,
+  });
+  const shown=sorted.slice(0,120);
   return `<div class="kpis" style="grid-template-columns:repeat(4,1fr)">
-    <div class="kpi" style="--accent:var(--run)"><div class="eyebrow">Trades (30d)</div><b class="num runc">${rows.length}</b><small>filtered blotter</small></div>
-    <div class="kpi" style="--accent:var(--agent)"><div class="eyebrow">Total notional</div><b class="num tealc">${fmtM(totalNotional)}</b><small>across all asset classes</small></div>
-    <div class="kpi" style="--accent:var(--fail)"><div class="eyebrow">SR consumed</div><b class="num failc">${fmtM(totalSR)}</b><small>settlement risk drawn by trades</small></div>
-    <div class="kpi" style="--accent:var(--gold)"><div class="eyebrow">Avg SR / trade</div><b class="num gold">${fmtM(rows.length?totalSR/rows.length:0)}</b><small>mean consumption per ticket</small></div>
+    <div class="kpi" style="--accent:var(--run)" data-tip="Trade count in the selected date range, after the sidebar filters. Change the range with the Date range selector in the sidebar."><div class="eyebrow">Trades</div><b class="num runc">${rows.length.toLocaleString()}</b><small>last ${days} days</small></div>
+    <div class="kpi" style="--accent:var(--agent)" data-tip="Total traded notional across the filtered blotter."><div class="eyebrow">Total notional</div><b class="num tealc">${fmtM(totalNotional)}</b><small>across all asset classes</small></div>
+    <div class="kpi" style="--accent:var(--fail)" data-tip="Settlement risk drawn by these trades. Typically 2–9% of notional depending on product and tenor."><div class="eyebrow">SR consumed</div><b class="num failc">${fmtM(totalSR)}</b><small>${totalNotional?fmtPct(totalSR/totalNotional):"0%"} of notional</small></div>
+    <div class="kpi" style="--accent:var(--gold)" data-tip="Trades that failed to settle. Failed settlements keep consuming SR until they are resolved."><div class="eyebrow">Failed settlements</div><b class="num gold">${failed.length}</b><small>${fmtM(failed.reduce((a,t)=>a+t.srConsumedM,0))} SR held up</small></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd"><h3>SR consumption by asset class</h3></div><div class="panel-body">${byClass.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.78125rem"><div style="width:100px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${x.v/maxClass*100}%;background:var(--cyan)"></i></div><div class="num" style="width:64px;text-align:right">${fmtM(x.v)}</div></div>`).join("")}</div></div>
-  <div class="panel mt14"><div class="panel-hd"><h3>Transaction blotter</h3><span class="slo">${rows.length} trades, last 30 days</span><div>${chips}</div></div>
-    <table><thead><tr><th>Trade ID</th><th>Date</th><th>Customer</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
-    <tbody>${rows.slice(0,80).map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td>${esc(t.customer.name)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>
-    ${rows.length>80?`<div class="foot">Showing first 80 of ${rows.length} trades.</div>`:""}</div>`;
+  <div class="panel mt14"><div class="panel-hd"><h3>SR consumption by asset class</h3><span class="slo">last ${days} days</span></div><div class="panel-body">${byClass.map(x=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:0.78125rem"><div style="width:100px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1"><i style="width:${x.v/maxClass*100}%;background:var(--cyan)"></i></div><div class="num" style="width:64px;text-align:right">${fmtM(x.v)}</div></div>`).join("")}</div></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Transaction blotter</h3><span class="slo">${rows.length.toLocaleString()} trades · last ${days} days · click any column to sort</span><div>${chips}</div></div>
+    <table><thead><tr>${sortTh("blotter","id","Trade ID")}${sortTh("blotter","date","Date")}${sortTh("blotter","customer","Customer")}${sortTh("blotter","assetClass","Asset class")}${sortTh("blotter","product","Product")}${sortTh("blotter","notional","Notional","r")}${sortTh("blotter","sr","SR consumed","r")}${sortTh("blotter","limitType","Limit type")}${sortTh("blotter","status","Status","r")}</tr></thead>
+    <tbody>${shown.map(t=>`<tr class="clickable" data-cust="${t.customer.id}"><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td>${esc(t.customer.name)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>
+    ${rows.length>shown.length?`<div class="foot">Showing ${shown.length} of ${rows.length.toLocaleString()} trades in this sort order — narrow the date range or filters to see fewer.</div>`:""}</div>`;
 }
 
 /* ============================================================
@@ -994,12 +1095,11 @@ function paneRankings(){
   const dormant=dormantAll.slice(0,RANK_N);
   const dormantCapital=dormantAll.reduce((a,x)=>a+x.c.limitM,0);
   const breaches=list.filter(c=>custUtilCur(c)>1.0).sort((a,b)=>custUtilCur(b)-custUtilCur(a));
-  const custThresholdAlerts=[];
-  THRESHOLDS.forEach(th=>{
-    const c=CUST_BY_ID[th.customerId]; if(!c) return;
-    const cur = th.mode==="pct" ? custUtilCur(c)*100 : Math.min(1,custUtilCur(c))*c.limitM;
-    if(cur>=+th.value) custThresholdAlerts.push({c,th,cur});
-  });
+  // Carve-out threshold breaches, scoped to the customers currently in view.
+  const inView=new Set(list.map(c=>c.id));
+  const custThresholdAlerts=CARVEOUTS.filter(co=>inView.has(co.customerId)&&carveThresholdBreached(co))
+    .map(co=>({co,c:CUST_BY_ID[co.customerId]}))
+    .sort((a,b)=>carveUtilPct(b.co)-carveUtilPct(a.co));
   return `<div class="grid2 mt0">
     <div class="panel"><div class="panel-hd" data-tip="Customers currently closest to fully drawing their SR limit. Headroom is what is left before the limit binds."><h3>Nearest to 100% utilization</h3><span class="slo">top ${RANK_N}</span></div>
       <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Headroom</th><th class="r">Current util.</th></tr></thead>
@@ -1014,9 +1114,11 @@ function paneRankings(){
   <div class="panel mt14"><div class="panel-hd" data-tip="Customers currently drawing more than 100% of their approved SR limit."><h3>Limit breach alerts</h3><span class="slo">${breaches.length} customers over 100% utilization</span></div>
     ${breaches.length?`<table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">Limit</th><th class="r">Current util.</th><th class="r">Excess</th></tr></thead>
     <tbody>${breaches.map(c=>`<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num failc">${fmtPct(custUtilCur(c))}</td><td class="r num failc">${fmtM((custUtilCur(c)-1)*c.limitM)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No customers currently over 100% of their SR limit.</div>`}</div>
-  <div class="panel mt14"><div class="panel-hd" data-tip="Breaches against the custom % or amount thresholds configured in the SR Carve-Outs tab."><h3>Custom threshold alerts</h3><span class="slo">${custThresholdAlerts.length} active</span></div>
-    ${custThresholdAlerts.length?`<table><thead><tr><th>Customer</th><th>Threshold</th><th>Country alloc.</th><th>Limit type</th><th class="r">Current</th></tr></thead>
-    <tbody>${custThresholdAlerts.map(a=>`<tr class="clickable" data-cust="${a.c.id}"><td>${esc(a.c.name)}</td><td class="muted">${a.th.mode==='pct'?a.th.value+'% utilization':fmtM(+a.th.value)}</td><td class="muted">${a.th.country}</td><td class="muted">${a.th.limitType}</td><td class="r num warnc">${a.th.mode==='pct'?fmtPct(a.cur/100):fmtM(a.cur)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No custom thresholds configured, or none currently breached. Set these up in the SR Carve-Outs tab.</div>`}</div>`;
+  <div class="panel mt14"><div class="panel-hd" data-tip="Carve-outs whose drawn amount has crossed the % or amount threshold set for them in the SR Carve-Outs tab."><h3>Carve-out threshold alerts</h3><span class="slo">${custThresholdAlerts.length} breached of ${CARVEOUTS.length} configured</span></div>
+    ${custThresholdAlerts.length?`<table><thead><tr><th>Customer</th><th>Scope</th><th>Label</th><th class="r">Carve-out</th><th class="r">Drawn</th><th class="r">Util.</th><th>Alert at</th></tr></thead>
+    <tbody>${custThresholdAlerts.slice(0,40).map(a=>{const up=carveUtilPct(a.co);
+      return `<tr class="clickable" data-carvecust="${a.c.id}"><td>${esc(a.c.name)}</td><td><span class="tag ${a.co.scope==='country'?'t-run':'t-violet'}">${CARVE_SCOPES[a.co.scope].label}</span></td><td class="muted">${esc(a.co.label)}</td><td class="r num">${fmtM(a.co.amountM)}</td><td class="r num failc">${fmtM(carveDrawn(a.co))}</td><td class="r num ${up>=1?'failc':'warnc'}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(a.co)}</td></tr>`;}).join("")}</tbody></table>
+    ${custThresholdAlerts.length>40?`<div class="foot">Showing 40 of ${custThresholdAlerts.length} breached carve-outs.</div>`:""}`:`<div class="empty">No carve-out thresholds currently breached in this view.</div>`}</div>`;
 }
 
 /* ============================================================
@@ -1025,30 +1127,78 @@ function paneRankings(){
 function custOptionsHtml(){
   return WITH_LIMIT.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)} (${SEGMENT_LABEL[c.segment]})</option>`).join("");
 }
+function carveScopeTable(c,scope){
+  const meta=CARVE_SCOPES[scope];
+  const list=carveoutsFor(c.id).filter(co=>co.scope===scope);
+  const allocated=list.reduce((a,co)=>a+co.amountM,0);
+  const remaining=c.limitM-allocated;
+  const rows=applySort(list,"carveouts",{
+    label:co=>co.label, amount:co=>co.amountM, share:co=>co.amountM/c.limitM,
+    drawn:co=>carveDrawn(co), util:co=>carveUtilPct(co), threshold:co=>carveThresholdLabel(co), created:co=>co.created,
+  });
+  return `<div class="panel"><div class="panel-hd" data-tip="Each row allocates part of ${esc(c.name)}'s ${fmtM(c.limitM)} SR limit to one ${meta.label.toLowerCase()} label."><h3>${meta.label} carve-outs</h3><span class="slo">${list.length} allocated · ${fmtM(allocated)} of ${fmtM(c.limitM)}</span></div>
+    ${list.length?`<table><thead><tr>${sortTh("carveouts","label",meta.label)}${sortTh("carveouts","amount","Carve-out","r")}${sortTh("carveouts","share","% of limit","r")}${sortTh("carveouts","drawn","Drawn","r")}${sortTh("carveouts","util","Util.","r")}${sortTh("carveouts","threshold","Alert at")}<th class="r"></th></tr></thead>
+    <tbody>${rows.map(co=>{const up=carveUtilPct(co);const br=carveThresholdBreached(co);
+      return `<tr><td>${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num muted">${(co.amountM/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(co)} ${br?'<span class="tag t-fail" style="margin-left:4px">Breached</span>':''}</td><td class="r"><button class="btn-ghost btn-danger" data-delco="${co.id}">Remove</button></td></tr>`;}).join("")}</tbody>
+    <tfoot class="tfoot"><tr><td>Allocated</td><td class="r num">${fmtM(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num" colspan="4">Unallocated headroom: <b class="${remaining<0?'failc':'passc'}">${fmtM(remaining)}</b></td></tr></tfoot></table>`
+    :`<div class="empty">No ${meta.label.toLowerCase()} carve-outs for this customer yet — add one above.</div>`}</div>`;
+}
 function paneCarveouts(){
-  return `<div class="panel"><div class="panel-hd"><h3>Create SR limit carve-out</h3><span class="slo">allocate a customer's limit to a specific country entity and product limit type, with an optional threshold alert</span></div>
+  const c = state.carveCustomer ? CUST_BY_ID[state.carveCustomer] : null;
+  const picker=`<div class="panel" style="margin-bottom:14px"><div class="panel-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="eyebrow" style="flex:0 0 auto">Customer</div>
+    <input class="dinput" id="co-cust-search" list="co-cust-list" style="max-width:320px" placeholder="Search or select a customer…" value="${c?esc(c.name):''}">
+    <datalist id="co-cust-list">${WITH_LIMIT.map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
+    ${c?`<span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="kv">${SEGMENT_LABEL[c.segment]}</span><span class="kv">${c.country}</span><button type="button" class="btn-ghost" id="co-cust-clear">Clear</button>`
+       :`<span class="muted" style="font-size:0.71875rem">Pick a customer to view and add their carve-outs.</span>`}
+  </div></div>`;
+
+  if(!c){
+    // No customer chosen — show the whole book so carve-outs are still browsable.
+    const all=applySort(CARVEOUTS,"allcarve",{
+      customer:co=>(CUST_BY_ID[co.customerId]||{}).name||"", scope:co=>CARVE_SCOPES[co.scope].label, label:co=>co.label,
+      amount:co=>co.amountM, drawn:co=>carveDrawn(co), util:co=>carveUtilPct(co), created:co=>co.created,
+    }).slice(0,60);
+    return picker+`<div class="panel"><div class="panel-hd"><h3>All carve-outs</h3><span class="slo">${CARVEOUTS.length} across ${new Set(CARVEOUTS.map(x=>x.customerId)).size} customers · click any column to sort</span></div>
+      <table><thead><tr>${sortTh("allcarve","customer","Customer")}${sortTh("allcarve","scope","Scope")}${sortTh("allcarve","label","Label")}${sortTh("allcarve","amount","Carve-out","r")}${sortTh("allcarve","drawn","Drawn","r")}${sortTh("allcarve","util","Util.","r")}${sortTh("allcarve","created","Created")}</tr></thead>
+      <tbody>${all.map(co=>{const cu=CUST_BY_ID[co.customerId];const up=carveUtilPct(co);
+        return `<tr class="clickable" data-carvecust="${co.customerId}"><td>${cu?esc(cu.name):"—"}</td><td><span class="tag ${co.scope==='country'?'t-run':'t-violet'}">${CARVE_SCOPES[co.scope].label}</span></td><td class="muted">${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted">${co.created}</td></tr>`;}).join("")}</tbody></table>
+      ${CARVEOUTS.length>60?`<div class="foot">Showing 60 of ${CARVEOUTS.length} — pick a customer above to see just theirs.</div>`:""}</div>`;
+  }
+
+  const scope=state.carveScope, meta=CARVE_SCOPES[scope];
+  const used=new Set(carveoutsFor(c.id).filter(co=>co.scope===scope).map(co=>co.label));
+  const avail=meta.options.filter(o=>!used.has(o));
+  const allocated=carveoutsFor(c.id).filter(co=>co.scope===scope).reduce((a,co)=>a+co.amountM,0);
+  return picker+`<div class="panel"><div class="panel-hd"><h3>Add carve-out — ${esc(c.name)}</h3><span class="slo">allocate part of the ${fmtM(c.limitM)} limit to one label, with a threshold alert</span></div>
     <div class="panel-body">
       <form id="carveout-form">
-        <div class="formgrid">
-          <label class="formfield"><span>Customer</span><select id="co-customer" required><option value="">Select customer…</option>${custOptionsHtml()}</select></label>
-          <label class="formfield"><span>Country allocation</span><select id="co-country" required><option value="">Select…</option>${CARVEOUT_COUNTRIES.map(c=>`<option>${c}</option>`).join("")}</select></label>
-          <label class="formfield"><span>Limit type</span><select id="co-limittype" required><option value="">Select…</option>${LIMIT_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></label>
-          <label class="formfield"><span>Carve-out amount (S$M)</span><input type="number" id="co-amount" min="1" step="1" placeholder="e.g. 250" required></label>
+        <label class="formfield"><span>Carve-out by</span>
+          <div class="radiorow">
+            <label class="radiopill"><input type="radio" name="co-scope" value="country" ${scope==="country"?"checked":""}> Country</label>
+            <label class="radiopill"><input type="radio" name="co-scope" value="limitType" ${scope==="limitType"?"checked":""}> Limit type</label>
+          </div></label>
+        <div class="formgrid mt14">
+          <label class="formfield"><span>${meta.label}</span><select id="co-label" required>${avail.length?`<option value="">Select…</option>`+avail.map(o=>`<option>${esc(o)}</option>`).join(""):`<option value="">All ${meta.label.toLowerCase()} labels already allocated</option>`}</select></label>
+          <label class="formfield"><span>Carve-out amount</span>
+            <div style="display:flex;gap:8px">
+              <select id="co-amtmode" style="max-width:130px"><option value="amt">S$M</option><option value="pct">% of limit</option></select>
+              <input type="number" id="co-amount" min="1" step="1" placeholder="e.g. 250" required style="flex:1">
+            </div>
+            <div class="ctrl-sub" style="margin-top:6px;color:var(--ink-3);font-size:0.65625rem">${fmtM(allocated)} of ${fmtM(c.limitM)} already allocated by ${meta.label.toLowerCase()}</div></label>
         </div>
         <div class="formgrid mt14">
-          <label class="formfield"><span>Threshold alert mode</span>
+          <label class="formfield"><span>Threshold alert</span>
             <div class="radiorow">
-              <label class="radiopill"><input type="radio" name="co-mode" value="pct" checked> % of limit</label>
-              <label class="radiopill"><input type="radio" name="co-mode" value="amt"> Absolute amount (S$M)</label>
+              <label class="radiopill"><input type="radio" name="co-thmode" value="pct" checked> % of carve-out</label>
+              <label class="radiopill"><input type="radio" name="co-thmode" value="amt"> Amount (S$M)</label>
             </div></label>
           <label class="formfield"><span>Threshold value</span><input type="number" id="co-threshold" min="0" step="1" placeholder="e.g. 85 (%) or 200 ($M)" required></label>
         </div>
-        <div class="mt14"><button type="submit" class="btn">Create carve-out</button></div>
+        <div class="mt14"><button type="submit" class="btn"${avail.length?"":" disabled style='opacity:.5;cursor:not-allowed'"}>Add carve-out</button></div>
       </form>
     </div></div>
-  <div class="panel mt14"><div class="panel-hd"><h3>Existing carve-outs</h3><span class="slo">${CARVEOUTS.length} configured</span></div>
-    ${CARVEOUTS.length?`<table><thead><tr><th>Customer</th><th>Country allocation</th><th>Limit type</th><th class="r">Amount</th><th>Threshold alert</th><th class="muted">Created</th><th class="r"></th></tr></thead>
-    <tbody>${CARVEOUTS.map((co,i)=>{const c=CUST_BY_ID[co.customerId];return `<tr><td>${c?esc(c.name):esc(co.customerId)}</td><td class="muted">${co.country}</td><td class="muted">${co.limitType}</td><td class="r num">${fmtM(+co.amount)}</td><td class="muted">${co.mode==='pct'?co.value+'% utilization':fmtM(+co.value)+' drawn'}</td><td class="muted">${co.created}</td><td class="r"><button class="btn-ghost btn-danger" data-delco="${i}">Remove</button></td></tr>`;}).join("")}</tbody></table>`:`<div class="empty">No carve-outs created yet — use the form above.</div>`}</div>`;
+  <div class="grid2 mt14">${carveScopeTable(c,"country")}${carveScopeTable(c,"limitType")}</div>`;
 }
 
 /* ============================================================
@@ -1137,9 +1287,12 @@ document.addEventListener("click",e=>{
   const ovclear=e.target.closest("#ov-cust-clear"); if(ovclear){state.customerView=null;render();return;}
   const viewcust=e.target.closest("[data-viewcust]"); if(viewcust){state.customerView=viewcust.dataset.viewcust;state.tab="overview";closeDrawer();render();return;}
   const cust=e.target.closest("[data-cust]"); if(cust){custDrawer(CUST_BY_ID[cust.dataset.cust]);return;}
+  const tsort=e.target.closest("[data-sorttable]"); if(tsort){toggleSort(tsort.dataset.sorttable,tsort.dataset.sortkey);render();return;}
   const sortth=e.target.closest("[data-sort]"); if(sortth){const k=sortth.dataset.sort;state.custSort={key:k,dir:state.custSort.key===k?-state.custSort.dir:(k==='name'||k==='segment'||k==='country'?1:-1)};render();return;}
+  const carvecust=e.target.closest("[data-carvecust]"); if(carvecust){state.carveCustomer=carvecust.dataset.carvecust;state.tab="carveouts";render();return;}
+  const cocustclear=e.target.closest("#co-cust-clear"); if(cocustclear){state.carveCustomer=null;render();return;}
   const assetclick=e.target.closest("[data-assetclick]"); if(assetclick){const ac=assetclick.dataset.assetclick;state.blotterFilter.assetClass=state.blotterFilter.assetClass===ac?"":ac;render();return;}
-  const delco=e.target.closest("[data-delco]"); if(delco){CARVEOUTS.splice(+delco.dataset.delco,1);saveLS("sr-dash-carveouts",CARVEOUTS);THRESHOLDS=CARVEOUTS.map(co=>({customerId:co.customerId,mode:co.mode,value:co.value,country:co.country,limitType:co.limitType}));saveLS("sr-dash-thresholds",THRESHOLDS);render();return;}
+  const delco=e.target.closest("[data-delco]"); if(delco){const id=delco.dataset.delco;CARVEOUTS=CARVEOUTS.filter(co=>co.id!==id);saveLS("sr-dash-carveouts-v2",CARVEOUTS);render();return;}
   const reqapprove=e.target.closest("[data-reqapprove]"); if(reqapprove){REQUESTS[+reqapprove.dataset.reqapprove].status="Approved";saveLS("sr-dash-requests",REQUESTS);render();return;}
   const reqreject=e.target.closest("[data-reqreject]"); if(reqreject){REQUESTS[+reqreject.dataset.reqreject].status="Rejected";saveLS("sr-dash-requests",REQUESTS);render();return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
@@ -1172,15 +1325,30 @@ document.addEventListener("change",e=>{
 });
 
 function wireCarveoutForm(){
+  const search=$("#co-cust-search");
+  if(search){
+    const pick=()=>{
+      const name=search.value.trim();
+      const found=WITH_LIMIT.find(x=>x.name===name);
+      const next=found?found.id:null;
+      if(next!==state.carveCustomer){ state.carveCustomer=next; render(); }
+    };
+    search.addEventListener("change",pick);
+    search.addEventListener("input",()=>{ if(WITH_LIMIT.some(x=>x.name===search.value.trim())) pick(); });
+  }
   const f=$("#carveout-form"); if(!f) return;
+  f.querySelectorAll('input[name="co-scope"]').forEach(r=>r.addEventListener("change",e=>{state.carveScope=e.target.value;render();}));
   f.addEventListener("submit",e=>{
     e.preventDefault();
-    const mode=f.querySelector('input[name="co-mode"]:checked').value;
-    CARVEOUTS.push({customerId:$("#co-customer").value,country:$("#co-country").value,limitType:$("#co-limittype").value,
-      amount:$("#co-amount").value,mode,value:$("#co-threshold").value,created:fmtDate(new Date())});
-    saveLS("sr-dash-carveouts",CARVEOUTS);
-    THRESHOLDS=CARVEOUTS.map(co=>({customerId:co.customerId,mode:co.mode,value:co.value,country:co.country,limitType:co.limitType}));
-    saveLS("sr-dash-thresholds",THRESHOLDS);
+    const c=CUST_BY_ID[state.carveCustomer]; if(!c) return;
+    const label=$("#co-label").value; if(!label) return;
+    const amtMode=$("#co-amtmode").value, amtRaw=+$("#co-amount").value;
+    const amountM = amtMode==="pct" ? Math.round(c.limitM*amtRaw/100) : Math.round(amtRaw);
+    if(!(amountM>0)) return;
+    CARVEOUTS.push({id:"CO-"+String(COID++).padStart(4,"0"),customerId:c.id,scope:state.carveScope,label,amountM,
+      thMode:f.querySelector('input[name="co-thmode"]:checked').value, thValue:$("#co-threshold").value,
+      created:fmtDate(new Date())});
+    saveLS("sr-dash-carveouts-v2",CARVEOUTS);
     render();
   });
 }
