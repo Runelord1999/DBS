@@ -407,6 +407,15 @@ const PRODUCTS={
   "Equities":["Cash Equity","Equity Swap","Equity Option"],
   "Fixed Income":["Govt Bond","Corp Bond","Repo","Bond Forward"],
 };
+/* Typical settlement lag in days per product. Settlement risk is only live until a
+   trade settles, so these drive the forward run-off of existing exposure. */
+const SETTLE_DAYS={
+  "FX Spot":2,"FX Forward":32,"FX Swap":32,"NDF":30,
+  "FX Vanilla Call":45,"FX Vanilla Put":45,"FX Barrier Option":60,
+  "Cash Equity":2,"Equity Swap":45,"Equity Option":45,
+  "Govt Bond":2,"Corp Bond":2,"Repo":14,"Bond Forward":30,
+};
+const DEFAULT_SETTLE_MIX=[[2,55],[14,20],[30,18],[60,7]]; // fallback profile when a customer has no trades
 const CLASS_TYPE_WEIGHTS={
   "FX":[["eFX",0.85],["FX-DERI",0.15]],
   "FX Options":[["FX-DERI",1.0]],
@@ -595,6 +604,43 @@ const TXNS=[];
 function txnsInRange(){
   const cutoff=TODAY.getTime()-(state.dateRangeDays-1)*dayMs;
   return TXNS.filter(t=>t.date.getTime()>=cutoff);
+}
+
+/* ============================================================
+   Forward view = settlement run-off, NOT a trend extrapolation.
+   Settlement risk is live only until a trade settles, and future trades
+   are unknowable, so the only defensible projection is how today's
+   outstanding exposure matures away. It can therefore only decline.
+   Weighted by the SR each product actually consumes.
+============================================================ */
+function settlementMix(txns){
+  const b=new Map(); let total=0;
+  txns.forEach(t=>{ const lag=SETTLE_DAYS[t.product]||5; b.set(lag,(b.get(lag)||0)+t.srConsumedM); total+=t.srConsumedM; });
+  if(!total){ DEFAULT_SETTLE_MIX.forEach(([lag,w])=>b.set(lag,w)); total=DEFAULT_SETTLE_MIX.reduce((a,x)=>a+x[1],0); }
+  return {b,total};
+}
+/* Fraction of today's exposure still outstanding on each future day. Each tenor
+   bucket matures over a short window around its lag rather than a hard cliff. */
+function runoffFractions(mix,horizon){
+  const out=[];
+  for(let d=1;d<=horizon;d++){
+    let remain=0;
+    mix.b.forEach((amt,lag)=>{
+      const s=lag*0.85, e=Math.max(lag*1.15,lag+1);
+      const f = d<=s ? 1 : d>=e ? 0 : (e-d)/(e-s);
+      remain+=amt*f;
+    });
+    out.push(remain/mix.total);
+  }
+  return out;
+}
+function runoffProjection(txns,currentUtil,horizon){
+  return runoffFractions(settlementMix(txns),horizon).map(f=>currentUtil*f);
+}
+/* First day the projection falls below a target utilization, or null if it never does. */
+function daysUntilBelow(proj,target){
+  for(let i=0;i<proj.length;i++) if(proj[i]<target) return i+1;
+  return null;
 }
 
 /* ============================================================
@@ -802,7 +848,7 @@ function trendChart(hist,fcast,days,w=560,h=202){
     <text x="${nowX}" y="${topPad-6}" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
     ${weekTicks}
     <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="2"/>
-    <polyline points="${fcastPts}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-dasharray="5 4"/>
+    <polyline points="${fcastPts}" fill="none" stroke="var(--pass)" stroke-width="2" stroke-dasharray="5 4"/>
     ${monthLbls}
     </svg>`;
 }
@@ -979,12 +1025,15 @@ function paneOverviewPortfolio(){
   });
 
   // forward projection off the trailing 14-day trend (hist is built above, with peakUtil)
-  const recent=hist.slice(-14);
-  const slope = recent.length>1 ? (recent[recent.length-1]-recent[0])/(recent.length-1) : 0;
-  const fcast=[]; let lastV=hist[hist.length-1]||0;
-  for(let i=1;i<=30;i++){ lastV=Math.max(0,Math.min(1.3,lastV+slope)); fcast.push(lastV); }
+  /* Forward path is the settlement run-off of exposure already on the book, not a
+     trend extrapolation — future trades are unknown, so the only thing that can be
+     projected is how today's outstanding exposure matures away. */
+  const curUtil=hist[hist.length-1]||0;
+  const inScope=new Set(list.map(x=>x.id));
+  const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,30);
   const projected30=fcast[fcast.length-1]||0;
-  const daysTo100 = slope>0.0002 ? Math.max(0,Math.round((1-(hist[hist.length-1]||0))/slope)) : null;
+  const releasedM=Math.max(0,(Math.min(1,curUtil)-Math.min(1,projected30))*total);
+  const half=daysUntilBelow(fcast,curUtil*0.5);
 
   // concentration by country / limit type — total, utilized and %
   const byCountry=COUNTRIES.map(co=>{
@@ -1033,9 +1082,9 @@ function paneOverviewPortfolio(){
   </div>
 
   <div class="grid2b mt14">
-    <div class="panel"><div class="panel-hd" data-tip="Solid blue line = actual limit-weighted utilization over the selected date range. Dashed gold line = a 30-day forward projection from the trailing 14-day trend. The red dashed line is the 100% limit."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
+    <div class="panel"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization over the selected range. Dashed green = the settlement run-off of exposure already on the book, weighted by each product's settlement lag. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3><span class="slo">last ${days}d actual + 30d run-off</span></div>
       <div class="panel-body"><div class="chart-well">${trendChart(hist,fcast,days)}</div></div>
-      <div class="foot">Projected utilization in 30 days: <b>${fmtPct(projected30)}</b>. ${daysTo100!==null?`At the current trend, pool-wide utilization reaches <b>100%</b> in approximately <b>${daysTo100} days</b> — a capacity-planning flag for Credit Risk.`:"Utilization is flat or declining at the current trend — no near-term capacity concern."}</div></div>
+      <div class="foot">As the current book settles, utilization runs off from <b>${fmtPct(curUtil)}</b> to <b>${fmtPct(projected30)}</b> by day 30, releasing <b>${fmtM(releasedM)}</b> of SR capacity${half?` — half of today's exposure has settled by ~<b>day ${half}</b>`:""}. Assumes no new trades; incoming flow offsets this in practice.</div></div>
     <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
       <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div>
       <div class="foot"><b>${tailCount}</b> customer${tailCount===1?"":"s"} in the 90%+ risk tail · <b>${buckets[0].count}</b> fully dormant at 0%.</div></div>
@@ -1080,10 +1129,7 @@ function paneOverviewCustomer(c){
     ["Days since zero util.",String(daysSinceNonZero(c.series)),"consecutive days at 0%","var(--gold)","gold"],
   ];
   const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
-  const recent=hist.slice(-14);
-  const slope = recent.length>1 ? (recent[recent.length-1]-recent[0])/(recent.length-1) : 0;
-  const fcast=[]; let lastV=hist[hist.length-1]||0;
-  for(let i=1;i<=30;i++){ lastV=Math.max(0,Math.min(1.3,lastV+slope)); fcast.push(lastV); }
+  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,30);
   const typeRows=LIMIT_TYPES.map(t=>{
     const amt=custLimitTypeM(c,t), utilAmt=Math.min(1,cur)*amt;
     return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:${cur>=0.9?'var(--fail)':cur>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
@@ -1100,9 +1146,9 @@ function paneOverviewCustomer(c){
     <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation of the ${fmtM(c.limitM)} limit</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd" data-tip="Solid line = actual utilization over the selected date range. Dashed gold line = a 30-day forward projection based on the trailing 14-day trend. The red dashed line is the 100% limit."><h3>Utilization trend &amp; forward-looking capacity</h3><span class="slo">last ${days}d actual + 30d projection</span></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual utilization over the selected range. Dashed green = the settlement run-off of this customer's outstanding exposure, weighted by each product's settlement lag. It only declines because future trades are unknowable. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3><span class="slo">last ${days}d actual + 30d run-off</span></div>
     <div class="panel-body"><div class="chart-well" style="height:236px">${trendChart(hist,fcast,days)}</div></div>
-    <div class="foot">Projected utilization in 30 days: <b>${fmtPct(fcast[fcast.length-1]||0)}</b>.</div></div>
+    <div class="foot">${srFreeUpOutlook(c,fcast,cur)}</div></div>
   <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
     <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer in the last 30 days.</div>`}</div>`;
@@ -1370,36 +1416,26 @@ function paneRequests(){
 ============================================================ */
 function openDrawer(eye,title,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
 function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
-/* Forward-looking read on when settlement-risk capacity frees up for this customer:
-   projects the trailing trend to the point utilization falls back under a usable
-   threshold, and prices the headroom that releases. */
-function srFreeUpOutlook(c,hist,fcast,slope,cur){
+/* Reads the settlement run-off: when today's exposure matures and how much SR
+   capacity comes back as it does. No assumption about future trades. */
+function srFreeUpOutlook(c,proj,cur){
   const limit=c.limitM;
-  const money=u=>fmtM(Math.max(0,limit-Math.min(1,u)*limit));
-  const in30=fcast[fcast.length-1]||0;
-  const daysTo=target=>{
-    if(cur<=target) return 0;
-    if(slope>=-1e-6) return null;              // flat or rising — never reaches it
-    return Math.ceil((cur-target)/Math.abs(slope));
-  };
+  const freeAt=u=>fmtM(Math.max(0,limit-Math.min(1,u)*limit));
+  const in30=proj[proj.length-1]||0;
+  const released=Math.max(0,(Math.min(1,cur)-Math.min(1,in30))*limit);
+  const marks=[];
   if(cur>1){
-    const d=daysTo(1);
-    return d===null
-      ? `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)} and not trending down — no capacity frees up on the current trend. Needs a limit increase or exposure reduction.`
-      : `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)}. On the current trend it returns under 100% in about <b>${d} day${d===1?"":"s"}</b>; first usable headroom appears then.`;
+    const d=daysUntilBelow(proj,1);
+    marks.push(d?`back under its limit in ~<b>${d}d</b>`:"still above its limit at day 30");
   }
-  if(slope<-1e-6){
-    const d90=daysTo(0.9), d75=daysTo(0.75);
-    const parts=[];
-    if(cur>0.9 && d90!==null) parts.push(`drops below 90% in ~<b>${d90}d</b>`);
-    if(cur>0.75 && d75!==null) parts.push(`below 75% in ~<b>${d75}d</b>`);
-    return `Utilization is <b class="passc">easing</b>. Projected <b>${fmtPct(in30)}</b> in 30 days, releasing <b class="passc">${money(in30)}</b> of headroom${parts.length?` — ${parts.join(", ")}`:""}.`;
-  }
-  if(slope>1e-6){
-    const dTo100=Math.ceil((1-cur)/slope);
-    return `Utilization is <b class="warnc">building</b>. Projected <b>${fmtPct(in30)}</b> in 30 days${dTo100<=365?`, reaching 100% in ~<b>${dTo100} days</b>`:""} — headroom shrinks to <b>${money(in30)}</b>. No capacity frees up on this trend.`;
-  }
-  return `Utilization is <b>flat</b> at ~${fmtPct(cur)}. Headroom holds around <b class="passc">${money(cur)}</b>; no material capacity change expected in the next 30 days.`;
+  [[0.9,"90%"],[0.75,"75%"],[0.5,"50%"]].forEach(([t,lbl])=>{
+    if(cur>t){ const d=daysUntilBelow(proj,t); if(d) marks.push(`below ${lbl} in ~<b>${d}d</b>`); }
+  });
+  if(cur<0.001) return `Nothing drawn — the full <b class="passc">${fmtM(limit)}</b> limit is available now.`;
+  const head=cur>1
+    ? `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)}. `
+    : "";
+  return `${head}As the current book settles, utilization runs off to <b>${fmtPct(in30)}</b> by day 30, releasing <b class="passc">${fmtM(released)}</b> of SR back (total available then: <b class="passc">${freeAt(in30)}</b>)${marks.length?` — ${marks.join(", ")}`:""}. Assumes no new trades are booked.`;
 }
 function custDrawer(c){
   if(!c.hasLimit){
@@ -1411,16 +1447,14 @@ function custDrawer(c){
   const typeRows=LIMIT_TYPES.map(t=>`<div class="rrow"><span>${t}</span><b>${fmtM(custLimitTypeM(c,t))} (${(c.typeAlloc[t]*100).toFixed(0)}%)</b></div>`).join("");
   const days=state.dateRangeDays;
   const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
-  const recent=hist.slice(-14);
-  const slope=recent.length>1?(recent[recent.length-1]-recent[0])/(recent.length-1):0;
-  const fcast=[]; let lv=hist[hist.length-1]||0;
-  for(let i=1;i<=30;i++){ lv=Math.max(0,Math.min(1.35,lv+slope)); fcast.push(lv); }
   const cur=custUtilCur(c);
-  const freed=srFreeUpOutlook(c,hist,fcast,slope,cur);
+  // Forward path = run-off of this customer's outstanding exposure as it settles.
+  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,30);
+  const freed=srFreeUpOutlook(c,fcast,cur);
   const hasCarve=carveoutsFor(c.id).length>0;
   openDrawer("Customer"+(c.rank?" · global rank #"+c.rank:""),c.name,
     `<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="tag ${custStatusTag(c)[1]}" style="align-self:center">${custStatusTag(c)[0]}</span></div>
-     <div class="block"><div class="lbl">Utilization &amp; capacity outlook — last ${days} days + 30d projection</div>
+     <div class="block"><div class="lbl">Utilization &amp; capacity outlook — last ${days} days + 30d settlement run-off</div>
        <div class="chart-well" style="height:190px;margin:2px 0 10px">${trendChart(hist,fcast,days)}</div>
        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
          <span class="kv">Avg <b>${fmtPct(s.avg)}</b></span><span class="kv">Max <b>${fmtPct(s.max)}</b></span><span class="kv">Min <b>${fmtPct(s.min)}</b></span>
