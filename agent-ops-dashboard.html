@@ -5,31 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Delivery Operations — Portfolio, Savings & Token Economics</title>
 <style>
-:root,[data-theme="dark"]{
-  --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
-  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F; --brand-ink:#06131A;
-  --pass:#2FD39A; --fail:#FF5470; --warn:#F5B23C; --run:#5B8CFF;
-  --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
-  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
-  --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
-}
-[data-theme="light"]{
+/* Light is the default skin — :root carries it so the page is white even before
+   the theme script runs. --brand is the chrome accent (brand mark, active tab,
+   primary buttons); --agent stays a data-series colour so themes can diverge. */
+:root,[data-theme="light"]{
   --ground:#F3F5FA; --panel:#FFFFFF; --panel-2:#F0F2F8; --panel-3:#E7EAF3; --hair:#DDE2ED;
   --ink:#12182B; --ink-2:#48506B; --ink-3:#78819E; --brand-ink:#FFFFFF;
   --pass:#0E8F5C; --fail:#D1293F; --warn:#B06A00; --run:#2E58D8;
   --agent:#0E8C80; --gold:#9C6B08; --violet:#6C57C4; --pink:#C23E77; --cyan:#0E829C;
+  --brand:#0E8C80;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Consolas,monospace;
+  --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
 }
+[data-theme="dark"]{
+  --ground:#0B111F; --panel:#141C2F; --panel-2:#1A2440; --panel-3:#202C4C; --hair:#263353;
+  --ink:#EAEFF8; --ink-2:#9FAEC9; --ink-3:#63718F; --brand-ink:#06131A;
+  --pass:#2FD39A; --fail:#FF5470; --warn:#F5B23C; --run:#5B8CFF;
+  --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
+  --brand:#00D6BE;
+}
+/* DBS — the logo red carries the chrome. Data-series colours stay navy/teal so
+   red keeps its meaning where it matters (breaches, failures). */
 [data-theme="dbs"]{
-  --ground:#FFFFFF; --panel:#FFFFFF; --panel-2:#F8F3F2; --panel-3:#F1E7E5; --hair:#E6DAD8;
-  --ink:#181818; --ink-2:#57534F; --ink-3:#756F6B; --brand-ink:#FFFFFF;
-  --pass:#1E8A4C; --fail:#B8102C; --warn:#A9660A; --run:#1F4E9C;
-  --agent:#E4002B; --gold:#B8860B; --violet:#6E5CC4; --pink:#C23E77; --cyan:#0E7C86;
+  --dbs-red:#ED1C24; --dbs-red-dark:#B0141B; --dbs-red-tint:#FBE7E8;
+  --ground:#F7F3F3; --panel:#FFFFFF; --panel-2:#FBF1F1; --panel-3:#F4E2E3; --hair:#E8D5D6;
+  --ink:#151112; --ink-2:#4E4749; --ink-3:#7B7274; --brand-ink:#FFFFFF;
+  --pass:#00843D; --fail:#C8102E; --warn:#B45309; --run:#1F3E7A;
+  --agent:#0F7B8A; --gold:#A8730A; --violet:#7A3B8C; --pink:#B03060; --cyan:#1C6FA8;
+  --brand:#ED1C24;
 }
-[data-theme="superman"]{
-  --ground:#0A1554; --panel:#0F1D66; --panel-2:#132373; --panel-3:#182B85; --hair:#2E3E9E;
-  --ink:#FFFFFF; --ink-2:#C9D3FF; --ink-3:#8593D9; --brand-ink:#0A1554;
-  --pass:#2FD37A; --fail:#E62429; --warn:#FFC72C; --run:#3E7BFA;
-  --agent:#FFC72C; --gold:#FFD447; --violet:#9B87D8; --pink:#FF6FA0; --cyan:#4FD8FF;
+/* Blue (formerly "Superman") — a deep-blue dark skin. */
+[data-theme="blue"]{
+  --ground:#08183A; --panel:#0E2350; --panel-2:#142B5F; --panel-3:#1B3672; --hair:#2A4585;
+  --ink:#EAF1FF; --ink-2:#B4C6EC; --ink-3:#7C93C8; --brand-ink:#06122E;
+  --pass:#3FD9A3; --fail:#FF6B80; --warn:#FFC45C; --run:#5B9BFF;
+  --agent:#39C8F0; --gold:#FFD36B; --violet:#A99BEA; --pink:#FF8FC0; --cyan:#5FE0FF;
+  --brand:#39C8F0;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -40,12 +51,12 @@ body{background:
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-:focus-visible{outline:2px solid var(--agent);outline-offset:2px;border-radius:3px}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
 
 .shell{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
 .rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
 .brand{display:flex;align-items:center;gap:10px}
-.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--agent),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:11px;box-shadow:0 4px 14px color-mix(in srgb,var(--agent) 35%,transparent)}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:11px;box-shadow:0 4px 14px color-mix(in srgb,var(--brand) 35%,transparent)}
 .brand h1{font-size:13px;margin:0;font-weight:700;letter-spacing:-.01em}
 .brand p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3)}
 .field{display:block;margin-bottom:10px}
@@ -81,20 +92,22 @@ select{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:v
 .assump-live b{font-size:19px;margin:0 4px}
 #a-delta{font-size:12px;font-weight:700}
 .reset{font-size:11px;color:var(--ink-2);border:1px solid var(--hair);border-radius:6px;padding:6px 11px;background:var(--panel-2)}
-.reset:hover{color:var(--ink);border-color:var(--agent)}
+.reset:hover{color:var(--ink);border-color:var(--brand)}
 .ctrls{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .ctrl-top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:var(--ink-2);margin-bottom:7px}
 .ctrl-top b{font-size:14px;color:var(--ink)}
 .ctrl-sub{font-size:10px;color:var(--ink-3);margin-top:5px}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:var(--hair);outline:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer;box-shadow:0 1px 5px color-mix(in srgb,var(--agent) 50%,transparent)}
-input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--agent);border:2px solid var(--panel);cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--brand);border:2px solid var(--panel);cursor:pointer;box-shadow:0 1px 5px color-mix(in srgb,var(--brand) 50%,transparent)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--brand);border:2px solid var(--panel);cursor:pointer}
 @media (max-width:900px){.ctrls{grid-template-columns:repeat(2,1fr)}}
 
 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin-bottom:20px}
 .kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
 .kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
 .kpi .cap{position:absolute;right:11px;top:12px;font-size:10px;font-weight:700}
+/* keep long KPI labels clear of the absolutely-positioned corner tag */
+.kpi:has(.cap) .eyebrow{padding-right:20px}
 .kpi b{display:block;font-size:21px;font-weight:750;margin-top:6px}
 .kpi small{display:block;color:var(--ink-3);font-size:10px;margin-top:2px}
 .gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
@@ -102,7 +115,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 .tabs{display:flex;gap:3px;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap}
 .tab{padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--ink-3);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--ink-2)}
-.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agent)}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
 
 .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden}
 .panel-hd{padding:13px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -192,8 +205,26 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 .agent-chip .qn{margin-left:auto;font-family:var(--mono);font-size:10px}
 
 /* custom tooltip — anchored so the cursor sits at its bottom-left corner, never covering the text */
-.tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.5);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
+.tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
+
+/* ---- DBS skin: structural red accents, so the theme reads as DBS at a glance ---- */
+[data-theme="dbs"] body{background:
+  linear-gradient(180deg,color-mix(in srgb,var(--dbs-red) 9%,transparent),transparent 220px),
+  var(--ground)}
+[data-theme="dbs"] body::before{content:"";position:fixed;top:0;left:0;right:0;height:4px;
+  background:linear-gradient(90deg,var(--dbs-red),var(--dbs-red-dark));z-index:1000;pointer-events:none}
+[data-theme="dbs"] .rail{background:linear-gradient(180deg,#FFFFFF,var(--panel-2));border-right:2px solid var(--dbs-red)}
+[data-theme="dbs"] .brand-mark{background:var(--dbs-red);box-shadow:0 4px 14px color-mix(in srgb,var(--dbs-red) 40%,transparent)}
+[data-theme="dbs"] .rail .eyebrow{color:var(--dbs-red)}
+[data-theme="dbs"] .tabs{border-bottom:2px solid color-mix(in srgb,var(--dbs-red) 22%,transparent)}
+[data-theme="dbs"] .tab[aria-selected="true"]{color:var(--dbs-red)}
+[data-theme="dbs"] .panel-hd{background:color-mix(in srgb,var(--dbs-red) 4%,transparent);border-bottom-color:color-mix(in srgb,var(--dbs-red) 18%,var(--hair))}
+[data-theme="dbs"] .btn:hover{background:var(--dbs-red-dark)}
+[data-theme="dbs"] .railcard{border-color:color-mix(in srgb,var(--dbs-red) 16%,var(--hair))}
+[data-theme="dbs"] .kpi::after{background:var(--accent,var(--dbs-red))}
+[data-theme="dbs"] .tt{background:#FFFFFF}
+
 
 @media (max-width:1240px){.kpis,.tokrow{grid-template-columns:repeat(3,1fr)}.grid2,.grid2e,.grid3{grid-template-columns:1fr}.fleetgrid{grid-template-columns:repeat(2,1fr)}.swarm{grid-template-columns:1fr}}
 @media (max-width:900px){.shell{grid-template-columns:1fr}.rail{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;border-right:0;border-bottom:1px solid var(--hair)}.mininote{display:none}.field{flex:1 1 150px;margin:0}.kpis,.tokrow{grid-template-columns:repeat(2,1fr)}}
@@ -206,7 +237,7 @@ tbody tr.clickable:hover{background:var(--panel-2)}
       <div><h1>Agent Delivery Ops</h1><p>Portfolio · Savings · Tokens</p></div></div>
     <div>
       <label class="field"><span class="eyebrow">Theme</span>
-        <select id="theme-sel"><option value="dark">Dark</option><option value="light">Light</option><option value="dbs">DBS</option><option value="superman">Superman</option></select></label>
+        <select id="theme-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">DBS</option><option value="blue">Blue</option></select></label>
       <label class="field"><span class="eyebrow">Portfolio</span>
         <select id="s1"><option>GFM — all projects</option><option>FX &amp; Rates</option><option>Credit &amp; Derivs</option></select></label>
       <div class="field" data-tip="The traditional-delivery cost estimate is deliberately cut by this percentage before it's compared to agent spend, so the saving figure stays conservative rather than best-case."><span class="eyebrow">Baseline (conservative)</span>
@@ -300,15 +331,22 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
   document.addEventListener("mouseleave",()=>{if(box)box.classList.remove("show");lastEl=null;});
 })();
 
-/* theme selector — dark/light/dbs/superman, remembered per browser via localStorage */
-const THEME_KEY="dbs-dashboard-theme";
+/* theme selector — light (default) / dark / dbs / blue, remembered per browser.
+   The key is versioned so the new light default reaches browsers that already
+   stored an older choice; "superman" maps to its new name, "blue". */
+const THEME_KEY="dbs-dashboard-theme-v2";
+const THEMES=["light","dark","dbs","blue"], DEFAULT_THEME="light";
+const THEME_ALIAS={superman:"blue"};
+function normTheme(t){t=THEME_ALIAS[t]||t;return THEMES.includes(t)?t:DEFAULT_THEME;}
 function applyTheme(t){
+  t=normTheme(t);
   document.documentElement.setAttribute("data-theme",t);
   try{localStorage.setItem(THEME_KEY,t);}catch(e){}
+  return t;
 }
 (function initTheme(){
-  let t="dark";
-  try{t=localStorage.getItem(THEME_KEY)||"dark";}catch(e){}
+  let t=DEFAULT_THEME;
+  try{t=normTheme(localStorage.getItem(THEME_KEY));}catch(e){}
   applyTheme(t);
   const sel=document.getElementById("theme-sel");
   if(sel){sel.value=t;sel.addEventListener("change",e=>applyTheme(e.target.value));}
