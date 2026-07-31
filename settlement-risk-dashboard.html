@@ -149,14 +149,24 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .table-wrap::-webkit-scrollbar-thumb{background:var(--hair);border-radius:5px}
 .table-wrap::-webkit-scrollbar-thumb:hover{background:var(--ink-3)}
 
-/* Stacked horizontal allocation bar */
-.allocbar{display:flex;height:26px;border-radius:6px;overflow:hidden;background:var(--hair);margin-bottom:8px}
-.allocseg{height:100%;display:flex;align-items:center;justify-content:center;font-size:0.625rem;font-family:var(--mono);font-weight:700;color:var(--brand-ink);overflow:hidden;white-space:nowrap;transition:filter .12s}
-.allocseg:hover{filter:brightness(1.15)}
-.allocseg.allocrem{background:repeating-linear-gradient(45deg,var(--panel-3),var(--panel-3) 5px,var(--panel-2) 5px,var(--panel-2) 10px);color:var(--ink-3)}
-.alloclegend{display:flex;gap:12px;flex-wrap:wrap;font-size:0.6875rem;color:var(--ink-2);margin-bottom:14px}
+/* Stacked horizontal allocation bar.
+   Each segment = one carve-out sized by its share of the limit. Inside it, a solid
+   sub-fill shows how much of THAT carve-out is drawn; the pale remainder is its
+   own unused headroom. So width = allocation, fill = utilization. */
+.allocbar{display:flex;height:34px;border-radius:6px;overflow:hidden;background:var(--hair);margin-bottom:8px}
+.allocseg{position:relative;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.625rem;font-family:var(--mono);font-weight:700;overflow:hidden;white-space:nowrap;transition:filter .12s;background:color-mix(in srgb,var(--seg) 26%,transparent);border-right:1px solid var(--panel)}
+.allocseg:last-child{border-right:0}
+.allocseg:hover{filter:brightness(1.18)}
+.allocfill{position:absolute;left:0;top:0;bottom:0;background:var(--seg);pointer-events:none}
+.allocfill.over{background:repeating-linear-gradient(45deg,var(--fail),var(--fail) 4px,color-mix(in srgb,var(--fail) 60%,#000) 4px,color-mix(in srgb,var(--fail) 60%,#000) 8px)}
+.alloctxt{position:relative;z-index:1;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);display:flex;flex-direction:column;line-height:1.15;align-items:center}
+.alloctxt small{font-size:0.9em;opacity:.85;font-weight:600}
+.allocseg.allocrem{background:repeating-linear-gradient(45deg,var(--panel-3),var(--panel-3) 5px,var(--panel-2) 5px,var(--panel-2) 10px)}
+.allocseg.allocrem .alloctxt{color:var(--ink-3);text-shadow:none}
+.alloclegend{display:flex;gap:14px;flex-wrap:wrap;font-size:0.6875rem;color:var(--ink-2);margin-bottom:14px}
 .alloclegend i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
-.allocrow-lbl{font-size:0.65625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between}
+.alloclegend .lgd-split{display:inline-block;width:16px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle;background:linear-gradient(90deg,var(--ink-2) 0 55%,color-mix(in srgb,var(--ink-2) 26%,transparent) 55% 100%)}
+.allocrow-lbl{font-size:0.65625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
 /* Icon remove button */
 .xbtn{width:22px;height:22px;border-radius:5px;border:1px solid var(--hair);color:var(--ink-3);font-size:0.875rem;line-height:1;display:inline-flex;align-items:center;justify-content:center}
@@ -181,7 +191,13 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 
 .formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
 .formfield{display:block}
-.formfield span{display:block;font-size:0.65625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:600}
+.formfield>span{display:block;font-size:0.65625rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px;font-weight:600;min-height:1.05rem}
+/* Label row: title left, hint right, always on ONE line so sibling fields in the
+   grid keep their inputs on the same baseline. */
+.formfield>span.lblrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.formfield>span.lblrow>.lbl-hint{text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink-3);white-space:nowrap}
+.formgrid{align-items:start}
+.formhint{font-size:0.65625rem;color:var(--ink-3);margin-top:6px;min-height:1rem}
 .formfield select,.formfield input[type=text],.formfield input[type=number],.formfield input[type=date],.formfield textarea{width:100%;background:var(--panel-2);border:1px solid var(--hair);color:var(--ink);padding:8px 10px;border-radius:7px;font-size:0.8125rem}
 .formfield textarea{font-family:var(--sans);resize:vertical;min-height:64px}
 .radiorow{display:flex;gap:14px;flex-wrap:wrap}
@@ -645,11 +661,20 @@ function seedCarveouts(){
       const n=Math.min(opts.length,scope==="country"?randInt(1,3):randInt(1,3));
       const picks=shuffled(opts).slice(0,n);
       const shares=allocShares(n,rand(0.55,0.92)); // never fully allocated — leaves visible headroom
-      picks.forEach((label,i)=>{
-        const amountM=Math.max(1,Math.round(c.limitM*shares[i]));
+      const entries=picks.map((label,i)=>({label,amountM:Math.max(1,Math.round(c.limitM*shares[i]))}));
+      /* Each carve-out draws at its own rate rather than all inheriting the customer's
+         blended rate — otherwise every segment would fill identically and the bar would
+         show nothing useful. Biases are normalised so the weighted average still ties
+         back to the customer's overall utilization. */
+      const biases=entries.map(()=>rand(0.40,1.55));
+      const sumA=entries.reduce((a,e)=>a+e.amountM,0);
+      const sumAB=entries.reduce((a,e,i)=>a+e.amountM*biases[i],0);
+      const k=sumAB?sumA/sumAB:1;
+      entries.forEach((e,i)=>{
         const thMode=rng()<0.75?"pct":"amt";
-        out.push({id:"CO-"+String(COID++).padStart(4,"0"),customerId:c.id,scope,label,amountM,
-          thMode, thValue: thMode==="pct" ? randInt(70,95) : Math.max(1,Math.round(amountM*rand(0.7,0.92))),
+        out.push({id:"CO-"+String(COID++).padStart(4,"0"),customerId:c.id,scope,label:e.label,amountM:e.amountM,
+          drawBias:+(biases[i]*k).toFixed(3),
+          thMode, thValue: thMode==="pct" ? randInt(70,95) : Math.max(1,Math.round(e.amountM*rand(0.7,0.92))),
           created:fmtDate(dateAt(randInt(20,300)))});
       });
     });
@@ -660,11 +685,12 @@ const SEED_CARVEOUTS=seedCarveouts();
 let CARVEOUTS=loadLS("sr-dash-carveouts-v2",SEED_CARVEOUTS);
 let REQUESTS=loadLS("sr-dash-requests",[]);
 
-/* Drawn against a carve-out is modelled as the customer's current utilization
-   rate applied to that carve-out's allocated amount. */
+/* Drawn against a carve-out = the customer's current utilization rate, scaled by
+   that carve-out's own draw bias, applied to its allocated amount and capped at it. */
 function carveDrawn(co){
   const c=CUST_BY_ID[co.customerId]; if(!c) return 0;
-  return Math.min(1,custUtilCur(c))*co.amountM;
+  const rate=Math.min(1,custUtilCur(c))*(co.drawBias||1);
+  return Math.min(co.amountM, co.amountM*rate);
 }
 function carveUtilPct(co){ return co.amountM ? carveDrawn(co)/co.amountM : 0; }
 function carveThresholdBreached(co){
@@ -1197,16 +1223,27 @@ function allocBarRow(c,scope){
   const meta=CARVE_SCOPES[scope];
   const list=carveoutsFor(c.id).filter(co=>co.scope===scope).sort((a,b)=>b.amountM-a.amountM);
   const allocated=list.reduce((a,co)=>a+co.amountM,0);
+  const drawnTotal=list.reduce((a,co)=>a+carveDrawn(co),0);
   const rem=Math.max(0,c.limitM-allocated);
   const pct=v=>v/c.limitM*100;
   const segs=list.map((co,i)=>{
     const w=pct(co.amountM);
-    return `<div class="allocseg" style="width:${w}%;background:${ALLOC_PALETTE[i%ALLOC_PALETTE.length]}" data-tip="${esc(co.label)} — ${fmtM(co.amountM)} (${w.toFixed(0)}% of limit), ${fmtM(carveDrawn(co))} drawn">${w>=9?esc(co.label):""}</div>`;
+    const col=ALLOC_PALETTE[i%ALLOC_PALETTE.length];
+    const up=carveUtilPct(co), drawn=carveDrawn(co);
+    const over=up>=0.999;
+    const tip=`${co.label} — carve-out ${fmtM(co.amountM)} (${w.toFixed(0)}% of limit) · drawn ${fmtM(drawn)} (${fmtPct(up)}) · headroom ${fmtM(Math.max(0,co.amountM-drawn))}`;
+    return `<div class="allocseg" style="width:${w}%;--seg:${col}" data-tip="${esc(tip)}">
+      <i class="allocfill${over?" over":""}" style="width:${Math.min(100,up*100).toFixed(1)}%"></i>
+      <span class="alloctxt">${w>=7?esc(co.label):""}${w>=11?`<small>${(up*100).toFixed(0)}% drawn</small>`:""}</span>
+    </div>`;
   }).join("");
-  const remSeg = rem>0 ? `<div class="allocseg allocrem" style="width:${pct(rem)}%" data-tip="Unallocated headroom — ${fmtM(rem)} of the ${fmtM(c.limitM)} limit is not carved out to any ${meta.label.toLowerCase()}">${pct(rem)>=9?"Unallocated":""}</div>` : "";
-  const legend=list.map((co,i)=>`<span><i style="background:${ALLOC_PALETTE[i%ALLOC_PALETTE.length]}"></i>${esc(co.label)} ${fmtM(co.amountM)}</span>`).join("")
+  const remSeg = rem>0 ? `<div class="allocseg allocrem" style="width:${pct(rem)}%" data-tip="Unallocated headroom — ${fmtM(rem)} of the ${fmtM(c.limitM)} limit is not carved out to any ${meta.label.toLowerCase()}"><span class="alloctxt">${pct(rem)>=9?"Unallocated":""}</span></div>` : "";
+  const legend=list.map((co,i)=>{
+    const up=carveUtilPct(co);
+    return `<span><i style="background:${ALLOC_PALETTE[i%ALLOC_PALETTE.length]}"></i>${esc(co.label)} ${fmtM(co.amountM)} · <b class="${up>=1?'failc':up>=0.75?'warnc':'passc'}">${fmtPct(up)} drawn</b></span>`;
+  }).join("")
     +(rem>0?`<span><i style="background:var(--panel-3)"></i>Unallocated ${fmtM(rem)}</span>`:"");
-  return `<div class="allocrow-lbl"><span>${meta.label}</span><span class="num">${fmtM(allocated)} of ${fmtM(c.limitM)} · ${(allocated/c.limitM*100).toFixed(0)}% allocated</span></div>
+  return `<div class="allocrow-lbl"><span>${meta.label}</span><span class="num">${fmtM(allocated)} of ${fmtM(c.limitM)} allocated · ${fmtM(drawnTotal)} drawn${allocated?" ("+(drawnTotal/allocated*100).toFixed(0)+"% of allocated)":""}</span></div>
     <div class="allocbar">${segs}${remSeg}</div>
     <div class="alloclegend">${legend||'<span class="muted">Nothing carved out yet.</span>'}</div>`;
 }
@@ -1259,8 +1296,9 @@ function paneCarveouts(){
     const isUsed=used.has(o);
     return `<option value="${esc(o)}"${isUsed?" disabled":""}>${esc(o)}${isUsed?"  — already carved out":""}</option>`;
   }).join("");
-  const allocPanel=`<div class="panel" style="margin-bottom:14px"><div class="panel-hd" data-tip="How ${esc(c.name)}'s SR limit is currently carved up. Each bar is the full ${fmtM(c.limitM)} limit; the hatched segment is what remains unallocated."><h3>Carve-out allocation — ${esc(c.name)}</h3><span class="slo">share of the ${fmtM(c.limitM)} SR limit</span></div>
-    <div class="panel-body">${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}</div></div>`;
+  const allocPanel=`<div class="panel" style="margin-bottom:14px"><div class="panel-hd" data-tip="How ${esc(c.name)}'s SR limit is carved up. Segment width = how much of the limit that carve-out holds. The solid portion inside each segment = how much of that carve-out is actually drawn. The hatched tail is limit not carved out to anything."><h3>Carve-out allocation &amp; utilization — ${esc(c.name)}</h3><span class="slo">width = allocation · solid fill = drawn</span></div>
+    <div class="panel-body">${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}
+      <div class="alloclegend" style="margin-bottom:0;border-top:1px solid var(--hair);padding-top:11px"><span><span class="lgd-split"></span>Solid = drawn · pale = unused headroom within that carve-out</span><span><i style="background:var(--fail)"></i>Fully drawn / at cap</span></div></div></div>`;
   return picker+allocPanel+`<div class="panel"><div class="panel-hd"><h3>Add carve-out — ${esc(c.name)}</h3><span class="slo">allocate part of the ${fmtM(c.limitM)} limit to one label, with a threshold alert</span></div>
     <div class="panel-body">
       <form id="carveout-form">
@@ -1270,13 +1308,13 @@ function paneCarveouts(){
             <label class="radiopill"><input type="radio" name="co-scope" value="limitType" ${scope==="limitType"?"checked":""}> Limit type</label>
           </div></label>
         <div class="formgrid mt14">
-          <label class="formfield"><span>${meta.label} <span class="muted" style="text-transform:none;letter-spacing:0">(${avail.length} of ${meta.options.length} available)</span></span><select id="co-label" required>${labelOpts}</select></label>
-          <label class="formfield"><span>Carve-out amount</span>
+          <label class="formfield"><span class="lblrow">${meta.label}<span class="lbl-hint">${avail.length} of ${meta.options.length} available</span></span><select id="co-label" required>${labelOpts}</select></label>
+          <label class="formfield"><span class="lblrow">Carve-out amount<span class="lbl-hint">of ${fmtM(c.limitM)} limit</span></span>
             <div style="display:flex;gap:8px">
               <select id="co-amtmode" style="max-width:130px"><option value="amt">S$M</option><option value="pct">% of limit</option></select>
               <input type="number" id="co-amount" min="1" step="1" placeholder="e.g. 250" required style="flex:1">
             </div>
-            <div class="ctrl-sub" style="margin-top:6px;color:var(--ink-3);font-size:0.65625rem">${fmtM(allocated)} of ${fmtM(c.limitM)} already allocated by ${meta.label.toLowerCase()}</div></label>
+            <div class="formhint">${fmtM(allocated)} of ${fmtM(c.limitM)} already allocated by ${meta.label.toLowerCase()}</div></label>
         </div>
         <div class="formgrid mt14">
           <label class="formfield"><span>Threshold alert</span>
@@ -1332,6 +1370,37 @@ function paneRequests(){
 ============================================================ */
 function openDrawer(eye,title,body){$("#d-eye").textContent=eye;$("#d-title").textContent=title;$("#d-body").innerHTML=body;$("#drawer").classList.add("open");$("#scrim").classList.add("open");$("#d-close").focus();}
 function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
+/* Forward-looking read on when settlement-risk capacity frees up for this customer:
+   projects the trailing trend to the point utilization falls back under a usable
+   threshold, and prices the headroom that releases. */
+function srFreeUpOutlook(c,hist,fcast,slope,cur){
+  const limit=c.limitM;
+  const money=u=>fmtM(Math.max(0,limit-Math.min(1,u)*limit));
+  const in30=fcast[fcast.length-1]||0;
+  const daysTo=target=>{
+    if(cur<=target) return 0;
+    if(slope>=-1e-6) return null;              // flat or rising — never reaches it
+    return Math.ceil((cur-target)/Math.abs(slope));
+  };
+  if(cur>1){
+    const d=daysTo(1);
+    return d===null
+      ? `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)} and not trending down — no capacity frees up on the current trend. Needs a limit increase or exposure reduction.`
+      : `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)}. On the current trend it returns under 100% in about <b>${d} day${d===1?"":"s"}</b>; first usable headroom appears then.`;
+  }
+  if(slope<-1e-6){
+    const d90=daysTo(0.9), d75=daysTo(0.75);
+    const parts=[];
+    if(cur>0.9 && d90!==null) parts.push(`drops below 90% in ~<b>${d90}d</b>`);
+    if(cur>0.75 && d75!==null) parts.push(`below 75% in ~<b>${d75}d</b>`);
+    return `Utilization is <b class="passc">easing</b>. Projected <b>${fmtPct(in30)}</b> in 30 days, releasing <b class="passc">${money(in30)}</b> of headroom${parts.length?` — ${parts.join(", ")}`:""}.`;
+  }
+  if(slope>1e-6){
+    const dTo100=Math.ceil((1-cur)/slope);
+    return `Utilization is <b class="warnc">building</b>. Projected <b>${fmtPct(in30)}</b> in 30 days${dTo100<=365?`, reaching 100% in ~<b>${dTo100} days</b>`:""} — headroom shrinks to <b>${money(in30)}</b>. No capacity frees up on this trend.`;
+  }
+  return `Utilization is <b>flat</b> at ~${fmtPct(cur)}. Headroom holds around <b class="passc">${money(cur)}</b>; no material capacity change expected in the next 30 days.`;
+}
 function custDrawer(c){
   if(!c.hasLimit){
     openDrawer("Customer",c.name,`<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">Status <b>No SR limit</b></span></div><div class="block">This customer does not currently hold a Settlement Risk limit. Use the Limit Increase Requests tab to initiate an onboarding request.</div>`);
@@ -1340,13 +1409,30 @@ function custDrawer(c){
   const s=custStats(c);
   const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,8);
   const typeRows=LIMIT_TYPES.map(t=>`<div class="rrow"><span>${t}</span><b>${fmtM(custLimitTypeM(c,t))} (${(c.typeAlloc[t]*100).toFixed(0)}%)</b></div>`).join("");
+  const days=state.dateRangeDays;
+  const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
+  const recent=hist.slice(-14);
+  const slope=recent.length>1?(recent[recent.length-1]-recent[0])/(recent.length-1):0;
+  const fcast=[]; let lv=hist[hist.length-1]||0;
+  for(let i=1;i<=30;i++){ lv=Math.max(0,Math.min(1.35,lv+slope)); fcast.push(lv); }
+  const cur=custUtilCur(c);
+  const freed=srFreeUpOutlook(c,hist,fcast,slope,cur);
+  const hasCarve=carveoutsFor(c.id).length>0;
   openDrawer("Customer"+(c.rank?" · global rank #"+c.rank:""),c.name,
     `<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="tag ${custStatusTag(c)[1]}" style="align-self:center">${custStatusTag(c)[0]}</span></div>
-     <div class="block"><div class="lbl">Utilization — last ${state.dateRangeDays} days</div>
-       <div style="display:flex;gap:16px;align-items:center">${spark(c.series.slice(-state.dateRangeDays),200,44)}<div style="font-size:0.78125rem;line-height:1.9"><div>Avg <b class="num">${fmtPct(s.avg)}</b></div><div>Max <b class="num">${fmtPct(s.max)}</b></div><div>Min <b class="num">${fmtPct(s.min)}</b></div></div></div></div>
+     <div class="block"><div class="lbl">Utilization &amp; capacity outlook — last ${days} days + 30d projection</div>
+       <div class="chart-well" style="height:190px;margin:2px 0 10px">${trendChart(hist,fcast,days)}</div>
+       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+         <span class="kv">Avg <b>${fmtPct(s.avg)}</b></span><span class="kv">Max <b>${fmtPct(s.max)}</b></span><span class="kv">Min <b>${fmtPct(s.min)}</b></span>
+         <span class="kv">Now <b class="${cur>1?'failc':cur>=0.9?'warnc':'passc'}">${fmtPct(cur)}</b></span>
+         <span class="kv">Headroom <b class="${cur>=1?'failc':'passc'}">${fmtM(Math.max(0,c.limitM-Math.min(1,cur)*c.limitM))}</b></span>
+       </div>
+       <div class="foot" style="border:0;padding:0;color:var(--ink-3)">${freed}</div></div>
+     ${hasCarve?`<div class="block"><div class="lbl">Carve-out allocation &amp; utilization</div>${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}
+       <div class="alloclegend" style="margin-bottom:0"><span><span class="lgd-split"></span>Solid = drawn · pale = unused headroom</span></div></div>`:""}
      <div class="block"><div class="lbl">Limit type breakdown</div>${typeRows}</div>
      <div class="block"><div class="lbl">Recent transactions</div>${recentTxns.length?recentTxns.map(t=>`<div class="rrow"><span>${fmtDate(t.date)} · ${t.assetClass} · ${t.product}</span><b>${fmtM(t.srConsumedM)} SR</b></div>`).join(""):'<div class="muted" style="font-size:0.78125rem">No recent transactions.</div>'}</div>
-     <div class="mt14"><button type="button" class="btn-ghost" id="drawer-viewcust" data-viewcust="${c.id}">Open in Overview customer view →</button></div>`);
+     <div class="mt14" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn-ghost" id="drawer-viewcust" data-viewcust="${c.id}">Open in Overview customer view →</button><button type="button" class="btn-ghost" data-carvecust="${c.id}">Manage carve-outs →</button></div>`);
 }
 
 /* ============================================================
