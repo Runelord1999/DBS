@@ -114,6 +114,14 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
    with the SVG scaled to fit and centred rather than letterboxed at the top. */
 .chart-well{display:flex;align-items:center;justify-content:center;height:252px}
 .chart-well svg{width:100%;height:100%;display:block}
+.chart-well.tall{height:330px}
+.trendkey{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:2px 16px 12px;font-size:0.65625rem;color:var(--ink-2)}
+.trendkey span{display:inline-flex;align-items:center;gap:6px}
+.trendkey .lk{display:inline-block;width:16px;height:3px;border-radius:2px;flex:none}
+.trendkey .lk.dash{height:0;border-top:3px dashed currentColor;background:none!important;color:inherit}
+.block .trendkey{padding:2px 0 8px;gap:12px}
+.machk{display:inline-flex;align-items:center;gap:6px;font-size:0.65625rem;color:var(--ink-2);font-weight:600;cursor:pointer;white-space:nowrap}
+.machk input{accent-color:var(--violet);width:13px;height:13px;cursor:pointer}
 .chart-well.donut-well{gap:22px;flex-wrap:wrap}
 .chart-well.donut-well svg.donut{width:auto;height:auto;flex:0 0 auto}
 /* Evenly distributed stat lists so 5-row and 10-row panels still end flush. */
@@ -315,6 +323,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
         <option value="90" selected>Last 90 days</option>
         <option value="180">Last 180 days</option>
         <option value="365">Last 365 days</option>
+        <option value="548">Last 18 months</option>
       </select></label>
 
     <div class="railcard" id="poolcard">
@@ -459,15 +468,33 @@ const PRODUCTS={
   "Equities":["Cash Equity","Equity Swap","Equity Option"],
   "Fixed Income":["Govt Bond","Corp Bond","Repo","Bond Forward"],
 };
-/* Typical settlement lag in days per product. Settlement risk is only live until a
-   trade settles, so these drive the forward run-off of existing exposure. */
-const SETTLE_DAYS={
-  "FX Spot":2,"FX Forward":32,"FX Swap":32,"NDF":30,
-  "FX Vanilla Call":45,"FX Vanilla Put":45,"FX Barrier Option":60,
-  "Cash Equity":2,"Equity Swap":45,"Equity Option":45,
-  "Govt Bond":2,"Corp Bond":2,"Repo":14,"Bond Forward":30,
+/* Settlement tenor in days per product, as a weighted distribution rather than a
+   single lag: cash products settle in T+2, but forwards, swaps and options run
+   from a month out to a year. Settlement risk is live until a trade settles, so
+   this tenor mix is what drives the forward run-off of existing exposure — and
+   it is why the 12-month forward view decays over months, not days. */
+const SETTLE_TENORS={
+  "FX Spot":[[2,100]],
+  "FX Forward":[[7,10],[32,32],[93,30],[186,20],[372,8]],
+  "FX Swap":[[32,28],[93,32],[186,26],[372,14]],
+  "NDF":[[30,40],[93,34],[186,20],[372,6]],
+  "FX Vanilla Call":[[32,26],[93,34],[186,28],[372,12]],
+  "FX Vanilla Put":[[32,26],[93,34],[186,28],[372,12]],
+  "FX Barrier Option":[[93,32],[186,38],[372,30]],
+  "Cash Equity":[[2,100]],
+  "Equity Swap":[[93,28],[186,37],[372,35]],
+  "Equity Option":[[32,22],[93,34],[186,32],[372,12]],
+  "Govt Bond":[[2,100]],
+  "Corp Bond":[[2,100]],
+  "Repo":[[7,32],[30,36],[93,26],[186,6]],
+  "Bond Forward":[[30,34],[93,36],[186,24],[372,6]],
 };
-const DEFAULT_SETTLE_MIX=[[2,55],[14,20],[30,18],[60,7]]; // fallback profile when a customer has no trades
+/* Typical (modal) lag per product, kept for labelling and as a fallback. */
+const SETTLE_DAYS={};
+Object.entries(SETTLE_TENORS).forEach(([p,mix])=>{
+  SETTLE_DAYS[p]=mix.reduce((a,b)=>b[1]>a[1]?b:a)[0];
+});
+const DEFAULT_SETTLE_MIX=[[2,42],[30,22],[93,20],[186,12],[372,4]]; // fallback profile when a customer has no trades
 const CLASS_TYPE_WEIGHTS={
   "FX":[["eFX",0.85],["FX-DERI",0.15]],
   "FX Options":[["FX-DERI",1.0]],
@@ -483,7 +510,9 @@ const rng=mulberry32(20260730);
 const rand=(min,max)=>min+rng()*(max-min);
 const randInt=(min,max)=>Math.floor(rand(min,max+1));
 const choice=arr=>arr[Math.floor(rng()*arr.length)];
-const weightedChoice=pairs=>{const r=rng();let acc=0;for(const [v,w] of pairs){acc+=w;if(r<=acc)return v;}return pairs[pairs.length-1][0];};
+// Weights need not sum to 1 — they are normalised here, so tables can be written
+// as readable percentages without silently biasing towards the first entry.
+const weightedChoice=pairs=>{const tot=pairs.reduce((a,p)=>a+p[1],0)||1;const r=rng()*tot;let acc=0;for(const [v,w] of pairs){acc+=w;if(r<=acc)return v;}return pairs[pairs.length-1][0];};
 
 /* ============================================================
    Formatters
@@ -496,6 +525,8 @@ const fmtPct=(v,d=1)=>(v*100).toFixed(d)+"%";
 const fmtDate=d=>d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 const dayMs=86400000;
 const TODAY=new Date(2026,6,30); // fixed "today" so the mock dataset reads consistently
+const HIST_DAYS=548;  // 18 months of daily utilization history
+const FWD_DAYS=365;   // 12 months of forward settlement run-off
 function dateAt(offsetFromEnd){ // offsetFromEnd: 0 = most recent day
   return new Date(TODAY.getTime()-offsetFromEnd*dayMs);
 }
@@ -558,21 +589,96 @@ function genTypeAlloc(segment){
   LIMIT_TYPES.forEach((t,i)=>alloc[t]=raw[i]/sum);
   return alloc;
 }
-function genSeries(profile){
-  const n=365; const out=new Array(n);
-  const base = profile==="breach" ? rand(0.70,0.85)
-    : profile==="hot" ? rand(0.65,0.82)
-    : profile==="dormant" ? rand(0.25,0.50)
-    : profile==="cold" ? rand(0.05,0.18)
-    : rand(0.28,0.58);
-  let level=base;
-  for(let i=0;i<n;i++){
-    level += rand(-0.018,0.018) + (base-level)*0.06; // mean-reverting random walk — oscillates around its baseline instead of drifting freely
-    level = Math.max(0.01,Math.min(1.32,level));
-    out[i]=level;
+/* Utilization history is simulated as an actual book of tickets rather than a
+   smoothed random walk: every booking steps the line UP by its SR consumption
+   and every maturity steps it back DOWN. That is what makes the series spiky —
+   the shape is driven by arrivals and run-off, exactly like the live number. */
+function poissonRand(lam){
+  if(lam<=0) return 0;
+  const L=Math.exp(-lam); let k=0,p=1;
+  do{k++;p*=rng();}while(p>L);
+  return k-1;
+}
+const SERIES_TENORS=[[2,34],[5,10],[14,14],[32,16],[93,14],[186,8],[372,4]];
+const SERIES_WARM=200;                   // warm-up so day 0 already has a live book
+/* One market-wide activity driver shared by every customer. Without it each book
+   is independent and the portfolio line averages flat — in reality month-end and
+   quarter-end rolls, and volatility bursts, hit every desk on the same day, so
+   the aggregate swings too. This is what makes the portfolio trend move. */
+const MARKET_DRIVE=(function(){
+  const N=HIST_DAYS+SERIES_WARM, out=new Array(N);
+  let regime=1, shock=0;
+  for(let d=0; d<N; d++){
+    regime += (1-regime)*0.012 + rand(-0.105,0.105);   // slow multi-week activity cycle
+    regime = Math.max(0.30,Math.min(2.70,regime));
+    if(rng()<0.022) shock=rand(1.6,5.0);               // vol burst — hedging across the whole book
+    let f=regime*(1+shock);
+    if(d%30<2) f*=1.85;                                // month-end roll
+    if(d%91<3) f*=1.5;                                 // quarter-end
+    shock*=0.70;
+    out[d]=f;
   }
-  if(profile==="breach"){ const len=randInt(6,16); for(let i=n-len;i<n;i++) out[i]=rand(1.03,1.34); }
-  if(profile==="dormant"){ const len=randInt(60,250); for(let i=n-len;i<n;i++) out[i]=0; }
+  return out;
+})();
+function genSeries(profile){
+  const n=HIST_DAYS, warm=SERIES_WARM;
+  const N=n+warm, tail=400;              // tail absorbs maturities past the window
+  // Targets are the 18-month AVERAGE, not the peak — the swing around them is wide,
+  // so they sit lower than the headline utilization a name actually reaches.
+  const target = profile==="breach" ? rand(0.58,0.72)
+    : profile==="hot" ? rand(0.50,0.64)
+    : profile==="dormant" ? rand(0.20,0.42)
+    : profile==="cold" ? rand(0.04,0.15)
+    : rand(0.22,0.48);
+  const lam=rand(0.7,2.6);               // tickets booked per day
+  const shape=rand(1.6,3.2);             // higher -> fatter tail of large tickets
+  const diff=new Array(N+tail).fill(0);  // difference array: +size at booking, -size at maturity
+  for(let d=0; d<N; d++){
+    const weekday=(d%7)<5;
+    const own=rng()<0.012 ? 4 : 1;       // this customer's own block trade / hedge programme
+    let k=poissonRand(lam*MARKET_DRIVE[d]*(weekday?1:0.22)*own);
+    for(let j=0;j<k;j++){
+      const size=Math.pow(rng(),shape)*100+2;
+      const ten=weightedChoice(SERIES_TENORS);
+      diff[d]+=size;
+      diff[Math.min(diff.length-1,d+ten)]-=size;
+    }
+  }
+  let run=0; const raw=new Array(N);
+  for(let d=0; d<N; d++){ run+=diff[d]; raw[d]=Math.max(0,run); }
+  const hist=raw.slice(warm);
+  const mean=hist.reduce((a,b)=>a+b,0)/hist.length || 1;
+  // Scale the book so its average utilization lands on the profile's target,
+  // then hold non-breach names just under their limit — breaches stay a
+  // property of the profile, not an accident of a volatile draw.
+  const ceil = profile==="breach" ? 1.38 : 0.985;
+  const out=hist.map(v=>Math.max(0,Math.min(ceil, v/mean*target)));
+  /* Ramp the recent tail towards where this profile is meant to sit TODAY, so the
+     risk bands are populated by design rather than by luck of the draw — but scale
+     the existing path rather than overwriting it, so the tail keeps its shape. */
+  const rampTo=(aim,cap)=>{
+    const len=randInt(25,70), from=out[n-1];
+    if(!(from>0.02)) return;
+    const k=aim/from;
+    for(let i=n-len;i<n;i++){
+      const w=(i-(n-len))/(len-1);
+      out[i]=Math.max(0,Math.min(cap,out[i]*(1+(k-1)*w)));
+    }
+  };
+  if(profile==="breach") rampTo(rand(1.04,1.30),1.38);
+  if(profile==="hot")    rampTo(rand(0.86,0.975),0.985);
+  if(profile==="dormant"){ const len=randInt(90,380); for(let i=n-len;i<n;i++) out[i]=0; }
+  return out;
+}
+/* Trailing simple moving average; the first window-1 points have no full window. */
+function movingAvg(series,window){
+  const out=new Array(series.length).fill(null);
+  let sum=0;
+  for(let i=0;i<series.length;i++){
+    sum+=series[i];
+    if(i>=window) sum-=series[i-window];
+    if(i>=window-1) out[i]=sum/window;
+  }
   return out;
 }
 function seriesStats(series,startOffset,endOffset){ // offsets from end, 0..364; window = [n-1-startOffset .. n-1-endOffset]
@@ -635,10 +741,10 @@ const TXNS=[];
     return pool[pool.length-1];
   }
   let tid=10000;
-  // Trades span the full 365-day history so the sidebar date-range selector has
+  // Trades span the full 18-month history so the sidebar date-range selector has
   // something to filter — previously they were bunched into the last 30 days only,
   // which is why the blotter said "30d" while the range selector said 90.
-  for(let i=0;i<1500;i++){
+  for(let i=0;i<2600;i++){
     const c=pickCustomer();
     const assetClass=choice(ASSET_CLASSES);
     const product=choice(PRODUCTS[assetClass]);
@@ -646,9 +752,10 @@ const TXNS=[];
     const notional=Math.round(rand(2,450)*(assetClass==="Fixed Income"?2:1));
     const srPct=rand(0.02,0.09);
     const srConsumed=+(notional*srPct).toFixed(1);
-    const dayOffset=randInt(0,364);
-    // Maturity = trade date + the product's settlement lag. SR is live until then.
-    const lag=SETTLE_DAYS[product]||5;
+    const dayOffset=randInt(0,HIST_DAYS-1);
+    // Maturity = trade date + a tenor drawn from the product's settlement mix.
+    // SR is live until then, so long-dated tenors keep exposure on the book for months.
+    const lag=weightedChoice(SETTLE_TENORS[product]||[[SETTLE_DAYS[product]||5,1]]);
     const tradeDate=dateAt(dayOffset);
     const maturity=new Date(tradeDate.getTime()+lag*dayMs);
     const daysToMaturity=Math.ceil((maturity.getTime()-TODAY.getTime())/dayMs);
@@ -673,10 +780,26 @@ function txnsInRange(){
    Weighted by the SR each product actually consumes.
 ============================================================ */
 function settlementMix(txns){
-  const b=new Map(); let total=0;
-  txns.forEach(t=>{ const lag=SETTLE_DAYS[t.product]||5; b.set(lag,(b.get(lag)||0)+t.srConsumedM); total+=t.srConsumedM; });
-  if(!total){ DEFAULT_SETTLE_MIX.forEach(([lag,w])=>b.set(lag,w)); total=DEFAULT_SETTLE_MIX.reduce((a,x)=>a+x[1],0); }
-  return {b,total};
+  // Bucket by REMAINING life rather than original tenor — a 1-year forward booked
+  // 11 months ago runs off next month, not next year.
+  const own=new Map(); let ownTot=0, cnt=0;
+  txns.forEach(t=>{
+    const remain=Math.max(0,t.daysToMaturity!=null?t.daysToMaturity:(t.settleLag||5));
+    if(remain<=0) return;
+    own.set(remain,(own.get(remain)||0)+t.srConsumedM); ownTot+=t.srConsumedM; cnt++;
+  });
+  /* The blotter is a SAMPLE of the book, not the whole of it. With only a handful of
+     live trades the remaining-life mix is lumpy and the projection would fall off a
+     cliff, so blend in the house tenor profile — the fewer live trades observed for a
+     name, the more the house profile carries the shape. */
+  const wHouse = ownTot<=0 ? 1 : Math.min(1,Math.max(0,(30-cnt)/30));
+  const houseTot=DEFAULT_SETTLE_MIX.reduce((a,x)=>a+x[1],0);
+  const b=new Map();
+  const blend=(pairs,tot,scale)=>{ if(tot<=0||scale<=0) return; pairs.forEach(([k,v])=>b.set(k,(b.get(k)||0)+v/tot*scale)); };
+  blend([...own.entries()],ownTot,1-wHouse);
+  blend(DEFAULT_SETTLE_MIX,houseTot,wHouse);
+  let total=0; b.forEach(v=>total+=v);
+  return {b,total:total||1};
 }
 /* Fraction of today's exposure still outstanding on each future day. Each tenor
    bucket matures over a short window around its lag rather than a hard cliff. */
@@ -685,7 +808,7 @@ function runoffFractions(mix,horizon){
   for(let d=1;d<=horizon;d++){
     let remain=0;
     mix.b.forEach((amt,lag)=>{
-      const s=lag*0.85, e=Math.max(lag*1.15,lag+1);
+      const s=lag*0.55, e=Math.max(lag*1.55,lag+3);   // maturities spread around the tenor, not a cliff
       const f = d<=s ? 1 : d>=e ? 0 : (e-d)/(e-s);
       remain+=amt*f;
     });
@@ -707,7 +830,7 @@ function daysUntilBelow(proj,target){
 ============================================================ */
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
-  carveCustomer:null, carveScope:"country"};
+  carveCustomer:null, carveScope:"country", showMA:true};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -875,41 +998,80 @@ function groupedBar(cats){ // cats: [{label,a,b}] a=with,b=without
 /* ============================================================
    Trend line chart with forward-looking forecast — month labels + week ticks on X-axis
 ============================================================ */
-function trendChart(hist,fcast,days,w=560,h=202){
-  const pad=32, botPad=30, topPad=14;
+/* Trend + forward run-off.
+   X-axis is calendar-driven: a minor tick on every Monday (one tick = one week),
+   a taller tick + gridline on the 1st of each month, month names below that and a
+   year band under the first month of each year. Month labels thin out automatically
+   when the horizon is long enough that they would collide. */
+function trendChart(hist,fcast,days,opts={}){
+  const w=opts.w||560, h=opts.h||202;
+  const pad=opts.pad||36, botPad=opts.botPad||44, topPad=16;
+  const lineW=opts.lineW||2;
   const all=hist.concat(fcast);
   const max=Math.max(1.12,...all)*1.04;
   const n=hist.length, m=fcast.length, total=n+m;
-  const X=i=>pad+i/(total-1)*(w-pad-10);
+  const X=i=>pad+i/(total-1)*(w-pad-12);
   const baseline=h-botPad;
   const Y=v=>baseline-(v/max)*(baseline-topPad);
   const histPts=hist.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
   const fcastPts=[X(n-1).toFixed(1)+","+Y(hist[n-1]).toFixed(1)].concat(fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v).toFixed(1))).join(" ");
   let grid="";
-  for(let g=0.25;g<=0.75;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-10}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
+  for(let g=0.25;g<=0.75;g+=0.25){grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-12}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="0" y="${(Y(g)+3).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${Math.round(g*100)}%</text>`;}
   // 100% is the limit, not just another gridline — call it out explicitly.
   const y100=Y(1).toFixed(1);
-  grid+=`<line x1="${pad}" y1="${y100}" x2="${w-10}" y2="${y100}" stroke="var(--fail)" stroke-width="1" stroke-dasharray="4 3" opacity=".75"/><text x="0" y="${(Y(1)+3).toFixed(1)}" fill="var(--fail)" font-size="9" font-family="var(--mono)">100%</text>`;
+  grid+=`<line x1="${pad}" y1="${y100}" x2="${w-12}" y2="${y100}" stroke="var(--fail)" stroke-width="1" stroke-dasharray="4 3" opacity=".75"/><text x="0" y="${(Y(1)+3).toFixed(1)}" fill="var(--fail)" font-size="9" font-family="var(--mono)">100%</text>`;
   const nowX=X(n-1).toFixed(1);
-  let weekTicks="",monthLbls="",lastMonth=null;
+
+  const plotW=w-pad-12;
+  const monthPx=plotW/(total/30.44);
+  const labelEvery=Math.max(1,Math.ceil(30/monthPx));   // keep ~30px between month names
+  let weekTicks="",monthTicks="",monthLbls="",yearLbls="",monthIdx=0,lastYear=null;
   for(let k=0;k<total;k++){
-    const d=dateForIdx(k,days);
-    if(k%7===0){ const xx=X(k).toFixed(1); weekTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+4).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".6"/>`; }
-    if(d.getMonth()!==lastMonth){
-      const xx=X(k).toFixed(1);
-      monthLbls+=`<text x="${xx}" y="${(baseline+17).toFixed(1)}" fill="var(--ink-2)" font-size="10" text-anchor="start">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
-      lastMonth=d.getMonth();
+    const d=dateForIdx(k,days), xx=X(k).toFixed(1);
+    if(d.getDay()===1){ // Monday — one minor tick per calendar week
+      weekTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+3.5).toFixed(1)}" stroke="var(--ink-3)" stroke-width=".75" opacity=".45"/>`;
+    }
+    if(d.getDate()===1){
+      monthTicks+=`<line x1="${xx}" y1="${topPad}" x2="${xx}" y2="${baseline}" stroke="var(--hair)" stroke-width=".5" opacity=".6"/>`
+        +`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+8).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".85"/>`;
+      if(monthIdx%labelEvery===0){
+        monthLbls+=`<text x="${xx}" y="${(baseline+20).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" font-weight="600" text-anchor="middle">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
+      }
+      if(d.getFullYear()!==lastYear){
+        yearLbls+=`<text x="${xx}" y="${(baseline+33).toFixed(1)}" fill="var(--ink-3)" font-size="9" font-weight="700" text-anchor="middle" letter-spacing=".05em">${d.getFullYear()}</text>`;
+        lastYear=d.getFullYear();
+      }
+      monthIdx++;
     }
   }
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forecast">${grid}
-    <line x1="${pad}" y1="${baseline}" x2="${w-10}" y2="${baseline}" stroke="var(--hair)"/>
-    <line x1="${nowX}" y1="${topPad-4}" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
-    <text x="${nowX}" y="${topPad-6}" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
+  // 3-month moving average over the actuals only — a forecast has no history to average.
+  const maWin=opts.maWindow||91;
+  let maLine="";
+  if(opts.showMA && n>=maWin){
+    const ma=movingAvg(hist,maWin), pts=[];
+    ma.forEach((v,i)=>{ if(v!=null) pts.push(X(i).toFixed(1)+","+Y(v).toFixed(1)); });
+    if(pts.length>1) maLine=`<polyline points="${pts.join(" ")}" fill="none" stroke="var(--violet)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forward settlement run-off">${monthTicks}${grid}
+    <line x1="${pad}" y1="${baseline}" x2="${w-12}" y2="${baseline}" stroke="var(--hair)"/>
+    <rect x="${nowX}" y="${topPad}" width="${(w-12-nowX).toFixed(1)}" height="${(baseline-topPad).toFixed(1)}" fill="var(--pass)" opacity=".045"/>
+    <line x1="${nowX}" y1="${topPad-6}" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
+    <text x="${nowX}" y="${topPad-8}" fill="var(--ink-3)" font-size="9" text-anchor="middle">today</text>
     ${weekTicks}
-    <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="2"/>
+    <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="${lineW}" stroke-linejoin="round"/>
+    ${maLine}
     <polyline points="${fcastPts}" fill="none" stroke="var(--pass)" stroke-width="2" stroke-dasharray="5 4"/>
-    ${monthLbls}
+    ${monthLbls}${yearLbls}
     </svg>`;
+}
+/* Legend shared by every instance of the trend chart. */
+function trendLegend(showMA){
+  return `<div class="trendkey">
+    <span><i class="lk" style="background:var(--run)"></i>Actual utilization</span>
+    ${showMA?`<span><i class="lk" style="background:var(--violet)"></i>3-month moving average</span>`:""}
+    <span><i class="lk dash" style="color:var(--pass)"></i>Forward settlement run-off</span>
+    <span><i class="lk dash" style="color:var(--fail)"></i>100% limit</span>
+  </div>`;
 }
 
 /* ============================================================
@@ -1056,6 +1218,16 @@ function paneOverviewPortfolio(){
   const utilRate  = total?utilizedRaw/total:0;
   const availRate = total?available/total:0;
 
+  // Limit-weighted portfolio utilization for the last `d` days.
+  const weightedHist=d=>{
+    const out=[];
+    for(let off=d-1; off>=0; off--){
+      let num=0,den=0;
+      list.forEach(c=>{ const idx=c.series.length-1-off; if(idx>=0){num+=c.series[idx]*c.limitM; den+=c.limitM;} });
+      out.push(den?num/den:0);
+    }
+    return out;
+  };
   // Period high-water mark, so the current rate reads against how close the book has come.
   const days=state.dateRangeDays;
   const hist=[];
@@ -1083,16 +1255,20 @@ function paneOverviewPortfolio(){
     return {key:seg,label:SEGMENT_LABEL[seg],a:segCust.filter(c=>c.hasLimit).length,b:segCust.filter(c=>!c.hasLimit).length};
   });
 
-  // forward projection off the trailing 14-day trend (hist is built above, with peakUtil)
   /* Forward path is the settlement run-off of exposure already on the book, not a
      trend extrapolation — future trades are unknown, so the only thing that can be
-     projected is how today's outstanding exposure matures away. */
-  const curUtil=hist[hist.length-1]||0;
+     projected is how today's outstanding exposure matures away. The trend panel
+     runs 18 months back and 12 months forward, independent of the sidebar range,
+     so the seasonal shape and the full run-off of long-dated tenors both fit. */
+  const trendHist=weightedHist(HIST_DAYS);
+  const curUtil=trendHist[trendHist.length-1]||0;
   const inScope=new Set(list.map(x=>x.id));
-  const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,30);
-  const projected30=fcast[fcast.length-1]||0;
+  const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,FWD_DAYS);
+  const projected30=fcast[29]||0;
+  const projected12m=fcast[fcast.length-1]||0;
   const releasedM=Math.max(0,(Math.min(1,curUtil)-Math.min(1,projected30))*total);
   const half=daysUntilBelow(fcast,curUtil*0.5);
+  const clearDay=daysUntilBelow(fcast,curUtil*0.02);   // book effectively fully settled
 
   // concentration by country / limit type — total, utilized and %
   const byCountry=COUNTRIES.map(co=>{
@@ -1140,16 +1316,23 @@ function paneOverviewPortfolio(){
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
   </div>
 
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
+      <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
+      <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
+      ${trendLegend(state.showMA)}
+      <div class="foot">As the current book settles, utilization runs off from <b>${fmtPct(curUtil)}</b> to <b>${fmtPct(projected30)}</b> by day 30 and <b>${fmtPct(projected12m)}</b> at 12 months, releasing <b>${fmtM(releasedM)}</b> of SR capacity in the first month alone${half?` — half of today's exposure has settled by ~<b>day ${half}</b>`:""}${clearDay?`, and today's entire book has matured by ~<b>day ${clearDay}</b>`:""}. Everything beyond that point depends on new business, which is why the line flattens. Assumes no new trades; incoming flow offsets this in practice.</div></div>
+
   <div class="grid2b mt14">
-    <div class="panel"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization over the selected range. Dashed green = the settlement run-off of exposure already on the book, weighted by each product's settlement lag. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3><span class="slo">last ${days}d actual + 30d run-off</span></div>
-      <div class="panel-body"><div class="chart-well">${trendChart(hist,fcast,days)}</div></div>
-      <div class="foot">As the current book settles, utilization runs off from <b>${fmtPct(curUtil)}</b> to <b>${fmtPct(projected30)}</b> by day 30, releasing <b>${fmtM(releasedM)}</b> of SR capacity${half?` — half of today's exposure has settled by ~<b>day ${half}</b>`:""}. Assumes no new trades; incoming flow offsets this in practice.</div></div>
     <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
       <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div>
       <div class="foot"><b>${tailCount}</b> customer${tailCount===1?"":"s"} in the 90%+ risk tail · <b>${buckets[0].count}</b> fully dormant at 0%.</div></div>
+    <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
+      <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
+      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div>
+      <div class="foot">Top 5 = <b>${fmtPct(top5Share)}</b> of all drawn exposure · top 10 = <b>${fmtPct(top10Share)}</b>.</div></div>
   </div>
 
-  <div class="grid3 mt14">
+  <div class="grid2 mt14">
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
       <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
@@ -1158,10 +1341,6 @@ function paneOverviewPortfolio(){
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
       <div class="dist-list">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
       <div class="foot">${hotType?`Most stretched: <b>${esc(hotType.label)}</b> at ${fmtPct(hotType.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
-    <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
-      <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
-      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div>
-      <div class="foot">Top 5 = <b>${fmtPct(top5Share)}</b> of all drawn exposure · top 10 = <b>${fmtPct(top10Share)}</b>.</div></div>
   </div>
 
   <div class="panel mt14"><div class="panel-hd"><h3>Customers${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3><span class="slo">${drillList.length} in current view · click a row for detail</span></div>
@@ -1187,8 +1366,10 @@ function paneOverviewCustomer(c){
     ["Min utilization",fmtPct(s.min),"last "+days+" days","var(--pass)","passc"],
     ["Days since zero util.",String(daysSinceNonZero(c.series)),"consecutive days at 0%","var(--gold)","gold"],
   ];
-  const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
-  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,30);
+  // Trend panel runs the full 18 months back and 12 months forward, like the
+  // portfolio chart — the sidebar date range governs the stats above, not this.
+  const hist=[]; for(let off=HIST_DAYS-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
+  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
   const typeRows=LIMIT_TYPES.map(t=>{
     const amt=custLimitTypeM(c,t), utilAmt=Math.min(1,cur)*amt;
     return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:${cur>=0.9?'var(--fail)':cur>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
@@ -1205,8 +1386,10 @@ function paneOverviewCustomer(c){
     <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation of the ${fmtM(c.limitM)} limit</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
   </div>
-  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual utilization over the selected range. Dashed green = the settlement run-off of this customer's outstanding exposure, weighted by each product's settlement lag. It only declines because future trades are unknowable. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3><span class="slo">last ${days}d actual + 30d run-off</span></div>
-    <div class="panel-body"><div class="chart-well" style="height:236px">${trendChart(hist,fcast,days)}</div></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = this customer's actual daily utilization over 18 months; it is spiky because each booking consumes SR at once and each maturity releases it. Purple = 3-month trailing moving average. Dashed green = the settlement run-off of outstanding exposure over the next 12 months, from each trade's own remaining tenor. It only declines because future trades are unknowable. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
+    <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
+    <div class="panel-body"><div class="chart-well tall">${trendChart(hist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
+    ${trendLegend(state.showMA)}
     <div class="foot">${srFreeUpOutlook(c,fcast,cur)}</div></div>
   <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
@@ -1480,12 +1663,13 @@ function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classLi
 function srFreeUpOutlook(c,proj,cur){
   const limit=c.limitM;
   const freeAt=u=>fmtM(Math.max(0,limit-Math.min(1,u)*limit));
-  const in30=proj[proj.length-1]||0;
+  const in30=proj[29]!=null?proj[29]:(proj[proj.length-1]||0);
+  const end=proj[proj.length-1]||0;
   const released=Math.max(0,(Math.min(1,cur)-Math.min(1,in30))*limit);
   const marks=[];
   if(cur>1){
     const d=daysUntilBelow(proj,1);
-    marks.push(d?`back under its limit in ~<b>${d}d</b>`:"still above its limit at day 30");
+    marks.push(d?`back under its limit in ~<b>${d}d</b>`:"still above its limit at the end of the horizon");
   }
   [[0.9,"90%"],[0.75,"75%"],[0.5,"50%"]].forEach(([t,lbl])=>{
     if(cur>t){ const d=daysUntilBelow(proj,t); if(d) marks.push(`below ${lbl} in ~<b>${d}d</b>`); }
@@ -1494,7 +1678,8 @@ function srFreeUpOutlook(c,proj,cur){
   const head=cur>1
     ? `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)}. `
     : "";
-  return `${head}As the current book settles, utilization runs off to <b>${fmtPct(in30)}</b> by day 30, releasing <b class="passc">${fmtM(released)}</b> of SR back (total available then: <b class="passc">${freeAt(in30)}</b>)${marks.length?` — ${marks.join(", ")}`:""}. Assumes no new trades are booked.`;
+  const clear=daysUntilBelow(proj,cur*0.02);
+  return `${head}As the current book settles, utilization runs off to <b>${fmtPct(in30)}</b> by day 30 and <b>${fmtPct(end)}</b> at 12 months, releasing <b class="passc">${fmtM(released)}</b> of SR back in the first month (total available then: <b class="passc">${freeAt(in30)}</b>)${marks.length?` — ${marks.join(", ")}`:""}${clear?`. Today's whole book has matured by ~<b>day ${clear}</b>`:""}. Assumes no new trades are booked.`;
 }
 /* Breakdown table for the drawer. Rows are sourced from the SAME carve-outs that
    drive the allocation bars above it, so the two always agree — country carve-outs
@@ -1587,18 +1772,19 @@ function custDrawer(c){
   }
   const s=custStats(c);
   const days=state.dateRangeDays;
-  const hist=[]; for(let off=days-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
+  const hist=[]; for(let off=HIST_DAYS-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
   const cur=custUtilCur(c);
   // Forward path = run-off of this customer's outstanding exposure as it settles.
-  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,30);
+  const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
   const freed=srFreeUpOutlook(c,fcast,cur);
   const hasCarve=carveoutsFor(c.id).length>0;
   openDrawer("Customer"+(c.rank?" · global rank #"+c.rank:""),c.name,
     `<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="tag ${custStatusTag(c)[1]}" style="align-self:center">${custStatusTag(c)[0]}</span></div>
-     <div class="block"><div class="lbl">Utilization &amp; capacity outlook — last ${days} days + 30d settlement run-off</div>
-       <div class="chart-well" style="height:190px;margin:2px 0 10px">${trendChart(hist,fcast,days)}</div>
+     <div class="block"><div class="lbl">Utilization &amp; capacity outlook — 18 months actual + 12 months settlement run-off</div>
+       <div class="chart-well" style="height:220px;margin:2px 0 4px">${trendChart(hist,fcast,HIST_DAYS,{w:820,h:290,showMA:state.showMA,lineW:1,pad:34,botPad:46})}</div>
+       ${trendLegend(state.showMA)}
        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-         <span class="kv">Avg <b>${fmtPct(s.avg)}</b></span><span class="kv">Max <b>${fmtPct(s.max)}</b></span><span class="kv">Min <b>${fmtPct(s.min)}</b></span>
+         <span class="kv">Avg <b>${fmtPct(s.avg)}</b> <small>${days}d</small></span><span class="kv">Max <b>${fmtPct(s.max)}</b> <small>${days}d</small></span><span class="kv">Min <b>${fmtPct(s.min)}</b> <small>${days}d</small></span>
          <span class="kv">Now <b class="${cur>1?'failc':cur>=0.9?'warnc':'passc'}">${fmtPct(cur)}</b></span>
          <span class="kv">Headroom <b class="${cur>=1?'failc':'passc'}">${fmtM(Math.max(0,c.limitM-Math.min(1,cur)*c.limitM))}</b></span>
        </div>
@@ -1685,6 +1871,7 @@ document.addEventListener("input",e=>{
   }
 });
 document.addEventListener("change",e=>{
+  if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
     const found=WITH_LIMIT.find(c=>c.name===name);
