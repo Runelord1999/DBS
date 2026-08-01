@@ -126,7 +126,30 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .hmghd{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
 .hmghd h4{margin:0;font-size:0.625rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:700}
 .hmghd span{font-size:0.59375rem;color:var(--ink-3)}
-.hmgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(102px,1fr));gap:5px}
+/* Tile density. A book of thousands of names is unreadable at full size, so the
+   tile sheds detail as it shrinks: full card -> name + rate -> colour and rate
+   only. Areas are roughly 100% / 50% / 25% of the large tile. */
+.hmgrid{display:grid;gap:5px}
+.hmgrid.sz-lg{grid-template-columns:repeat(auto-fill,minmax(102px,1fr));gap:5px}
+.hmgrid.sz-md{grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:4px}
+.hmgrid.sz-sm{grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:3px}
+.sz-md .hmcell{min-height:42px;padding:4px 5px;gap:2px;border-radius:5px}
+.sz-md .hmcell .hmn{-webkit-line-clamp:1;font-size:0.5rem}
+.sz-md .hmcell .hmu{font-size:0.625rem}
+.sz-md .hmcell .hmm{display:none}
+.sz-md .hmcell.nolimit .hmu{font-size:0.4375rem}
+.sz-sm .hmcell{min-height:30px;padding:2px 3px;gap:0;border-radius:4px;justify-content:center;align-items:center}
+.sz-sm .hmcell .hmn,.sz-sm .hmcell .hmm{display:none}
+.sz-sm .hmcell .hmb{width:100%;justify-content:center}
+.sz-sm .hmcell .hmu{font-size:0.5rem;font-weight:700}
+.sz-sm .hmcell.nolimit .hmb{display:none}
+.sz-sm .hmcell.breach{border-width:1.5px}
+.szseg{display:inline-flex;border:1px solid var(--hair);border-radius:6px;overflow:hidden;flex:none}
+.szseg button{font-size:0.59375rem;font-weight:700;padding:3px 10px;color:var(--ink-3);background:transparent;border:0;cursor:pointer;line-height:1.7}
+.szseg button+button{border-left:1px solid var(--hair)}
+.szseg button:hover{color:var(--ink-2)}
+.szseg button[aria-pressed="true"]{background:var(--brand);color:var(--brand-ink)}
+.szlbl{font-size:0.53125rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
 .hmcell{border-radius:6px;padding:6px 7px;min-height:50px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;
   cursor:pointer;border:1px solid color-mix(in srgb,var(--ink) 8%,transparent);background:var(--panel-2);text-align:left;color:var(--ink);overflow:hidden}
 .hmcell:hover{border-color:var(--brand);transform:translateY(-1px)}
@@ -861,7 +884,7 @@ function daysUntilBelow(proj,target){
 ============================================================ */
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
-  carveCustomer:null, carveScope:"country", showMA:true};
+  carveCustomer:null, carveScope:"country", showMA:true, heatSize:"lg"};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -1147,8 +1170,15 @@ function heatmap(customers){
   return `<div class="hmwrap">${groups.map(g=>{
     const withLim=g.rows.filter(c=>c.hasLimit).length;
     return `<div class="hmgroup"><div class="hmghd"><h4>${g.label}</h4><span>${g.rows.length} customer${g.rows.length===1?"":"s"} · ${withLim} with an SR limit · ${g.rows.length-withLim} without</span></div>
-      <div class="hmgrid">${g.rows.map(heatCell).join("")}</div></div>`;
+      <div class="hmgrid sz-${state.heatSize}">${g.rows.map(heatCell).join("")}</div></div>`;
   }).join("")}</div>`;
+}
+function heatSizeToggle(){
+  const opts=[["sm","S","Small — 25% tile size. Colour and rate only; best for a book of thousands."],
+              ["md","M","Medium — 50% tile size. Name and rate, no limit amount."],
+              ["lg","L","Large — 100% tile size. Name, rate and approved limit."]];
+  return `<span class="szlbl">Tile size</span><span class="szseg" role="group" aria-label="Heatmap tile size">${
+    opts.map(([k,lbl,tip])=>`<button type="button" data-heatsize="${k}" aria-pressed="${state.heatSize===k}" data-tip="${esc(tip)}">${lbl}</button>`).join("")}</span>`;
 }
 function heatLegend(){
   const steps=[0.05,0.25,0.45,0.65,0.85,1.0];
@@ -1445,7 +1475,8 @@ function paneOverviewPortfolio(){
       <div class="foot">${hotType?`Most stretched: <b>${esc(hotType.label)}</b> at ${fmtPct(hotType.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer utilization heatmap${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3><span class="slo">${heatList.length} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit} without an SR limit · click a tile for detail</span></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer utilization heatmap${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
+      <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${heatSizeToggle()}<span class="slo">${heatList.length} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit} without an SR limit · click a tile for detail</span></span></div>
     ${segFilterNote?`<div style="padding:10px 16px 0">${segFilterNote}</div>`:""}
     ${heatLegend()}
     ${heatmap(heatList)}
@@ -1923,6 +1954,7 @@ document.addEventListener("click",e=>{
   const mselclear=e.target.closest("[data-mselclear]"); if(mselclear){const key=mselclear.dataset.mselclear; state.filters[key]=new Set(); if(key==="segment") state.overviewSegClick=""; refreshMsel(key); render(); return;}
   const tab=e.target.closest(".tab"); if(tab){state.tab=tab.dataset.tab;render();return;}
   const clr=e.target.closest("[data-clearchip]"); if(clr){const k=clr.dataset.clearchip; state.filters[k]=new Set(); if(k==="segment") state.overviewSegClick=""; refreshMsel(k); render(); return;}
+  const hsize=e.target.closest("[data-heatsize]"); if(hsize){state.heatSize=hsize.dataset.heatsize;render();return;}
   const segdrill=e.target.closest("[data-segclick]"); if(segdrill){state.overviewSegClick=state.overviewSegClick===segdrill.dataset.segclick?"":segdrill.dataset.segclick;render();return;}
   const clearsegdrill=e.target.closest("#clearsegdrill"); if(clearsegdrill){state.overviewSegClick="";render();return;}
   const ovclear=e.target.closest("#ov-cust-clear"); if(ovclear){state.customerView=null;render();return;}
