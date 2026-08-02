@@ -82,12 +82,20 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 .main{padding:20px 26px 48px;min-width:0}
 
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.kpis.kpis-4{grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
 .toprow:hover{background:var(--panel-2);border-radius:5px}
-.kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:13px 14px;position:relative;overflow:hidden}
+.kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:11px 12px;position:relative;overflow:hidden;min-width:0}
 .kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
-.kpi b{display:block;font-size:1.3125rem;font-weight:750;margin-top:6px}
-.kpi small{display:block;color:var(--ink-3);font-size:0.625rem;margin-top:2px}
+.kpi b{display:block;font-size:1.125rem;font-weight:750;margin-top:5px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi small{display:block;color:var(--ink-3);font-size:0.59375rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .eyebrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Eight across is tight: shave the label and sub-line so they fit rather than ellipsis. */
+.kpis:not(.kpis-4) .kpi .eyebrow{font-size:0.5625rem;letter-spacing:.07em}
+.kpis:not(.kpis-4) .kpi small{font-size:0.5625rem}
+.kpis.kpis-4 .kpi b{font-size:1.3125rem}
+/* Eight across needs the room; drop to four, then two, as the viewport narrows. */
+@media (max-width:1400px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.kpis .kpi b{font-size:1.25rem}.kpis:not(.kpis-4) .kpi .eyebrow{font-size:0.625rem;letter-spacing:.14em}.kpis:not(.kpis-4) .kpi small{font-size:0.625rem}}
 .gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
 
 .tabs{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap;gap:10px}
@@ -118,6 +126,8 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 /* Chart wells: one fixed height per row so sibling charts optically match,
    with the SVG scaled to fit and centred rather than letterboxed at the top. */
 .chart-well{display:flex;align-items:center;justify-content:center;height:252px}
+.grid3 .chart-well{height:206px}
+.grid3 .dist-list{height:206px}
 .chart-well svg{width:100%;height:100%;display:block}
 /* ---- Customer utilization heatmap ---- */
 .hmwrap{padding:4px 16px 14px}
@@ -191,7 +201,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .hmkey i{display:inline-block;width:22px;height:11px;border-radius:3px;border:1px solid color-mix(in srgb,var(--ink) 10%,transparent);vertical-align:middle}
 .hmkey .sep{width:1px;height:13px;background:var(--hair);margin:0 6px}
 .hmkey span{display:inline-flex;align-items:center;gap:4px}
-.chart-well.tall{height:330px}
+.chart-well.tall{height:288px}
 .trendkey{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:2px 16px 12px;font-size:0.65625rem;color:var(--ink-2)}
 .trendkey span{display:inline-flex;align-items:center;gap:6px}
 .trendkey .lk{display:inline-block;width:16px;height:3px;border-radius:2px;flex:none}
@@ -1708,7 +1718,7 @@ function paneOverviewPortfolio(){
 
   return `<div class="kpis">${kpis.map(([l,v,s,acc,c,tip])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}"><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("")}</div>
 
-  <div class="grid2b">
+  <div class="grid3">
     <div class="panel"><div class="panel-hd" data-tip="Total SR pool split into Utilized (drawn against customer limits, capped at 100% per customer), Available (unused allocated capacity) and Reserved (held back, not yet allocated)."><h3>SR pool composition</h3><span class="slo">Utilized · Available · Reserved</span></div>
       <div class="panel-body"><div class="chart-well donut-well">
         ${donut(pieSegs,fmtM(grand),"total pool")}
@@ -1718,6 +1728,8 @@ function paneOverviewPortfolio(){
         ${excessM>0?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
       </div></div>
 </div>
+    <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
+      <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div></div>
     <div class="panel"><div class="panel-hd" data-tip="Coverage is the share of each segment that already holds an SR limit — the remainder is the Sales whitespace. Click a bar to drill into that segment below."><h3>Customers with vs without SR limits</h3><span class="slo">by segment · coverage %</span></div>
       <div class="panel-body"><div class="chart-well">${groupedBar(segCats)}</div></div>
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
@@ -1728,15 +1740,10 @@ function paneOverviewPortfolio(){
       <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
       ${trendLegend(state.showMA)}</div>
 
-  <div class="grid2b mt14">
-    <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
-      <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div></div>
+  <div class="grid3 mt14">
     <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
       <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
       <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div></div>
-  </div>
-
-  <div class="grid2 mt14">
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
       <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
@@ -1778,7 +1785,7 @@ function paneOverviewCustomer(c){
     return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:${cur>=0.9?'var(--fail)':cur>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
   }).join("");
   const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,10);
-  return `<div class="kpis">${kpis.map(([l,v,s2,acc,cls])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${cls}">${v}</b><small>${s2}</small></div>`).join("")}</div>
+  return `<div class="kpis kpis-4">${kpis.map(([l,v,s2,acc,cls])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${cls}">${v}</b><small>${s2}</small></div>`).join("")}</div>
   <div class="grid2b">
     <div class="panel"><div class="panel-hd"><h3>SR limit composition — ${esc(c.name)}</h3><span class="slo">Utilized · Available</span></div>
       <div class="panel-body"><div class="chart-well donut-well">
@@ -1857,7 +1864,7 @@ function paneBlotter(){
     product:t=>t.product, notional:t=>t.notionalM, sr:t=>t.srConsumedM, limitType:t=>t.limitType, status:t=>t.status,
   });
   const shown=sorted.slice(0,120);
-  return `<div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+  return `<div class="kpis kpis-4">
     <div class="kpi" style="--accent:var(--run)" data-tip="Trade count in the selected date range, after the sidebar filters. Change the range with the Date range selector in the sidebar."><div class="eyebrow">Trades</div><b class="num runc">${rows.length.toLocaleString()}</b><small>last ${days} days</small></div>
     <div class="kpi" style="--accent:var(--agent)" data-tip="Total traded notional across the filtered blotter."><div class="eyebrow">Total notional</div><b class="num tealc">${fmtM(totalNotional)}</b><small>across all asset classes</small></div>
     <div class="kpi" style="--accent:var(--fail)" data-tip="Settlement risk drawn by these trades. Typically 2–9% of notional depending on product and tenor."><div class="eyebrow">SR consumed</div><b class="num failc">${fmtM(totalSR)}</b><small>${totalNotional?fmtPct(totalSR/totalNotional):"0%"} of notional</small></div>
