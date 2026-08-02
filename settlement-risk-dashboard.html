@@ -577,6 +577,14 @@ const COUNTRIES=["Singapore","Hong Kong","China","Taiwan","India","Indonesia","L
 const SEGMENTS=["Banks","Non-bank FI","Large Corps","SME","II","CWM"];
 const SEGMENT_LABEL={"Banks":"Banks","Non-bank FI":"Non-bank FI","Large Corps":"Large Corps","SME":"SME","II":"II (Insti. Investors)","CWM":"CWM"};
 const LIMIT_TYPES=["eFX","REPO","SBL","FX-DERI","SEC"];
+/* Utilization is not uniform across products or booking centres. Without these
+   the concentration bars all converge on the portfolio mean — 2,000 customers
+   averaged together give every country and every limit type the same rate.
+   Type biases are normalised per customer so a customer's drawn total is
+   unchanged; only its split across types moves. */
+const TYPE_UTIL_BIAS={"eFX":2.00,"REPO":0.46,"SBL":1.14,"FX-DERI":1.60,"SEC":1.47};
+const COUNTRY_UTIL_BIAS={"Singapore":1.02,"Hong Kong":0.72,"China":1.34,"Taiwan":1.46,
+  "India":0.61,"Indonesia":1.18,"London":0.86};
 const CARVEOUT_COUNTRIES=["Singapore","Hong Kong Limited","Hong Kong Branch","China","Taiwan","India","Indonesia","London"];
 const ASSET_CLASSES=["FX","FX Options","Equities","Fixed Income"];
 const PRODUCTS={
@@ -771,7 +779,7 @@ const MARKET_DRIVE=(function(){
   }
   return out;
 })();
-function genSeries(profile){
+function genSeries(profile,bias){
   const n=HIST_DAYS, warm=SERIES_WARM;
   const N=n+warm, tail=400;              // tail absorbs maturities past the window
   // Targets are the 18-month AVERAGE, not the peak — the swing around them is wide,
@@ -781,6 +789,7 @@ function genSeries(profile){
     : profile==="dormant" ? rand(0.20,0.42)
     : profile==="cold" ? rand(0.04,0.15)
     : rand(0.22,0.48);
+  const target2=Math.max(0.01,Math.min(0.95,target*(bias||1)));
   const lam=rand(0.7,2.6);               // tickets booked per day
   const shape=rand(1.6,3.2);             // higher -> fatter tail of large tickets
   const diff=new Array(N+tail).fill(0);  // difference array: +size at booking, -size at maturity
@@ -803,7 +812,7 @@ function genSeries(profile){
   // then hold non-breach names just under their limit — breaches stay a
   // property of the profile, not an accident of a volatile draw.
   const ceil = profile==="breach" ? 1.38 : 0.985;
-  const out=hist.map(v=>Math.max(0,Math.min(ceil, v/mean*target)));
+  const out=hist.map(v=>Math.max(0,Math.min(ceil, v/mean*target2)));
   /* Ramp the recent tail towards where this profile is meant to sit TODAY, so the
      risk bands are populated by design rather than by luck of the draw — but scale
      the existing path rather than overwriting it, so the tail keeps its shape. */
@@ -850,7 +859,7 @@ function makeCustomer(o){
   const id="C"+String(CUSTID++).padStart(3,"0");
   return Object.assign({id, hasLimit:o.limitM!=null, limitM:o.limitM||0,
     typeAlloc:o.limitM!=null?genTypeAlloc(o.segment):null,
-    series:o.limitM!=null?genSeries(o.profile||"mid"):null}, o);
+    series:o.limitM!=null?genSeries(o.profile||"mid",COUNTRY_UTIL_BIAS[o.country]||1):null}, o);
 }
 const CUSTOMERS=[];
 BANKS.forEach((b,i)=>{
@@ -1135,6 +1144,34 @@ function filteredWithLimit(){ return filteredCustomers().filter(c=>c.hasLimit); 
 
 function custUtilCur(c){ return c.series ? c.series[c.series.length-1] : 0; }
 function custLimitTypeM(c,type){ return c.hasLimit ? c.limitM*c.typeAlloc[type] : 0; }
+/* Drawn against ONE limit type. Biased by product, then renormalised so the five
+   types still add up to the customer's overall drawn amount — the pool totals and
+   every utilization KPI are untouched, only the split across types changes. */
+function custTypeDrawn(c){
+  if(c._typeDrawn) return c._typeDrawn;
+  const cap=LIMIT_TYPES.map(t=>custLimitTypeM(c,t));
+  const w=LIMIT_TYPES.map(t=>c.typeAlloc[t]*(TYPE_UTIL_BIAS[t]||1));
+  const out=LIMIT_TYPES.map(()=>0), open=LIMIT_TYPES.map(()=>true);
+  let remain=Math.min(1,custUtilCur(c))*c.limitM;
+  // Water-fill: a type that hits its allocation stops taking, and its overflow is
+  // redistributed rather than dropped, so the five types still sum to drawn.
+  for(let pass=0; pass<6 && remain>1e-9; pass++){
+    let wsum=0; w.forEach((x,i)=>{ if(open[i]) wsum+=x; });
+    if(wsum<=0) break;
+    let placed=0;
+    for(let i=0;i<w.length;i++){
+      if(!open[i]) continue;
+      const want=remain*w[i]/wsum, room=cap[i]-out[i], give=Math.min(want,room);
+      out[i]+=give; placed+=give;
+      if(give<want-1e-12) open[i]=false;
+    }
+    remain-=placed;
+    if(placed<=1e-12) break;
+  }
+  c._typeDrawn=out;
+  return out;
+}
+function custTypeDrawnM(c,type){ return c.hasLimit ? custTypeDrawn(c)[LIMIT_TYPES.indexOf(type)] : 0; }
 function custDrawnM(c){ return c.hasLimit ? Math.min(1,custUtilCur(c))*c.limitM : 0; }
 function custFreeM(c){ return c.hasLimit ? Math.max(0,c.limitM-custDrawnM(c)) : 0; }
 /* Mean utilization over the trailing N days, cached per window. */
@@ -1695,7 +1732,7 @@ function paneOverviewPortfolio(){
   });
   const byType=LIMIT_TYPES.map(t=>{
     const total=list.reduce((a,c)=>a+custLimitTypeM(c,t),0);
-    const utilized=list.reduce((a,c)=>a+Math.min(1,custUtilCur(c))*custLimitTypeM(c,t),0);
+    const utilized=list.reduce((a,c)=>a+custTypeDrawnM(c,t),0);
     return {label:t,total,utilized,pct:total?utilized/total:0};
   });
 
@@ -1735,10 +1772,6 @@ function paneOverviewPortfolio(){
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
-      <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
-      <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
-      ${trendLegend(state.showMA)}</div>
 
   <div class="grid3 mt14">
     <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
@@ -1757,7 +1790,12 @@ function paneOverviewPortfolio(){
     ${segFilterNote?`<div style="padding:10px 16px 0">${segFilterNote}</div>`:""}
     ${heatTools(heatShown.length,heatList.length)}
     ${heatLegend()}
-    ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>`;
+    ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>
+
+  <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
+      <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
+      <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
+      ${trendLegend(state.showMA)}</div>`;
 }
 function paneOverviewCustomer(c){
   const days=state.dateRangeDays;
