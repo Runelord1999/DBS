@@ -133,6 +133,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .hmgrid.sz-lg{grid-template-columns:repeat(auto-fill,minmax(102px,1fr));gap:5px}
 .hmgrid.sz-md{grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:4px}
 .hmgrid.sz-sm{grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:3px}
+.hmgrid.sz-xs{grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:2px}
 .sz-md .hmcell{min-height:42px;padding:4px 5px;gap:2px;border-radius:5px}
 .sz-md .hmcell .hmn{-webkit-line-clamp:1;font-size:0.5rem}
 .sz-md .hmcell .hmu{font-size:0.625rem}
@@ -144,6 +145,28 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .sz-sm .hmcell .hmu{font-size:0.5rem;font-weight:700}
 .sz-sm .hmcell.nolimit .hmb{display:none}
 .sz-sm .hmcell.breach{border-width:1.5px}
+.sz-xs .hmcell{min-height:15px;padding:0 1px;gap:0;border-radius:2px;justify-content:center;align-items:center}
+.sz-xs .hmcell .hmn,.sz-xs .hmcell .hmm,.sz-xs .hmcell .pcs{display:none}
+.sz-xs .hmcell .hmb{width:100%;justify-content:center}
+.sz-xs .hmcell .hmu{font-size:0.4375rem;font-weight:700;line-height:1}
+.sz-xs .hmcell.nolimit .hmb,.sz-sm .hmcell.nolimit .hmb{display:none}
+.sz-xs .hmcell.breach{border-width:1px}
+.sz-xs .hmcell:hover,.sz-sm .hmcell:hover{transform:none}
+/* Toolbar above the heatmap: view, population, no-SR filter and tile density. */
+.hmtools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:10px 16px 4px}
+.hmtool{display:inline-flex;align-items:center;gap:6px}
+/* Treemap */
+.tmwrap{position:relative;margin:4px 16px 14px;border-radius:6px;overflow:hidden}
+.tmseghd{position:absolute;font-size:0.5625rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-2);padding:2px 5px;white-space:nowrap;overflow:hidden;pointer-events:none;z-index:2}
+.tmseg{position:absolute;border:1px solid var(--hair);border-radius:4px;background:color-mix(in srgb,var(--ink-3) 7%,transparent);pointer-events:none}
+.tmcell{position:absolute;border:1px solid var(--panel);overflow:hidden;cursor:pointer;padding:2px 3px;
+  display:flex;flex-direction:column;justify-content:flex-start;gap:1px;color:var(--ink);text-align:left;border-radius:2px}
+.tmcell:hover{outline:2px solid var(--brand);outline-offset:-2px;z-index:3}
+.tmcell.breach{border:1.5px solid var(--fail)}
+.tmcell .tmn{font-size:0.53125rem;font-weight:600;line-height:1.15;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tmcell .tmv{font-size:0.5625rem;font-weight:800;font-family:var(--mono);line-height:1.1}
+.tmcell .tmm{font-size:0.5rem;font-family:var(--mono);color:color-mix(in srgb,var(--ink) 58%,transparent);line-height:1.1}
 .szseg{display:inline-flex;border:1px solid var(--hair);border-radius:6px;overflow:hidden;flex:none}
 .szseg button{font-size:0.59375rem;font-weight:700;padding:3px 10px;color:var(--ink-3);background:transparent;border:0;cursor:pointer;line-height:1.7}
 .szseg button+button{border-left:1px solid var(--hair)}
@@ -616,22 +639,56 @@ const WORD_A=["Meridian","Sovereign","Zenith","Crown","Straits","Nordica","Helio
  "Silverline","Everest","Marina","Thames","Indus","Pearl","Yangtze","Borneo","Celtic","Kensington",
  "Raffles","Victoria","Sentosa","Bosphorus","Formosa","Ganges","Java","Sumatra","Taipei","Kowloon",
  "Amber","Cascade","Highland","Lotus","Emerald"];
+/* Second name element. WORD_A x SEG_SUFFIX alone only spans ~200 names per
+   segment; the bulk book needs thousands, so names fall back to a three-part
+   form once the two-part space is used up. */
+const WORD_B=["Crest","Ridge","Harbour","Gate","Bridge","Point","Vale","Court","Park","Field","Rock","Bay",
+ "Summit","Grove","Haven","Reach","Quay","Terrace","Arbor","Hollow","Spring","Stone","Wood","Cove",
+ "Lane","Mill","Cross","Fort","Meadow","Cliff","Dale","Brook","Glen","Row","Tower","Anvil","Compass",
+ "Lantern","Beacon","Keystone","Aurora","Cobalt","Verdant","Skyline","Redwood","Copper","Granite",
+ "Willow","Cedar","Palm","Monsoon","Delta","Estuary","Lagoon","Atoll","Straitgate","Northgate"];
 const SEG_SUFFIX={
- "Non-bank FI":["Financial Corp","Credit Partners","Capital Markets","Finance Group"],
- "Large Corps":["Industries","Holdings","Group","Enterprises Ltd"],
- "SME":["Trading Pte Ltd","Enterprises","Trading Co","Supplies Ltd"],
- "II":["Pension Fund","Sovereign Wealth Fund","Asset Management","Investment Fund"],
- "CWM":["Family Office","Private Trust","Wealth Partners","Private Office"],
+ "Banks":["Bank","Commercial Bank","Banking Corp","Merchant Bank","Trust Bank","Bank Ltd","Savings Bank"],
+ "Non-bank FI":["Financial Corp","Credit Partners","Capital Markets","Finance Group","Lending Corp","Credit Union","Leasing Corp"],
+ "Large Corps":["Industries","Holdings","Group","Enterprises Ltd","Manufacturing","Resources Ltd","Logistics Group"],
+ "SME":["Trading Pte Ltd","Enterprises","Trading Co","Supplies Ltd","Services Pte Ltd","Works Pte Ltd","Distributors","Engineering Pte Ltd"],
+ "II":["Pension Fund","Sovereign Wealth Fund","Asset Management","Investment Fund","Endowment Fund","Insurance Fund","Capital Trust"],
+ "CWM":["Family Office","Private Trust","Wealth Partners","Private Office","Private Holdings","Family Trust","Wealth Office"],
 };
 const SEG_LIMIT_RANGE={"Non-bank FI":[200,1500],"Large Corps":[100,800],"SME":[10,100],"II":[300,2000],"CWM":[20,200]};
 const SEG_COUNTS={"Non-bank FI":{with:14,without:9},"Large Corps":{with:16,without:11},"SME":{with:12,without:14},"II":{with:9,without:5},"CWM":{with:11,without:7}};
 
 let usedNames=new Set();
 function genName(segment){
-  let name;
-  do{ name=choice(WORD_A)+" "+choice(SEG_SUFFIX[segment]); }while(usedNames.has(name));
-  usedNames.add(name);
-  return name;
+  const sufs=SEG_SUFFIX[segment];
+  // Prefer the short two-part form, fall back to three parts, then to a numbered
+  // variant. Every name in the book is unique.
+  for(let t=0;t<24;t++){
+    const n=choice(WORD_A)+" "+choice(sufs);
+    if(!usedNames.has(n)){ usedNames.add(n); return n; }
+  }
+  for(let t=0;t<300;t++){
+    const n=choice(WORD_A)+" "+choice(WORD_B)+" "+choice(sufs);
+    if(!usedNames.has(n)){ usedNames.add(n); return n; }
+  }
+  let k=2,n;
+  do{ n=choice(WORD_A)+" "+choice(WORD_B)+" "+choice(sufs)+" "+(k++); }while(usedNames.has(n));
+  usedNames.add(n); return n;
+}
+/* Standard normal via Box-Muller. */
+function gaussian(){
+  let u=0,v=0;
+  while(u===0) u=rng();
+  while(v===0) v=rng();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+/* Bell curve centred in [lo,hi] with the range spanning +/- 3 sd, resampled
+   rather than clamped so the tails do not pile up on the bounds. */
+function bellBetween(lo,hi){
+  const mid=(lo+hi)/2, sd=(hi-lo)/6;
+  let v;
+  do{ v=mid+gaussian()*sd; }while(v<lo||v>hi);
+  return v;
 }
 function genTypeAlloc(segment){
   const bias = segment==="Banks" ? {eFX:1.3,REPO:1.0,SBL:0.8,"FX-DERI":1.3,SEC:0.9}
@@ -722,7 +779,7 @@ function genSeries(profile){
   if(profile==="breach") rampTo(rand(1.04,1.30),1.38);
   if(profile==="hot")    rampTo(rand(0.86,0.975),0.985);
   if(profile==="dormant"){ const len=randInt(90,380); for(let i=n-len;i<n;i++) out[i]=0; }
-  return out;
+  return Float32Array.from(out);   // ~2,000 series x 548 days — typed keeps it a few MB
 }
 /* Trailing simple moving average; the first window-1 points have no full window. */
 function movingAvg(series,window){
@@ -777,6 +834,40 @@ SEGMENTS.filter(s=>s!=="Banks").forEach(seg=>{
     CUSTOMERS.push(makeCustomer({name:genName(seg),segment:seg,country:choice(COUNTRIES),rank:null,limitM:null}));
   }
 });
+/* ------------------------------------------------------------
+   Bulk book — ~4,000 further names so the dashboard behaves like a real
+   portfolio rather than a sample. Every downstream figure (pool size,
+   utilization, concentration, rankings, blotter) is derived from CUSTOMERS,
+   so adding here moves every tab.
+
+   Mass market: 3,000 names split evenly between SME and CWM, most of which
+   hold no SR limit at all; those that do sit in a $5M-$50M band drawn from a
+   bell curve. Institutional tail: 1,000 names split 25/35/20/20 across Banks,
+   Non-bank FI, II and Large Corps, a tenth with no limit and the rest spread
+   flat across $50M-$1B.
+------------------------------------------------------------ */
+CUSTOMERS.forEach(c=>usedNames.add(c.name));   // the fixed bank roster must not be re-drawn
+const BULK_PLAN=[
+  {segment:"SME",         count:1500, withRate:0.20, limit:[5,50],    bell:true},
+  {segment:"CWM",         count:1500, withRate:0.45, limit:[5,50],    bell:true},
+  {segment:"Banks",       count:250,  withRate:0.90, limit:[50,1000], bell:false},
+  {segment:"Non-bank FI", count:350,  withRate:0.90, limit:[50,1000], bell:false},
+  {segment:"II",          count:200,  withRate:0.90, limit:[50,1000], bell:false},
+  {segment:"Large Corps", count:200,  withRate:0.90, limit:[50,1000], bell:false},
+];
+BULK_PLAN.forEach(p=>{
+  for(let i=0;i<p.count;i++){
+    const withLimit=rng()<p.withRate;
+    const limitM=withLimit
+      ? Math.max(1,Math.round(p.bell?bellBetween(p.limit[0],p.limit[1]):rand(p.limit[0],p.limit[1])))
+      : null;
+    const profile=withLimit
+      ? weightedChoice([["mid",0.52],["hot",0.14],["cold",0.14],["dormant",0.12],["breach",0.08]])
+      : null;
+    CUSTOMERS.push(makeCustomer({name:genName(p.segment),segment:p.segment,country:choice(COUNTRIES),rank:null,limitM,profile}));
+  }
+});
+
 const CUST_BY_ID={}; CUSTOMERS.forEach(c=>CUST_BY_ID[c.id]=c);
 const WITH_LIMIT=CUSTOMERS.filter(c=>c.hasLimit);
 const RESERVED_M=Math.round(WITH_LIMIT.reduce((a,c)=>a+c.limitM,0)*0.12);
@@ -798,7 +889,7 @@ const TXNS=[];
   // Trades span the full 18-month history so the sidebar date-range selector has
   // something to filter — previously they were bunched into the last 30 days only,
   // which is why the blotter said "30d" while the range selector said 90.
-  for(let i=0;i<2600;i++){
+  for(let i=0;i<12000;i++){
     const c=pickCustomer();
     const assetClass=choice(ASSET_CLASSES);
     const product=choice(PRODUCTS[assetClass]);
@@ -884,7 +975,8 @@ function daysUntilBelow(proj,target){
 ============================================================ */
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
-  carveCustomer:null, carveScope:"country", showMA:true, heatSize:"lg"};
+  carveCustomer:null, carveScope:"country", showMA:true,
+  heatSize:"lg", heatView:"heat", heatTop:250, heatHideNoSR:false};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -964,7 +1056,7 @@ function seedCarveouts(){
   return out;
 }
 const SEED_CARVEOUTS=seedCarveouts();
-let CARVEOUTS=loadLS("sr-dash-carveouts-v2",SEED_CARVEOUTS);
+let CARVEOUTS=loadLS("sr-dash-carveouts-v3",SEED_CARVEOUTS);
 let REQUESTS=loadLS("sr-dash-requests",[]);
 
 /* Drawn against a carve-out = the customer's current utilization rate, scaled by
@@ -980,7 +1072,15 @@ function carveThresholdBreached(co){
   return co.thMode==="pct" ? carveUtilPct(co)*100 >= +co.thValue : drawn >= +co.thValue;
 }
 function carveThresholdLabel(co){ return co.thMode==="pct" ? co.thValue+"% of carve-out" : fmtM(+co.thValue)+" drawn"; }
-function carveoutsFor(custId){ return CARVEOUTS.filter(co=>co.customerId===custId); }
+let CARVE_BY_CUST=null;
+function carveIndex(){
+  if(CARVE_BY_CUST) return CARVE_BY_CUST;
+  CARVE_BY_CUST=new Map();
+  CARVEOUTS.forEach(co=>{ const a=CARVE_BY_CUST.get(co.customerId); if(a) a.push(co); else CARVE_BY_CUST.set(co.customerId,[co]); });
+  return CARVE_BY_CUST;
+}
+function carveDirty(){ CARVE_BY_CUST=null; }   // call after any add/remove
+function carveoutsFor(custId){ return carveIndex().get(custId)||[]; }
 
 function matchesFilters(c){
   const f=state.filters;
@@ -995,7 +1095,15 @@ function filteredWithLimit(){ return filteredCustomers().filter(c=>c.hasLimit); 
 
 function custUtilCur(c){ return c.series ? c.series[c.series.length-1] : 0; }
 function custLimitTypeM(c,type){ return c.hasLimit ? c.limitM*c.typeAlloc[type] : 0; }
-function custStats(c){ return c.series ? seriesStats(c.series,state.dateRangeDays-1,0) : {avg:0,max:0,min:0}; }
+const EMPTY_STATS={avg:0,max:0,min:0};
+function custStats(c){
+  if(!c.series) return EMPTY_STATS;
+  // Cached per window: this is called from sort comparators, where recomputing a
+  // 548-point scan on every comparison is the difference between instant and seconds.
+  const d=state.dateRangeDays;
+  if(c._statsD!==d){ c._stats=seriesStats(c.series,d-1,0); c._statsD=d; }
+  return c._stats;
+}
 function custStatusTag(c){
   const u=custUtilCur(c);
   if(u>1.0) return ["Breach","t-fail"];
@@ -1157,7 +1265,7 @@ ${fmtM(drawn)} drawn of a ${fmtM(c.limitM)} limit · ${fmtPct(u)} utilized`
     +(dormant?" · dormant, nothing drawn":"");
   return `<button type="button" class="${cls}" data-cust="${c.id}" style="background:${bg}" data-tip="${esc(tip)}">
     <span class="hmn">${esc(c.name)}</span>
-    <span class="hmb"><span class="hmu">${fmtPct(u,0)}</span><span class="hmm">${fmtM(c.limitM)}</span></span></button>`;
+    <span class="hmb"><span class="hmu">${Math.round(u*100)}<i class="pcs">%</i></span><span class="hmm">${fmtM(c.limitM)}</span></span></button>`;
 }
 function heatmap(customers){
   const groups=SEGMENTS.map(seg=>({
@@ -1173,12 +1281,101 @@ function heatmap(customers){
       <div class="hmgrid sz-${state.heatSize}">${g.rows.map(heatCell).join("")}</div></div>`;
   }).join("")}</div>`;
 }
-function heatSizeToggle(){
-  const opts=[["sm","S","Small — 25% tile size. Colour and rate only; best for a book of thousands."],
-              ["md","M","Medium — 50% tile size. Name and rate, no limit amount."],
-              ["lg","L","Large — 100% tile size. Name, rate and approved limit."]];
-  return `<span class="szlbl">Tile size</span><span class="szseg" role="group" aria-label="Heatmap tile size">${
-    opts.map(([k,lbl,tip])=>`<button type="button" data-heatsize="${k}" aria-pressed="${state.heatSize===k}" data-tip="${esc(tip)}">${lbl}</button>`).join("")}</span>`;
+/* Which customers the heatmap/treemap shows: ranked by approved SR limit so the
+   largest relationships surface first, optionally trimmed to a Top-N and
+   optionally excluding names that hold no limit. */
+const HEAT_TOPS=[[100,"100"],[250,"250"],[500,"500"],[1000,"1,000"],[0,"All"]];
+function heatSelection(all){
+  let rows=state.heatHideNoSR ? all.filter(c=>c.hasLimit) : all.slice();
+  rows.sort((a,b)=>(b.limitM||0)-(a.limitM||0)
+    || (b.hasLimit?Math.min(1,custUtilCur(b))*b.limitM:0)-(a.hasLimit?Math.min(1,custUtilCur(a))*a.limitM:0));
+  const n=state.heatTop|0;
+  return n>0 ? rows.slice(0,n) : rows;
+}
+/* Squarified treemap (Bruls, Huizing & van Wijk) — returns laid-out rects in the
+   same coordinate space as the rect passed in. */
+function squarify(values,x,y,w,h){
+  const out=[];
+  const items=values.map((v,i)=>({v,i})).filter(o=>o.v>0).sort((a,b)=>b.v-a.v);
+  const total=items.reduce((a,o)=>a+o.v,0);
+  if(!(total>0)||w<=0||h<=0) return out;
+  const scale=(w*h)/total;
+  items.forEach(o=>o.a=o.v*scale);
+  let cx=x, cy=y, cw=w, ch=h, row=[], rowArea=0;
+  const side=()=>Math.min(cw,ch);
+  const worst=(r,area,sd)=>{
+    if(!r.length||area<=0||sd<=0) return Infinity;
+    const mx=r[0].a, mn=r[r.length-1].a, s2=area*area, l2=sd*sd;
+    return Math.max((l2*mx)/s2, s2/(l2*mn));
+  };
+  const flush=()=>{
+    const sd=side(); if(sd<=0){ row=[]; rowArea=0; return; }
+    const thick=rowArea/sd;
+    let off=0;
+    if(cw<=ch){ row.forEach(o=>{const len=o.a/thick; out.push({i:o.i,x:cx+off,y:cy,w:len,h:thick}); off+=len;}); cy+=thick; ch-=thick; }
+    else      { row.forEach(o=>{const len=o.a/thick; out.push({i:o.i,x:cx,y:cy+off,w:thick,h:len}); off+=len;}); cx+=thick; cw-=thick; }
+    row=[]; rowArea=0;
+  };
+  items.forEach(o=>{
+    let sd=side();
+    if(row.length && worst(row.concat(o),rowArea+o.a,sd) > worst(row,rowArea,sd)){ flush(); sd=side(); }
+    row.push(o); rowArea+=o.a;
+  });
+  if(row.length) flush();
+  return out;
+}
+const TREE_H={xs:280,sm:400,md:540,lg:700};
+function treemap(customers){
+  // Area is the approved limit, so a name with no limit has no area to draw.
+  const rows=customers.filter(c=>c.hasLimit && c.limitM>0);
+  if(!rows.length) return `<div class="empty">No customers with an SR limit match the current view.</div>`;
+  const H=TREE_H[state.heatSize]||540, W=1200, HD=15;
+  const pcx=v=>(v/W*100).toFixed(3)+"%", pcy=v=>(v/H*100).toFixed(3)+"%";
+  const segs=SEGMENTS.map(seg=>({label:SEGMENT_LABEL[seg],rows:rows.filter(c=>c.segment===seg)}))
+    .filter(g=>g.rows.length)
+    .map(g=>Object.assign(g,{v:g.rows.reduce((a,c)=>a+c.limitM,0)}));
+  let html="";
+  squarify(segs.map(g=>g.v),0,0,W,H).forEach(r=>{
+    const g=segs[r.i];
+    html+=`<div class="tmseg" style="left:${pcx(r.x)};top:${pcy(r.y)};width:${pcx(r.w)};height:${pcy(r.h)}"></div>`
+      +`<div class="tmseghd" style="left:${pcx(r.x)};top:${pcy(r.y)};max-width:${pcx(r.w)}">${g.label} · ${fmtM(g.v)} · ${g.rows.length}</div>`;
+    squarify(g.rows.map(c=>c.limitM), r.x+1, r.y+HD, Math.max(0,r.w-2), Math.max(0,r.h-HD-1)).forEach(k=>{
+      const c=g.rows[k.i], u=custUtilCur(c), drawn=Math.min(1,u)*c.limitM;
+      const dormant=u<0.001, breach=u>1;
+      const bg=dormant?"color-mix(in srgb, var(--violet) 12%, var(--panel))":utilRamp(u);
+      const tip=`${c.name} — ${SEGMENT_LABEL[c.segment]} · ${c.country}\n${fmtM(drawn)} drawn of a ${fmtM(c.limitM)} limit · ${fmtPct(u)} utilized`
+        +(breach?` · OVER LIMIT by ${fmtM((u-1)*c.limitM)}`:` · ${fmtM(Math.max(0,c.limitM-drawn))} headroom`);
+      const showName=k.w>52 && k.h>26, showVal=k.w>26 && k.h>15, showAmt=k.w>62 && k.h>40;
+      html+=`<button type="button" class="tmcell${breach?" breach":""}" data-cust="${c.id}" data-tip="${esc(tip)}"
+        style="left:${pcx(k.x)};top:${pcy(k.y)};width:${pcx(k.w)};height:${pcy(k.h)};background:${bg}">`
+        +(showName?`<span class="tmn">${esc(c.name)}</span>`:"")
+        +(showVal?`<span class="tmv">${Math.round(u*100)}%</span>`:"")
+        +(showAmt?`<span class="tmm">${fmtM(c.limitM)}</span>`:"")
+        +`</button>`;
+    });
+  });
+  return `<div class="tmwrap" style="height:${H}px">${html}</div>`;
+}
+function segControl(label,key,opts){
+  return `<span class="hmtool"><span class="szlbl">${label}</span><span class="szseg" role="group" aria-label="${esc(label)}">${
+    opts.map(([v,lbl,tip])=>`<button type="button" data-${key}="${v}" aria-pressed="${String(state[key==="heatsize"?"heatSize":key==="heatview"?"heatView":"heatTop"])===String(v)}" data-tip="${esc(tip)}">${lbl}</button>`).join("")}</span></span>`;
+}
+function heatTools(shown,total){
+  const sizeTips={xs:"Extra small — a quarter of Small. Colour and a bare number, no % sign.",
+    sm:"Small — 25% tile size. Colour and rate only.",
+    md:"Medium — 50% tile size. Name and rate.",
+    lg:"Large — 100% tile size. Name, rate and approved limit."};
+  const sizeOpts=[["xs","XS",state.heatView==="tree"?"Extra small — shortest treemap.":sizeTips.xs],
+                  ["sm","S",state.heatView==="tree"?"Small treemap height.":sizeTips.sm],
+                  ["md","M",state.heatView==="tree"?"Medium treemap height.":sizeTips.md],
+                  ["lg","L",state.heatView==="tree"?"Tall treemap.":sizeTips.lg]];
+  return `<div class="hmtools">
+    ${segControl("View","heatview",[["heat","Heatmap","Equal-sized tile per customer — compares utilization rates."],["tree","Treemap","Tiles sized by approved SR limit — shows where the exposure actually sits. Names with no limit have no area and are excluded."]])}
+    ${segControl("Show","heattop",HEAT_TOPS.map(([v,l])=>[v,l,v?`The ${l} largest customers by approved SR limit.`:"Every customer in the current filter — slowest to draw."]))}
+    <span class="hmtool"><label class="machk" data-tip="Hide customers that hold no SR limit, leaving only the live book."><input type="checkbox" id="hm-hidenosr"${state.heatHideNoSR?" checked":""}> Hide names without SR</label></span>
+    ${segControl(state.heatView==="tree"?"Height":"Tile size","heatsize",sizeOpts)}
+    <span class="hmtool" style="color:var(--ink-3);font-size:0.59375rem">Showing ${shown.toLocaleString()} of ${total.toLocaleString()}</span>
+  </div>`;
 }
 function heatLegend(){
   const steps=[0.05,0.25,0.45,0.65,0.85,1.0];
@@ -1394,10 +1591,6 @@ function paneOverviewPortfolio(){
   const inScope=new Set(list.map(x=>x.id));
   const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,FWD_DAYS);
   const projected30=fcast[29]||0;
-  const projected12m=fcast[fcast.length-1]||0;
-  const releasedM=Math.max(0,(Math.min(1,curUtil)-Math.min(1,projected30))*total);
-  const half=daysUntilBelow(fcast,curUtil*0.5);
-  const clearDay=daysUntilBelow(fcast,curUtil*0.02);   // book effectively fully settled
 
   // concentration by country / limit type — total, utilized and %
   const byCountry=COUNTRIES.map(co=>{
@@ -1424,11 +1617,8 @@ function paneOverviewPortfolio(){
      names without SR are the whitespace and need to be visible next to the book. */
   const heatList = CUSTOMERS.filter(c=>matchesFilters(c) && (!state.overviewSegClick || c.segment===state.overviewSegClick));
   const heatNoLimit = heatList.filter(c=>!c.hasLimit).length;
+  const heatShown = heatSelection(heatList);
 
-  const maxCountryTotal=Math.max(1,...byCountry.map(x=>x.total));
-  const maxTypeTotal=Math.max(1,...byType.map(x=>x.total));
-  const hotCountry=[...byCountry].filter(x=>x.total>0).sort((a,b)=>b.pct-a.pct)[0];
-  const hotType=[...byType].filter(x=>x.total>0).sort((a,b)=>b.pct-a.pct)[0];
   const tailCount=buckets[4].count+buckets[5].count;
 
   return `<div class="kpis">${kpis.map(([l,v,s,acc,c,tip])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(tip)}"><div class="eyebrow">${l}</div><b class="num ${c}">${v}</b><small>${s}</small></div>`).join("")}</div>
@@ -1442,7 +1632,7 @@ function paneOverviewPortfolio(){
         ${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num muted" style="width:62px;text-align:right">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="num" style="font-weight:700;width:60px;text-align:right">${s.v.toFixed(1)}%</span></div>`).join("")}
         ${excessM>0?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
       </div></div>
-      <div class="foot">Slices are <b>share of the total pool</b> (limits + reserved), so they sum to 100%. The Utilized and Available KPIs above are <b>utilization rates</b> against approved limits only — a different, deliberately narrower denominator.</div></div>
+</div>
     <div class="panel"><div class="panel-hd" data-tip="Coverage is the share of each segment that already holds an SR limit — the remainder is the Sales whitespace. Click a bar to drill into that segment below."><h3>Customers with vs without SR limits</h3><span class="slo">by segment · coverage %</span></div>
       <div class="panel-body"><div class="chart-well">${groupedBar(segCats)}</div></div>
       <div class="gpills-key"><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--pass);margin-right:5px"></span>With SR limit</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink-3);opacity:.55;margin-right:5px"></span>Without SR limit</span></div></div>
@@ -1451,36 +1641,31 @@ function paneOverviewPortfolio(){
   <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
       <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
       <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
-      ${trendLegend(state.showMA)}
-      <div class="foot">As the current book settles, utilization runs off from <b>${fmtPct(curUtil)}</b> to <b>${fmtPct(projected30)}</b> by day 30 and <b>${fmtPct(projected12m)}</b> at 12 months, releasing <b>${fmtM(releasedM)}</b> of SR capacity in the first month alone${half?` — half of today's exposure has settled by ~<b>day ${half}</b>`:""}${clearDay?`, and today's entire book has matured by ~<b>day ${clearDay}</b>`:""}. Everything beyond that point depends on new business, which is why the line flattens. Assumes no new trades; incoming flow offsets this in practice.</div></div>
+      ${trendLegend(state.showMA)}</div>
 
   <div class="grid2b mt14">
     <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
-      <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div>
-      <div class="foot"><b>${tailCount}</b> customer${tailCount===1?"":"s"} in the 90%+ risk tail · <b>${buckets[0].count}</b> fully dormant at 0%.</div></div>
+      <div class="panel-body"><div class="chart-well">${histogram(buckets)}</div></div></div>
     <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
       <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
-      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div>
-      <div class="foot">Top 5 = <b>${fmtPct(top5Share)}</b> of all drawn exposure · top 10 = <b>${fmtPct(top10Share)}</b>.</div></div>
+      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div></div>
   </div>
 
   <div class="grid2 mt14">
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
-      <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
-      <div class="foot">${hotCountry?`Most stretched: <b>${esc(hotCountry.label)}</b> at ${fmtPct(hotCountry.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
+      <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by product limit type. The bar shows utilization rate."><h3>Concentration by limit type</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
-      <div class="dist-list">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div>
-      <div class="foot">${hotType?`Most stretched: <b>${esc(hotType.label)}</b> at ${fmtPct(hotType.pct)} drawn.`:"No allocated limits in the current view."}</div></div>
+      <div class="dist-list">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer utilization heatmap${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
-      <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${heatSizeToggle()}<span class="slo">${heatList.length} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit} without an SR limit · click a tile for detail</span></span></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer ${state.heatView==="tree"?"exposure treemap":"utilization heatmap"}${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
+      <span class="slo">${heatList.length.toLocaleString()} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit.toLocaleString()} without an SR limit · click a tile for detail</span></div>
     ${segFilterNote?`<div style="padding:10px 16px 0">${segFilterNote}</div>`:""}
+    ${heatTools(heatShown.length,heatList.length)}
     ${heatLegend()}
-    ${heatmap(heatList)}
-    <div class="foot">Grouped by customer segment, highest utilization first. <b>${tailCount}</b> name${tailCount===1?"":"s"} sit at 90% or above, <b>${buckets[0].count}</b> hold a limit they are not using, and <b>${heatNoLimit}</b> have no SR limit to settle against.</div></div>`;
+    ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>`;
 }
 function paneOverviewCustomer(c){
   const days=state.dateRangeDays;
@@ -1522,8 +1707,7 @@ function paneOverviewCustomer(c){
   <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = this customer's actual daily utilization over 18 months; it is spiky because each booking consumes SR at once and each maturity releases it. Purple = 3-month trailing moving average. Dashed green = the settlement run-off of outstanding exposure over the next 12 months, from each trade's own remaining tenor. It only declines because future trades are unknowable. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
     <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
     <div class="panel-body"><div class="chart-well tall">${trendChart(hist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
-    ${trendLegend(state.showMA)}
-    <div class="foot">${srFreeUpOutlook(c,fcast,cur)}</div></div>
+    ${trendLegend(state.showMA)}</div>
   <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
     <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer in the last 30 days.</div>`}</div>`;
@@ -1548,19 +1732,25 @@ function paneCustomers(){
     if(key==="utilCur") return c.hasLimit?custUtilCur(c):-1;
     return 0;
   };
-  rows.sort((a,b)=>{const av=val(a),bv=val(b); if(typeof av==="string") return av.localeCompare(bv)*dir; return (av-bv)*dir;});
+  // Decorate-sort-undecorate: val() is expensive and a comparator calls it O(n log n) times.
+  const keyed=rows.map(c=>({c,k:val(c)}));
+  keyed.sort((a,b)=>(typeof a.k==="string") ? a.k.localeCompare(b.k)*dir : (a.k-b.k)*dir);
+  const allRows=keyed.map(o=>o.c);
+  const CUST_ROW_CAP=300;
+  const shownRows=allRows.slice(0,CUST_ROW_CAP);
   const th=(k,l,cls="")=>`<th class="${cls} sortable${key===k?" sorted":""}" data-sort="${k}">${l}<span class="sortcaret">${key===k?(dir<0?"▼":"▲"):"↕"}</span></th>`;
   return `<div class="panel"><div class="panel-hd">
       <h3>Customer limits &amp; utilization</h3>
-      <span class="slo">${rows.length} customers · range: last ${state.dateRangeDays} days · click a row for detail</span>
+      <span class="slo">${rows.length.toLocaleString()} customers · range: last ${state.dateRangeDays} days · click a row for detail</span>
       <input class="dinput" style="max-width:220px" id="cust-search" placeholder="Search customer name…" value="${esc(state.custSearch||"")}">
     </div>
     <table><thead><tr>${th("name","Customer")}${th("segment","Segment")}${th("country","Country")}${th("limit","SR limit","r")}${th("avg","Avg util.","r")}${th("max","Max util.","r")}${th("min","Min util.","r")}${th("utilCur","Current","r")}<th class="r">Status</th></tr></thead>
-    <tbody>${rows.map(c=>{
+    <tbody>${shownRows.map(c=>{
       if(!c.hasLimit) return `<tr><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r muted" colspan="5">No SR limit on file</td><td class="r"><span class="tag t-muted">No limit</span></td></tr>`;
       const s=custStats(c); const [lbl,cls]=custStatusTag(c);
       return `<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}${c.rank?`<div class="muted" style="font-size:.6875rem">Global rank #${c.rank}</div>`:""}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num">${fmtPct(s.avg)}</td><td class="r num">${fmtPct(s.max)}</td><td class="r num">${fmtPct(s.min)}</td><td class="r num">${fmtPct(custUtilCur(c))}</td><td class="r"><span class="tag ${cls}">${lbl}</span></td></tr>`;
-    }).join("")}</tbody></table></div>`;
+    }).join("")}</tbody></table>
+    ${allRows.length>shownRows.length?`<div class="foot">Showing ${shownRows.length} of ${allRows.length.toLocaleString()} customers in this sort order — search or narrow the filters to reach the rest.</div>`:""}</div>`;
 }
 
 /* ============================================================
@@ -1615,13 +1805,11 @@ function paneRankings(){
   return `<div class="grid2 mt0">
     <div class="panel"><div class="panel-hd" data-tip="Customers currently closest to fully drawing their SR limit. Headroom is what is left before the limit binds."><h3>Nearest to 100% utilization</h3><span class="slo">top ${RANK_N}</span></div>
       <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Headroom</th><th class="r">Current util.</th></tr></thead>
-      <tbody>${near100.map((c,i)=>{const u=custUtilCur(c);const head=Math.max(0,c.limitM-Math.min(1,u)*c.limitM);return `<tr class="clickable" data-cust="${c.id}"><td class="muted">${i+1}</td><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num ${u>=1?'failc':'passc'}">${u>=1?"none":fmtM(head)}</td><td class="r num ${u>1?'failc':u>=0.9?'warnc':''}">${fmtPct(u)}</td></tr>`;}).join("")}</tbody></table>
-      <div class="foot">These names bind first if flow picks up — the front of the queue for pre-emptive limit reviews.</div></div>
+      <tbody>${near100.map((c,i)=>{const u=custUtilCur(c);const head=Math.max(0,c.limitM-Math.min(1,u)*c.limitM);return `<tr class="clickable" data-cust="${c.id}"><td class="muted">${i+1}</td><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num ${u>=1?'failc':'passc'}">${u>=1?"none":fmtM(head)}</td><td class="r num ${u>1?'failc':u>=0.9?'warnc':''}">${fmtPct(u)}</td></tr>`;}).join("")}</tbody></table></div>
     <div class="panel"><div class="panel-hd" data-tip="Customers whose SR limit has recorded zero utilization for the longest continuous stretch — candidates for limit recycling or reduction."><h3>Longest period with zero utilization</h3><span class="slo">top ${RANK_N}, dormant limits</span></div>
       <table><thead><tr><th>#</th><th>Customer</th><th>Segment</th><th class="r">Limit</th><th class="r">Days at zero</th></tr></thead>
       <tbody>${dormant.map((x,i)=>`<tr class="clickable" data-cust="${x.c.id}"><td class="muted">${i+1}</td><td>${esc(x.c.name)}</td><td class="muted">${SEGMENT_LABEL[x.c.segment]}</td><td class="r num">${fmtM(x.c.limitM)}</td><td class="r num warnc">${x.days}</td></tr>`).join("")}
-      ${dormant.length<RANK_N?Array.from({length:RANK_N-dormant.length}).map(()=>`<tr><td colspan="5">&nbsp;</td></tr>`).join(""):""}</tbody></table>
-      <div class="foot"><b>${fmtM(dormantCapital)}</b> of approved limit is sitting idle across ${dormantAll.length} dormant customer${dormantAll.length===1?"":"s"} — recyclable capacity.</div></div>
+      ${dormant.length<RANK_N?Array.from({length:RANK_N-dormant.length}).map(()=>`<tr><td colspan="5">&nbsp;</td></tr>`).join(""):""}</tbody></table></div>
   </div>
   <div class="panel mt14"><div class="panel-hd" data-tip="Customers currently drawing more than 100% of their approved SR limit."><h3>Limit breach alerts</h3><span class="slo">${breaches.length} customers over 100% utilization</span></div>
     ${breaches.length?`<table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">Limit</th><th class="r">Current util.</th><th class="r">Excess</th></tr></thead>
@@ -1793,27 +1981,6 @@ function openDrawer(eye,title,body){$("#d-eye").textContent=eye;$("#d-title").te
 function closeDrawer(){$("#drawer").classList.remove("open");$("#scrim").classList.remove("open");}
 /* Reads the settlement run-off: when today's exposure matures and how much SR
    capacity comes back as it does. No assumption about future trades. */
-function srFreeUpOutlook(c,proj,cur){
-  const limit=c.limitM;
-  const freeAt=u=>fmtM(Math.max(0,limit-Math.min(1,u)*limit));
-  const in30=proj[29]!=null?proj[29]:(proj[proj.length-1]||0);
-  const end=proj[proj.length-1]||0;
-  const released=Math.max(0,(Math.min(1,cur)-Math.min(1,in30))*limit);
-  const marks=[];
-  if(cur>1){
-    const d=daysUntilBelow(proj,1);
-    marks.push(d?`back under its limit in ~<b>${d}d</b>`:"still above its limit at the end of the horizon");
-  }
-  [[0.9,"90%"],[0.75,"75%"],[0.5,"50%"]].forEach(([t,lbl])=>{
-    if(cur>t){ const d=daysUntilBelow(proj,t); if(d) marks.push(`below ${lbl} in ~<b>${d}d</b>`); }
-  });
-  if(cur<0.001) return `Nothing drawn — the full <b class="passc">${fmtM(limit)}</b> limit is available now.`;
-  const head=cur>1
-    ? `<b class="failc">Over limit</b> by ${fmtM((cur-1)*limit)}. `
-    : "";
-  const clear=daysUntilBelow(proj,cur*0.02);
-  return `${head}As the current book settles, utilization runs off to <b>${fmtPct(in30)}</b> by day 30 and <b>${fmtPct(end)}</b> at 12 months, releasing <b class="passc">${fmtM(released)}</b> of SR back in the first month (total available then: <b class="passc">${freeAt(in30)}</b>)${marks.length?` — ${marks.join(", ")}`:""}${clear?`. Today's whole book has matured by ~<b>day ${clear}</b>`:""}. Assumes no new trades are booked.`;
-}
 /* Breakdown table for the drawer. Rows are sourced from the SAME carve-outs that
    drive the allocation bars above it, so the two always agree — country carve-outs
    AND limit-type carve-outs, each with its unallocated remainder. Falls back to the
@@ -1909,7 +2076,6 @@ function custDrawer(c){
   const cur=custUtilCur(c);
   // Forward path = run-off of this customer's outstanding exposure as it settles.
   const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
-  const freed=srFreeUpOutlook(c,fcast,cur);
   const hasCarve=carveoutsFor(c.id).length>0;
   openDrawer("Customer"+(c.rank?" · global rank #"+c.rank:""),c.name,
     `<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="tag ${custStatusTag(c)[1]}" style="align-self:center">${custStatusTag(c)[0]}</span></div>
@@ -1920,8 +2086,7 @@ function custDrawer(c){
          <span class="kv">Avg <b>${fmtPct(s.avg)}</b> <small>${days}d</small></span><span class="kv">Max <b>${fmtPct(s.max)}</b> <small>${days}d</small></span><span class="kv">Min <b>${fmtPct(s.min)}</b> <small>${days}d</small></span>
          <span class="kv">Now <b class="${cur>1?'failc':cur>=0.9?'warnc':'passc'}">${fmtPct(cur)}</b></span>
          <span class="kv">Headroom <b class="${cur>=1?'failc':'passc'}">${fmtM(Math.max(0,c.limitM-Math.min(1,cur)*c.limitM))}</b></span>
-       </div>
-       <div class="foot" style="border:0;padding:0;color:var(--ink-3)">${freed}</div></div>
+       </div></div>
      ${hasCarve?`<div class="block"><div class="lbl">Carve-out allocation &amp; utilization</div>${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}
        <div class="alloclegend" style="margin-bottom:0"><span><span class="lgd-split"></span>Solid = drawn · pale = unused headroom</span></div></div>`:""}
      ${drawerBreakdownTable(c)}
@@ -1955,6 +2120,8 @@ document.addEventListener("click",e=>{
   const tab=e.target.closest(".tab"); if(tab){state.tab=tab.dataset.tab;render();return;}
   const clr=e.target.closest("[data-clearchip]"); if(clr){const k=clr.dataset.clearchip; state.filters[k]=new Set(); if(k==="segment") state.overviewSegClick=""; refreshMsel(k); render(); return;}
   const hsize=e.target.closest("[data-heatsize]"); if(hsize){state.heatSize=hsize.dataset.heatsize;render();return;}
+  const hview=e.target.closest("[data-heatview]"); if(hview){state.heatView=hview.dataset.heatview;render();return;}
+  const htop=e.target.closest("[data-heattop]"); if(htop){state.heatTop=+htop.dataset.heattop;render();return;}
   const segdrill=e.target.closest("[data-segclick]"); if(segdrill){state.overviewSegClick=state.overviewSegClick===segdrill.dataset.segclick?"":segdrill.dataset.segclick;render();return;}
   const clearsegdrill=e.target.closest("#clearsegdrill"); if(clearsegdrill){state.overviewSegClick="";render();return;}
   const ovclear=e.target.closest("#ov-cust-clear"); if(ovclear){state.customerView=null;render();return;}
@@ -1973,7 +2140,7 @@ document.addEventListener("click",e=>{
       askConfirm("Remove carve-out",
         `Remove the <b>${esc(co.label)}</b> ${CARVE_SCOPES[co.scope].label.toLowerCase()} carve-out of <b>${fmtM(co.amountM)}</b>${cu?` for <b>${esc(cu.name)}</b>`:""}?<br><br>Its threshold alert will be removed too, and the amount returns to unallocated headroom.`,
         "Remove carve-out",
-        ()=>{ CARVEOUTS=CARVEOUTS.filter(x=>x.id!==id); saveLS("sr-dash-carveouts-v2",CARVEOUTS); render(); });
+        ()=>{ CARVEOUTS=CARVEOUTS.filter(x=>x.id!==id); carveDirty(); saveLS("sr-dash-carveouts-v3",CARVEOUTS); render(); });
     }
     return;
   }
@@ -2006,6 +2173,7 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
+  if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
     const found=WITH_LIMIT.find(c=>c.name===name);
@@ -2038,7 +2206,8 @@ function wireCarveoutForm(){
     CARVEOUTS.push({id:"CO-"+String(COID++).padStart(4,"0"),customerId:c.id,scope:state.carveScope,label,amountM,
       thMode:f.querySelector('input[name="co-thmode"]:checked').value, thValue:$("#co-threshold").value,
       created:fmtDate(new Date())});
-    saveLS("sr-dash-carveouts-v2",CARVEOUTS);
+    carveDirty();
+    saveLS("sr-dash-carveouts-v3",CARVEOUTS);
     render();
   });
 }
