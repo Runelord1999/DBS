@@ -135,6 +135,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .dlegend .damt{width:4.2em;text-align:right;color:var(--ink-3);font-family:var(--mono)}
 .dlegend .dpct{width:3.8em;text-align:right;font-weight:700;font-family:var(--mono)}
 .dlegend .dhd{display:flex;gap:7px;font-size:0.5625rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+/* The legend doubles as a bar chart: the series bar reads the mix at a glance,
+   and it is where the highlight marker shows the selection's share. */
+.dlegend .drow{flex-wrap:wrap;padding:2px 3px}
+.dlegend .dtrack{flex:0 0 100%;margin:3px 0 1px;min-width:0;height:5px}
 
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:0.625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
@@ -166,8 +170,46 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 .foot{padding:10px 16px;border-top:1px solid var(--hair);font-size:0.6875rem;color:var(--ink-3);line-height:1.55}
 .foot b{color:var(--gold)}
 .tfoot td{font-weight:700;color:var(--ink);background:var(--panel-2);border-top:1px solid var(--hair)}
-.bar-mini{height:6px;border-radius:3px;background:var(--hair);overflow:hidden;min-width:60px;display:inline-block;vertical-align:middle}
+.bar-mini{position:relative;height:6px;border-radius:3px;background:var(--hair);overflow:hidden;min-width:60px;display:inline-block;vertical-align:middle}
 .bar-mini i{display:block;height:100%;border-radius:3px}
+
+/* ============================================================
+   Data Highlight — brushing and linking
+   Hovering any dimension of the book (a trader, a rule, a category, a
+   severity, a disposition, an hour of the day, a month) dims everything that
+   does not belong to it and lifts everything that does, in every panel at
+   once. Members of the selection light up; aggregate bars — which are a
+   different cut of the same alerts, not members of it — stay lit and carry a
+   marker showing how much of that bar the selection accounts for.
+============================================================ */
+.hl-active .hlmember,.hl-active .hlctx{transition:opacity .12s ease,filter .12s ease}
+/* Discrete things — cards, cells, rows — recede hard so the selection reads as
+   the only lit object. Context bars and lines recede less: they are the frame
+   the selection's overlay is measured against, and an invisible frame measures
+   nothing. */
+.hl-active .hlmember{opacity:.13;filter:saturate(.25)}
+.hl-active .hlctx{opacity:.26;filter:saturate(.35)}
+.hl-active [data-hl-agg]:not(.hl-has){opacity:.18;filter:saturate(.25)}
+.hl-active [data-hl-agg]{transition:opacity .12s ease,filter .12s ease}
+/* The selection's share of an aggregate bar, drawn over it. */
+.hlmark{position:absolute;left:0;top:0;height:100%;width:0;border-radius:3px;display:none;
+  background:var(--ink);opacity:.62;box-shadow:0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)}
+.hl-active .hl-has .hlmark{display:block}
+rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
+.hl-active rect.hlmark-svg,.hl-active rect.hlshare{opacity:.72}
+[data-hlsrc]{cursor:pointer}
+[data-hlpin]{cursor:crosshair}
+/* Toggle in the rail + the pinned-selection badge. */
+.hltoggle{display:flex;align-items:center;gap:7px;font-size:0.65625rem;color:var(--ink-2);cursor:pointer;
+  border:1px solid var(--hair);border-radius:7px;padding:7px 9px;background:var(--panel)}
+.hltoggle input{accent-color:var(--brand);margin:0}
+.hltoggle b{color:var(--ink);font-weight:600}
+.hlpin{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:60;display:none;
+  background:var(--panel-3,var(--panel));border:1px solid var(--hair);border-radius:999px;padding:7px 16px;
+  font-size:0.71875rem;font-weight:600;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 26%,transparent)}
+.hlpin.on{display:block}
+.hlpin b{color:var(--brand)}
+.hlpin span{color:var(--ink-3);font-weight:400;margin-left:8px}
 .empty{padding:26px;text-align:center;color:var(--ink-3)}
 .spark{display:inline-block;vertical-align:middle}
 
@@ -414,6 +456,8 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
       <button type="button" class="msel-btn" data-msel="assetClass" aria-expanded="false"><span>All asset classes</span></button></div>
     <div class="field"><span class="eyebrow">Severity</span>
       <button type="button" class="msel-btn" data-msel="severity" aria-expanded="false"><span>All severities</span></button></div>
+    <div class="field"><span class="eyebrow">Linking</span>
+      <label class="hltoggle" data-tip="Data Highlight: hovering a trader, rule, category, severity, disposition, month or booking hour anywhere on the page dims everything that does not belong to it and marks that selection's share of every other chart. Where the cursor turns to a crosshair, click to pin the selection so it survives scrolling and tab changes; click again or press Esc to release."><input type="checkbox" id="hl-toggle" checked> <b>Data highlight</b></label></div>
     <div class="msel-shared-wrap"><div class="msel-panel" id="msel-panel-shared"></div></div>
     <label class="field"><span class="eyebrow">Review period</span>
       <select id="f-daterange">
@@ -2803,6 +2847,15 @@ applyReviews();
 /* ============================================================
    Derived indices
 ============================================================ */
+/* The hour the alerting activity was actually executed, taken from the earliest
+   deal on the alert. Booking time is a behaviour in its own right — concealment
+   clusters outside the hours anyone is watching — so it earns its own axis. */
+ALERTS.forEach(a=>{
+  let m=null;
+  a.tradeIds.forEach(id=>{ const t=TRADES_BY_ID[id]; if(t&&(m===null||t.execMin<m)) m=t.execMin; });
+  a.hour=m===null?null:Math.min(23,Math.floor(m/60));
+});
+
 const TRADER_STATS={};
 TRADERS.forEach(t=>TRADER_STATS[t.id]={id:t.id,name:t.name,deskId:t.deskId,cohort:t.cohort,
   trades:0,notional:0,pnl:0,alerts:0,crit:0,susp:0,score:0,rules:{}});
@@ -2855,6 +2908,7 @@ const state={
   blot:{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",from:"",to:"",
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
+  highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
   log:{who:"me",status:"",search:"",sort:{key:"reviewDay",dir:-1},page:0,per:25},
   ovMonthSel:null,
@@ -2896,6 +2950,189 @@ function tradeMatchesRail(t){
 }
 
 /* ============================================================
+   Data Highlight (brushing & linking)
+   The population is the alert book. Every panel tags its elements with the
+   dimensions each alert belongs to; hovering any one of them rewrites a single
+   <style> rule, so the browser does the matching and the cost is the same
+   whether twenty elements or two thousand are on screen.
+============================================================ */
+const HL_KEYS={trader:"data-hl-trader",desk:"data-hl-desk",rule:"data-hl-rule",cat:"data-hl-cat",
+  sev:"data-hl-sev",status:"data-hl-status",ac:"data-hl-ac",hour:"data-hl-hour",month:"data-hl-month"};
+const HL_NOUN={trader:"Trader",desk:"Trader group",rule:"Rule",cat:"Category",
+  sev:"Severity",status:"Disposition",ac:"Asset class",hour:"Booking hour",month:"Month"};
+const AGE_BUCKETS=[["0–2 days",0,2,"var(--pass)"],["3–5 days",3,5,"var(--agent)"],["6–10 days",6,10,"var(--warn)"],
+  ["11–20 days",11,20,"var(--fail)"],["20+ days",21,9999,"var(--violet)"]];
+const ageBucketOf=a=>{ const g=ageOf(a); for(const b of AGE_BUCKETS) if(g>=b[1]&&g<=b[2]) return b[0]; return AGE_BUCKETS[0][0]; };
+function hlMatches(a,key,val){
+  switch(key){
+    case "trader": return a.traderId===val;
+    case "desk":   return a.deskId===val;
+    case "rule":   return a.ruleId===val;
+    case "cat":    return a.cat===val;
+    case "sev":    return a.sev===val;
+    case "status": return a.status===val;
+    case "ac":     return a.acs.indexOf(val)>=0;
+    case "hour":   return a.hour===+val;
+    case "month":  return monthIdxOf(a.date)===+val;
+  }
+  return false;
+}
+/* What the selection contributes to every OTHER dimension. Without this, hovering
+   a trader would leave the severity donut and the monthly columns dark — those
+   are different cuts of the same alerts, not members of the selection. One pass
+   over the book, memoised per selection. */
+let HL_AGG=new Map();
+function hlAggregate(spec){
+  if(HL_AGG.has(spec)) return HL_AGG.get(spec);
+  const [key,val]=spec.split("|");
+  const r={trader:{},desk:{},rule:{},cat:{},sev:{},status:{},ac:{},hour:{},age:{},
+           month:Array(12).fill(0),days:Array(DAYS).fill(0),n:0,nPeriod:0,notional:0,
+           // Panels scoped to the review period need their own cut: sharing the
+           // 12-month one would size a marker against the wrong denominator.
+           period:{sev:{},status:{},cat:{},rule:{},trader:{},desk:{}}};
+  ALERTS.forEach(a=>{
+    if(!matchRail(a)||!hlMatches(a,key,val)) return;
+    r.n++; r.notional+=a.notional;
+    if(alertInRange(a)){
+      r.nPeriod++;
+      const P=r.period;
+      P.sev[a.sev]=(P.sev[a.sev]||0)+1;
+      P.status[a.status]=(P.status[a.status]||0)+1;
+      P.cat[a.cat]=(P.cat[a.cat]||0)+1;
+      P.rule[a.ruleId]=(P.rule[a.ruleId]||0)+1;
+      P.trader[a.traderId]=(P.trader[a.traderId]||0)+1;
+      P.desk[a.deskId]=(P.desk[a.deskId]||0)+1;
+    }
+    r.trader[a.traderId]=(r.trader[a.traderId]||0)+1;
+    r.desk[a.deskId]=(r.desk[a.deskId]||0)+1;
+    r.rule[a.ruleId]=(r.rule[a.ruleId]||0)+1;
+    r.cat[a.cat]=(r.cat[a.cat]||0)+1;
+    r.sev[a.sev]=(r.sev[a.sev]||0)+1;
+    r.status[a.status]=(r.status[a.status]||0)+1;
+    a.acs.forEach(x=>{ r.ac[x]=(r.ac[x]||0)+1; });
+    if(a.hour!=null) r.hour[a.hour]=(r.hour[a.hour]||0)+1;
+    if(isOpen(a)){ const b=ageBucketOf(a); r.age[b]=(r.age[b]||0)+1; }
+    const mi=monthIdxOf(a.date); if(mi>=0) r.month[mi]++;
+    r.days[a.day]++;
+  });
+  HL_AGG.set(spec,r);
+  return r;
+}
+/* Paint every aggregate: keep it lit when the selection is present in it, and
+   size its marker to the share the selection accounts for. Four passes, one per
+   marker shape — a div bar, a horizontal SVG bar, a vertical SVG column, and
+   the daily series. */
+/* "P:sev|Critical" reads the period-scoped cut; "sev|Critical" the 12-month one. */
+const hlSub=(agg,spec)=>{
+  if(!agg) return 0;
+  const i=spec.indexOf("|"), key=spec.slice(i+1);
+  let dim=spec.slice(0,i), src=agg;
+  if(dim.slice(0,2)==="P:"){ dim=dim.slice(2); src=agg.period; }
+  return ((src||{})[dim]||{})[key]||0;
+};
+function hlPaintAggregates(agg){
+  $$("[data-hl-agg]").forEach(el=>{
+    const spec=el.getAttribute("data-hl-agg");
+    const sub=hlSub(agg,spec);
+    el.classList.toggle("hl-has",!!agg&&sub>0);
+    const total=+el.getAttribute("data-hl-total")||0;
+    const mark=el.querySelector&&el.querySelector(".hlmark");
+    if(mark) mark.style.width=((total>0?Math.min(1,sub/total):0)*(+el.getAttribute("data-hl-rate")||100)).toFixed(1)+"%";
+  });
+  $$("rect.hlmark-svg").forEach(r=>{
+    const sub=hlSub(agg,r.getAttribute("data-hl-for"));
+    const total=+r.getAttribute("data-hl-total")||0, len=+r.getAttribute("data-hl-len")||0;
+    r.setAttribute("width",((total>0?Math.min(1,sub/total):0)*len).toFixed(1));
+  });
+  $$("rect.hlshare").forEach(r=>{
+    const sub=hlSub(agg,r.getAttribute("data-hl-for"));
+    const px=+r.getAttribute("data-hl-px")||0, base=+r.getAttribute("data-hl-base")||0;
+    const h=Math.max(0,sub*px);
+    r.setAttribute("height",h.toFixed(1));
+    r.setAttribute("y",(base-h).toFixed(1));
+  });
+  $$("path.hlseries").forEach(pth=>{
+    if(!agg){ pth.setAttribute("d",""); return; }
+    const x0=+pth.getAttribute("data-x0"), dx=+pth.getAttribute("data-dx");
+    const base=+pth.getAttribute("data-base"), py=+pth.getAttribute("data-py"), n=+pth.getAttribute("data-n");
+    const off=DAYS-n;
+    let d="M"+x0.toFixed(1)+","+base.toFixed(1);
+    for(let i=0;i<n;i++) d+=" "+(x0+i*dx).toFixed(1)+","+(base-agg.days[off+i]*py).toFixed(1);
+    pth.setAttribute("d",d+" "+(x0+(n-1)*dx).toFixed(1)+","+base.toFixed(1)+"Z");
+  });
+}
+let hlStyleEl=null, hlPinned=null;
+function hlStyle(){ if(!hlStyleEl){ hlStyleEl=document.createElement("style"); document.head.appendChild(hlStyleEl); } return hlStyleEl; }
+function hlApply(spec){
+  const st=hlStyle();
+  const [key,val]=spec?spec.split("|"):[];
+  const attr=spec?HL_KEYS[key]:null;
+  if(!spec||!attr||!state.highlight){
+    st.textContent=""; document.body.classList.remove("hl-active"); hlPaintAggregates(null); hlLabel(null); return;
+  }
+  // Asset class is multi-valued on an alert, so it matches on a word within the
+  // attribute; every other dimension is exact.
+  const op=key==="ac"?"~=":"=";
+  const sel="["+attr+op+JSON.stringify(val)+"]";
+  st.textContent=
+    ".hl-active "+sel+"{opacity:1 !important;filter:none !important}"+
+    ".hl-active .mcell"+sel+",.hl-active .tcard"+sel+",.hl-active .rulecard"+sel+
+      "{outline:2px solid var(--ink);outline-offset:-2px;z-index:6;position:relative}"+
+    ".hl-active .hlrow"+sel+",.hl-active tr"+sel+
+      "{background:color-mix(in srgb,var(--brand) 16%,transparent)}"+
+    ".hl-active rect"+sel+",.hl-active circle"+sel+"{stroke:var(--ink);stroke-width:1.6}";
+  document.body.classList.add("hl-active");
+  const agg=hlAggregate(spec);
+  hlPaintAggregates(agg);
+  hlLabel(spec,agg);
+}
+function hlLabel(spec,agg){
+  let el=$("#hl-pin");
+  if(!el){ el=document.createElement("div"); el.id="hl-pin"; el.className="hlpin"; document.body.appendChild(el); }
+  if(!spec||!state.highlight){ el.classList.remove("on"); return; }
+  const [k,v]=spec.split("|");
+  const label=k==="trader"?(TRADER_BY_ID[v]||{}).name||v
+    :k==="desk"?(DESK_BY_ID[v]||{}).name||v
+    :k==="rule"?v+" "+((RULE_BY_ID[v]||{}).name||"")
+    :k==="hour"?pad2(v)+":00–"+pad2((+v+1)%24)+":00"
+    :k==="month"?(MONTH_KEYS[+v]||{}).full||v:v;
+  el.innerHTML='<b></b><span></span>';
+  el.querySelector("b").textContent=(HL_NOUN[k]||k)+" · "+label;
+  el.querySelector("span").textContent="· "+fmtNum(agg?agg.n:0)+" alerts in scope"+
+    (hlPinned?" · pinned, click again or press Esc to release":"");
+  el.classList.add("on");
+}
+function hlSet(spec){ if(!hlPinned) hlApply(spec); }
+function hlClear(){ if(!hlPinned) hlApply(null); }
+function hlPin(spec){ hlPinned=hlPinned===spec?null:spec; hlApply(hlPinned); }
+/* The selection survives a re-render: panes are rebuilt from scratch on every
+   filter change, so the pinned rule has to be re-attached to the new nodes. */
+function hlRefresh(){ HL_AGG=new Map(); hlApply(hlPinned); }
+document.addEventListener("mouseover",e=>{
+  if(!state.highlight) return;
+  const src=e.target.closest("[data-hlsrc]");
+  if(src) hlSet(src.getAttribute("data-hlsrc")); else hlClear();
+});
+document.addEventListener("mouseout",e=>{
+  if(!state.highlight) return;
+  if(!e.relatedTarget||!e.relatedTarget.closest||!e.relatedTarget.closest("[data-hlsrc]")) hlClear();
+});
+/* Attribute bundle every alert-bearing element carries, so one selector lights
+   them all whichever dimension is hovered. */
+function hlAttrs(a){
+  return 'data-hl-trader="'+a.traderId+'" data-hl-desk="'+a.deskId+'" data-hl-rule="'+a.ruleId+
+    '" data-hl-cat="'+esc(a.cat)+'" data-hl-sev="'+a.sev+'" data-hl-status="'+esc(a.status)+
+    '" data-hl-ac="'+esc(a.acs.join(" "))+'" data-hl-hour="'+(a.hour==null?"":a.hour)+'"';
+}
+/* Aggregate bar: dims when the selection is absent from it, carries a marker
+   sized to the selection's share when present. */
+function hlAgg(dim,key,total,ratePct){
+  return 'data-hl-agg="'+esc(dim+"|"+key)+'" data-hl-total="'+total+'" data-hl-rate="'+(ratePct==null?100:ratePct)+'"';
+}
+/* Same, for a panel that only shows the selected review period. */
+const hlAggP=(dim,key,total,ratePct)=>hlAgg("P:"+dim,key,total,ratePct);
+
+/* ============================================================
    Chart primitives — hand-rolled SVG, themed through CSS variables
 ============================================================ */
 function donut(segs,cTop,cBot,size,thick){
@@ -2905,9 +3142,9 @@ function donut(segs,cTop,cBot,size,thick){
   let off=0,arcs="";
   segs.forEach(s=>{
     const len=Math.max(0,s.v)/tot*C;
-    arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="'+thick+
+    arcs+='<circle class="hlmember" cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="'+thick+
       '" stroke-dasharray="'+len.toFixed(2)+" "+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+
-      '" transform="rotate(-90 '+cx+" "+cy+')"><title>'+esc(s.label)+" "+((s.v/tot)*100).toFixed(1)+"%</title></circle>";
+      '" transform="rotate(-90 '+cx+" "+cy+')" '+(s.hl||"")+'><title>'+esc(s.label)+" "+((s.v/tot)*100).toFixed(1)+"%</title></circle>";
     off+=len;
   });
   return '<svg class="donut" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+" "+size+'">'+
@@ -2917,10 +3154,14 @@ function donut(segs,cTop,cBot,size,thick){
 }
 function donutLegend(segs,tot,clickAttr){
   const t=tot||segs.reduce((a,s)=>a+s.v,0)||1;
+  const max=Math.max(1,...segs.map(s=>s.v));
   return '<div class="dlegend"><div class="dhd"><span style="flex:1">Series</span><span class="damt">Count</span><span class="dpct">Share</span></div>'+
-    segs.map(s=>'<div class="drow" '+(clickAttr?clickAttr(s):"")+'><span class="dot" style="background:'+s.color+'"></span>'+
+    segs.map(s=>'<div class="drow" '+(clickAttr?clickAttr(s):"")+" "+(s.hl||"")+" "+(s.agg||"")+">"+
+      '<span class="dot" style="background:'+s.color+'"></span>'+
       '<span class="dlabel">'+esc(s.label)+'</span><span class="damt">'+fmtNum(s.v)+'</span>'+
-      '<span class="dpct" style="color:'+s.color+'">'+((s.v/t)*100).toFixed(1)+"%</span></div>").join("")+"</div>";
+      '<span class="dpct" style="color:'+s.color+'">'+((s.v/t)*100).toFixed(1)+"%</span>"+
+      '<span class="dtrack bar-mini"><i style="width:'+(s.v/max*100).toFixed(1)+"%;background:"+s.color+'"></i><i class="hlmark"></i></span>'+
+      "</div>").join("")+"</div>";
 }
 /* Stacked monthly columns. Rendered in a fixed viewBox and scaled by the well,
    so the same function fits a full-width panel and a drawer block. */
@@ -2937,6 +3178,7 @@ function stackedBars(cats,series,opts){
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
        '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
   }
+  const px=(H-padB-padT)/niceMax;   // pixels per alert, for the highlight overlay
   cats.forEach((c,i)=>{
     const x=padL+i*bw+(bw-bar)/2; let acc=0;
     const tot=c.parts.reduce((a,p)=>a+p.v,0);
@@ -2944,12 +3186,17 @@ function stackedBars(cats,series,opts){
     c.parts.forEach(p=>{
       if(p.v<=0) return;
       const y=Y(acc+p.v),h=Y(acc)-Y(acc+p.v);
-      g+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,h).toFixed(1)+
-        '" fill="'+p.color+'" rx="1.5" style="cursor:pointer" data-monthbar="'+i+'" data-tip="'+esc(c.label)+'" data-tipsub="'+tot+
+      g+='<rect class="hlctx" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,h).toFixed(1)+
+        '" fill="'+p.color+'" rx="1.5" style="cursor:pointer" data-monthbar="'+i+'" data-hl-sev="'+esc(p.label)+
+        (opts.hlMonth?'" data-hlsrc="month|'+i:"")+'" data-tip="'+esc(c.label)+'" data-tipsub="'+tot+
         ' alerts" data-tiptable="'+esc(tip)+'"/>';
       acc+=p.v;
     });
-    if(tot>0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
+    // The selection's own count for this month, drawn from the baseline up: the
+    // month a trader's pattern started is visible as a step in this overlay.
+    if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
+      '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
+    if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
     g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">'+esc(c.label)+"</text>";
     if(c.sub) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+23)+'" text-anchor="middle" font-size="7.5" fill="var(--ink-3)" opacity=".8">'+esc(c.sub)+"</text>";
   });
@@ -2979,12 +3226,22 @@ function dailyTrend(vals,opts){
     }
   }
   const area="M"+X(0).toFixed(1)+","+(H-padB)+" "+vals.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+" L"+X(n-1).toFixed(1)+","+(H-padB)+"Z";
-  g+='<path d="'+area+'" fill="color-mix(in srgb,var(--run) 16%,transparent)"/>';
-  g+='<polyline points="'+vals.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--run)" stroke-width="1.1" opacity=".85"/>';
+  g+='<path class="hlctx" d="'+area+'" fill="color-mix(in srgb,var(--run) 16%,transparent)"/>';
+  g+='<polyline class="hlctx" points="'+vals.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--run)" stroke-width="1.1" opacity=".85"/>';
   const ma=vals.map((_,i)=>{ const lo=Math.max(0,i-6); let s=0; for(let j=lo;j<=i;j++) s+=vals[j]; return s/(i-lo+1); });
-  g+='<polyline points="'+ma.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--violet)" stroke-width="2.2"/>';
+  g+='<polyline class="hlctx" points="'+ma.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--violet)" stroke-width="2.2"/>';
+  /* The selection's own daily counts, filled against the same axis. Against the
+     floor's volume it answers the question the total cannot: is this name's
+     activity constant, or did it start on a date? */
+  g+='<path class="hlseries" d="" fill="var(--ink)" fill-opacity=".62" stroke="var(--ink)" stroke-width="1" pointer-events="none"'+
+     ' data-x0="'+padL+'" data-dx="'+((W-padL-padR)/(n-1||1)).toFixed(4)+'" data-base="'+(H-padB)+
+     '" data-py="'+((H-padB-padT)/niceMax).toFixed(4)+'" data-n="'+n+'"/>';
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="none" role="img">'+g+"</svg>";
 }
+/* Ranked horizontal bars. Each row can declare itself an aggregate of one
+   dimension (`it.agg`), in which case it dims when the current selection is
+   absent from it and carries a dark marker sized to the selection's share of
+   that bar — the "how much of this rule is this one trader?" read. */
 function hbars(items,opts){
   opts=opts||{};
   const W=opts.w||520,rowH=opts.rowH||22,labW=opts.labW||150,valW=46;
@@ -2992,18 +3249,60 @@ function hbars(items,opts){
   const barW=W-labW-valW-8;
   let g="",y=6;
   items.forEach(it=>{
-    const w=it.v/max*barW;
+    const w=Math.max(1,it.v/max*barW);
+    const open=it.agg?'<g '+it.agg+" "+(it.hl||"")+' style="cursor:pointer">':"<g>";
+    g+=open;
     g+='<text x="0" y="'+(y+10)+'" font-size="9.5" fill="var(--ink-2)">'+esc(it.label)+"</text>";
-    g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+Math.max(1,w).toFixed(1)+'" height="11" rx="2.5" fill="'+(it.color||"var(--run)")+
+    g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+w.toFixed(1)+'" height="11" rx="2.5" fill="'+(it.color||"var(--run)")+
       '" style="cursor:pointer" '+(it.click||"")+'><title>'+esc(it.label)+": "+it.v+"</title></rect>";
     if(it.v2!=null){
       const w2=it.v2/max*barW;
       g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+Math.max(0,w2).toFixed(1)+'" height="11" rx="2.5" fill="var(--fail)" opacity=".92"><title>'+esc(it.label)+": "+it.v2+" suspicious</title></rect>";
     }
     g+='<text x="'+(W-2)+'" y="'+(y+10)+'" text-anchor="end" font-size="9.5" font-family="var(--mono)" font-weight="700" fill="var(--ink-2)">'+esc(it.vLabel||String(it.v))+"</text>";
+    g+="</g>";
+    if(it.aggKey) g+='<rect class="hlmark-svg" data-hl-for="'+esc(it.aggKey)+'" data-hl-total="'+it.v+'" data-hl-len="'+w.toFixed(1)+
+      '" x="'+labW+'" y="'+(y+1)+'" width="0" height="11" rx="2.5" fill="var(--ink)" pointer-events="none"/>';
     y+=rowH;
   });
   return '<svg viewBox="0 0 '+W+" "+Math.max(y+2,20)+'" preserveAspectRatio="xMinYMin meet" role="img">'+g+"</svg>";
+}
+/* Twenty-four columns, one per hour of the desk-local trading day. Shaded bands
+   mark the hours outside any desk's window, so "outside hours" is a region of
+   the chart rather than a number the reader has to hold in their head. */
+function hourChart(counts,opts){
+  opts=opts||{};
+  const W=opts.w||560,H=opts.h||212,padL=30,padB=28,padT=14,padR=8;
+  const max=Math.max(1,...counts), niceMax=Math.ceil(max/4)*4;
+  const bw=(W-padL-padR)/24, bar=Math.min(17,bw*0.72);
+  const Y=v=>H-padB-(v/niceMax)*(H-padB-padT);
+  const px=(H-padB-padT)/niceMax;
+  let g="";
+  // Nobody's desk is open before 07:00 or after 19:30 local.
+  [[0,7],[19.5,24]].forEach(b=>{
+    const x=padL+b[0]*bw;
+    g+='<rect x="'+x.toFixed(1)+'" y="'+padT+'" width="'+((b[1]-b[0])*bw).toFixed(1)+'" height="'+(H-padB-padT)+
+      '" fill="var(--fail)" opacity=".055"/>';
+  });
+  for(let i=0;i<=4;i++){
+    const v=niceMax*i/4,y=Y(v);
+    g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
+       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+  }
+  counts.forEach((v,h)=>{
+    const x=padL+h*bw+(bw-bar)/2;
+    const outside=h<7||h>=19;
+    g+='<rect class="hlctx" x="'+x.toFixed(1)+'" y="'+Y(v).toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,(H-padB)-Y(v)).toFixed(1)+
+      '" rx="1.5" fill="'+(outside?"var(--fail)":"var(--agent)")+'" data-hl-hour="'+h+'" data-hlsrc="hour|'+h+'" data-hlpin="1"'+
+      ' style="cursor:pointer" data-tip="'+pad2(h)+":00 – "+pad2((h+1)%24)+':00" data-tipsub="'+(outside?"Outside every desk's trading window":"Within desk hours")+
+      '" data-tiptable="Alerts|'+v+"§Share of all alerts|"+(v/Math.max(1,counts.reduce((a,c)=>a+c,0))*100).toFixed(1)+'%"/>';
+    g+='<rect class="hlshare" data-hl-for="hour|'+h+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
+      '" x="'+(x+bar*0.26).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.48).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
+    if(h%3===0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+pad2(h)+"</text>";
+  });
+  g+='<text x="'+(padL+3.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside desk hours</text>';
+  g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside</text>';
+  return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
 function spark(vals,w,h,color){
   w=w||84;h=h||22;
@@ -3039,10 +3338,11 @@ function bubbleChart(pts,opts){
   g+='<text x="11" y="'+midY.toFixed(1)+'" transform="rotate(-90 11 '+midY.toFixed(1)+')" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Alerts</text>';
   pts.forEach(p=>{
     const r=4+ (p.r/maxR)*13;
-    g+='<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+p.color+
+    g+='<circle class="hlmember" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+p.color+
       '" fill-opacity=".55" stroke="'+p.color+'" stroke-width="1.2" style="cursor:pointer" data-trader="'+p.id+
+      '" data-hl-trader="'+p.id+'" data-hl-desk="'+esc(p.deskId||"")+'" data-hlsrc="trader|'+p.id+
       '" data-tip="'+esc(p.label)+'" data-tipsub="'+esc(p.sub)+'" data-tiptable="'+esc(p.tip)+'"/>';
-    if(p.big) g+='<text x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
+    if(p.big) g+='<text class="hlmember" data-hl-trader="'+p.id+'" x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
@@ -3114,7 +3414,7 @@ const ageOf=a=>DAYS-1-a.day;
    Pane — Surveillance overview
 ============================================================ */
 function paneOverview(){
-  const scoped=scopedAlerts(), open=openAlerts();
+  const scoped=scopedAlerts(), open=openAlerts(), scopedAll=allScopedAlerts();
   const today=ALERTS.filter(a=>a.day===DAYS-1&&matchRail(a));
   const crit=open.filter(a=>a.sev==="Critical");
   const decided=scoped.filter(a=>!isOpen(a));
@@ -3137,7 +3437,7 @@ function paneOverview(){
 
   // Monthly volume, stacked by severity.
   const months=MONTH_KEYS.map((mk,i)=>{
-    const inM=allScopedAlerts().filter(a=>monthIdxOf(a.date)===i);
+    const inM=scopedAll.filter(a=>monthIdxOf(a.date)===i);
     return {label:mk.label,sub:i===0||mk.m===0?String(mk.y).slice(2):"",
       parts:SEV_ORDER.map(s=>({label:s,v:inM.filter(a=>a.sev===s).length,color:SEV_COLOR[s]}))};
   });
@@ -3147,18 +3447,23 @@ function paneOverview(){
   // Daily trend across the full year, irrespective of the period selector — a
   // step change three months ago still matters when today's queue looks calm.
   const daily=Array(DAYS).fill(0);
-  allScopedAlerts().forEach(a=>daily[a.day]++);
+  scopedAll.forEach(a=>daily[a.day]++);
+
+  const sevTot=scoped.length||1, stTot=scoped.length||1;
+  sevSegs.forEach(sg=>{ sg.hl='data-hlsrc="sev|'+esc(sg.label)+'" data-hl-sev="'+esc(sg.label)+'"'; sg.agg=hlAggP("sev",sg.label,sg.v); });
+  stSegs.forEach(sg=>{ sg.hl='data-hlsrc="status|'+esc(sg.label)+'" data-hl-status="'+esc(sg.label)+'"'; sg.agg=hlAggP("status",sg.label,sg.v); });
 
   const rowA='<div class="grid2b">'+
-    panel("Alert volume by month","stacked by severity · rolling 12 months",
-      '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266})+"</div></div>",
-      "Each column is one calendar month of alerts across every rule. "+
+    panel("Alert volume by month","stacked by severity · rolling 12 months · dark overlay = current selection",
+      '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266,hlMonth:true})+"</div></div>",
+      "Each column is one calendar month of alerts across every rule. With <b>Data highlight</b> on, hovering a trader or a rule anywhere "+
+      "on the page draws their own count inside each column — the month a pattern started shows up as a step. "+
       "<b>Click a column</b> to open that month in the Detections queue.")+
     panel("Severity mix","last "+state.dateRangeDays+" days",
       '<div class="panel-body"><div class="chart-well donut-well">'+
       donut(sevSegs,String(scoped.length),"alerts",156,24)+
       donutLegend(sevSegs,scoped.length,s=>'data-sevclick="'+esc(s.label)+'"')+"</div></div>",
-      "Critical and High carry a 3-business-day disposition target. <b>Click a row</b> to filter the queue.")+
+      "Critical and High carry a 3-business-day disposition target. <b>Hover a row</b> to light that severity across the page, <b>click</b> to filter the queue.")+
     "</div>";
 
   const rowB='<div class="grid2c">'+
@@ -3167,17 +3472,47 @@ function paneOverview(){
       donut(stSegs,decided.length?fmtPct(passed.length/decided.length,0):"—","passed",156,24)+
       donutLegend(stSegs,scoped.length,s=>'data-statusclick="'+esc(s.label)+'"')+"</div></div>",
       "A high pass rate on one rule is a tuning problem; a low one on a trader is not.")+
-    panel("Detection volume — daily","full 12 months · 7-day mean overlaid",
+    panel("Detection volume — daily","full 12 months · 7-day mean · dark fill = current selection",
       '<div class="panel-body" style="padding-bottom:4px"><div class="chart-well">'+dailyTrend(daily,{w:900,h:236})+"</div></div>"+
       '<div class="trendkey"><span><i class="lk" style="background:var(--run)"></i>Alerts raised per day</span>'+
-      '<span><i class="lk" style="background:var(--violet)"></i>7-day mean</span></div>',
-      "Volume spikes cluster on month ends and around the quarterly reporting dates.")+
+      '<span><i class="lk" style="background:var(--violet)"></i>7-day mean</span>'+
+      '<span><i class="lk" style="background:var(--ink)"></i>Highlighted selection</span></div>',
+      "Volume spikes cluster on month ends and around the quarterly reporting dates. Hovering a name elsewhere on the page fills in that trader's own "+
+      "daily series against the floor's, which is where a pattern that starts on a date separates from one that has always been there.")+
+    "</div>";
+
+  /* Two charts that exist for the linking: a category fingerprint and a
+     booking-hour profile. Neither says much on its own — the floor's mix and
+     the floor's working day are unremarkable — but under a selection they are
+     the two fastest reads in surveillance. Is this name's activity spread
+     across unrelated typologies, or concentrated in one? And is it happening
+     when anybody is watching? */
+  const catRows=RULE_CATS.map(c=>{
+    const hits=scopedAll.filter(a=>a.cat===c);
+    const n=hits.length;
+    return {label:c,v:n,v2:hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length,
+      color:"var(--agent)",agg:hlAgg("cat",c,n),aggKey:"cat|"+c,
+      hl:'data-hlsrc="cat|'+esc(c)+'" data-hl-cat="'+esc(c)+'" data-hlpin="1"'};
+  }).sort((a,b)=>b.v-a.v);
+
+  const hourCounts=Array(24).fill(0);
+  scopedAll.forEach(a=>{ if(a.hour!=null) hourCounts[a.hour]++; });
+  const hourMax=Math.max(1,...hourCounts);
+
+  const rowH='<div class="grid2">'+
+    panel("Typology fingerprint","alerts by rule category · 12 months",
+      '<div class="panel-body"><div class="chart-well">'+hbars(catRows,{w:520,rowH:23,labW:150})+"</div></div>",
+      "The floor's mix is unremarkable; one person's is not. <b>Hover a trader</b> and the dark markers show how much of each category is theirs — "+
+      "risk concentrated in a single category is a specialism, risk spread across four unrelated ones is a method. <b>Click a category</b> to pin it.")+
+    panel("Booking-hour profile","alerting activity by execution hour · desk-local time",
+      '<div class="panel-body"><div class="chart-well">'+hourChart(hourCounts,{w:560,h:212})+"</div></div>",
+      "When the alerting deals were actually struck. The floor's shape is the trading day; a selection that sits outside it — "+
+      "before the open, after the close, through the night — is the shape concealment makes. <b>Click an hour</b> to pin it.")+
     "</div>";
 
   /* Rule × trader. The columns are people, not desks: a typology firing four
      times against one name is the finding, and it is exactly what a desk column
      hides when it pools twelve traders into one number. */
-  const scopedAll=allScopedAlerts();
   const traderCols=Object.values(TRADER_STATS)
     .filter(traderInRail)
     .map(s=>({s,n:scopedAll.filter(a=>a.traderId===s.id).length}))
@@ -3193,34 +3528,42 @@ function paneOverview(){
   });
   const matrix=panel("Where the patterns are firing","rule × trader · "+traderCols.length+" busiest names · full 12 months · darker = more alerts",
     '<div class="matwrap tallmat"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
-    traderCols.map(s=>'<th class="colhd"><div>'+esc(s.name)+"</div></th>").join("")+'<th class="colhd"><div>All traders</div></th></tr></thead><tbody>'+
-    mat.map(row=>'<tr><th class="rowhd" data-tip="'+esc(row.rule.name)+'" data-tipsub="'+esc(row.rule.desc)+'"><b>'+row.rule.id+"</b>"+esc(row.rule.name)+"</th>"+
-      row.cells.map(c=>'<td><button class="mcell'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,matMax)+
-        '" data-trrule="'+c.tr.id+"|"+row.rule.id+'" data-tip="'+esc(c.tr.name)+'" data-tipsub="'+esc(row.rule.id+" · "+row.rule.name)+
+    traderCols.map(s=>'<th class="colhd" data-hlsrc="trader|'+s.id+'" data-hlpin="1" data-tip="'+esc(s.name)+
+      '" data-tipsub="'+esc(DESK_BY_ID[s.deskId].name)+'" data-tiptable="Risk index|'+s.idx.toFixed(1)+"§Versus cohort|×"+s.peer+
+      "§Alerts|"+s.alerts+'"><div>'+esc(s.name)+"</div></th>").join("")+'<th class="colhd"><div>All traders</div></th></tr></thead><tbody>'+
+    mat.map(row=>'<tr><th class="rowhd" data-hlsrc="rule|'+row.rule.id+'" data-hlpin="1" data-tip="'+esc(row.rule.name)+'" data-tipsub="'+esc(row.rule.desc)+'"><b>'+row.rule.id+"</b>"+esc(row.rule.name)+"</th>"+
+      row.cells.map(c=>'<td><button class="mcell hlmember'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,matMax)+
+        '" data-hl-trader="'+c.tr.id+'" data-hl-desk="'+c.tr.deskId+'" data-hl-rule="'+row.rule.id+'" data-hl-cat="'+esc(row.rule.cat)+
+        '" data-hl-sev="'+row.rule.sev+'" data-trrule="'+c.tr.id+"|"+row.rule.id+'" data-tip="'+esc(c.tr.name)+'" data-tipsub="'+esc(row.rule.id+" · "+row.rule.name)+
         '" data-tiptable="Alerts|'+c.n+"§Rule severity|"+row.rule.sev+"§Trader risk index|"+c.tr.idx.toFixed(1)+"§Versus cohort|×"+c.tr.peer+
         "§Group|"+esc(DESK_BY_ID[c.tr.deskId].short)+'">'+(c.n||"·")+"</button></td>").join("")+
-      '<td><button class="mcell" style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="Every trader">'+row.total+"</button></td></tr>").join("")+
+      '<td><button class="mcell" '+hlAgg("rule",row.rule.id,row.total)+' style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="Every trader">'+row.total+"</button></td></tr>").join("")+
     "</tbody></table></div>"+
     '<div class="mkey"><span class="kl">Alerts per cell</span><i style="background:var(--heat-0)"></i><span>0</span>'+
     '<i style="background:'+heatColor(matMax*0.2,matMax)+'"></i><span>low</span>'+
     '<i style="background:'+heatColor(matMax*0.55,matMax)+'"></i><span>mid</span>'+
     '<i style="background:'+heatColor(matMax,matMax)+'"></i><span>'+matMax+'</span></div>',
-    "<b>Click any cell</b> to open that trader and rule in the Detections queue. A lit column is one person, not a department: read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning.");
+    "<b>Click any cell</b> to open that trader and rule in the Detections queue. A lit column is one person, not a department: read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning. "+
+    "<b>Hover a name or a rule label</b> to light it across every panel on the page; <b>click the label</b> to pin that selection so it survives scrolling and tab changes.");
 
   // Bottom row: rules, traders, ageing.
   const ruleItems=RULES.map(r=>{
-    const hits=allScopedAlerts().filter(a=>a.ruleId===r.id);
+    const hits=scopedAll.filter(a=>a.ruleId===r.id);
     return {label:r.id+" "+r.name.slice(0,26),v:hits.length,
       v2:hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length,
-      color:SEV_COLOR[r.sev],click:'data-ruleclick="'+r.id+'"'};
+      color:SEV_COLOR[r.sev],click:'data-ruleclick="'+r.id+'"',
+      agg:hlAgg("rule",r.id,hits.length),aggKey:"rule|"+r.id,
+      hl:'data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'"'};
   }).sort((a,b)=>b.v-a.v).slice(0,10);
 
   const tstats=Object.values(TRADER_STATS).filter(traderInRail)
     .sort((a,b)=>b.idx-a.idx).slice(0,10);
   const maxIdx=Math.max(1,...tstats.map(s=>s.idx));
 
-  const buckets=[["0–2 days",0,2,"var(--pass)"],["3–5 days",3,5,"var(--agent)"],["6–10 days",6,10,"var(--warn)"],["11–20 days",11,20,"var(--fail)"],["20+ days",21,9999,"var(--violet)"]];
-  const ageItems=buckets.map(b=>({label:b[0],v:open.filter(a=>ageOf(a)>=b[1]&&ageOf(a)<=b[2]).length,color:b[3]}));
+  const ageItems=AGE_BUCKETS.map(b=>{
+    const n=open.filter(a=>ageOf(a)>=b[1]&&ageOf(a)<=b[2]).length;
+    return {label:b[0],v:n,color:b[3],agg:hlAgg("age",b[0],n),aggKey:"age|"+b[0]};
+  });
 
   const rowC='<div class="grid3">'+
     panel("Top rules by hits","12 months · red overlay = confirmed suspicious",
@@ -3229,7 +3572,8 @@ function paneOverview(){
     panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
-        return '<div class="rrow2" data-trader="'+s.id+'"><div class="rl"><b>'+esc(s.name)+"</b>"+
+        return '<div class="rrow2 hlmember" data-trader="'+s.id+'" data-hlsrc="trader|'+s.id+'" data-hl-trader="'+s.id+
+          '" data-hl-desk="'+s.deskId+'"><div class="rl"><b>'+esc(s.name)+"</b>"+
           '<div class="sub2">'+esc(DESK_BY_ID[s.deskId].short)+(t.arc?" · "+esc(t.arc):"")+"</div></div>"+
           '<div class="rv">'+s.idx.toFixed(1)+'<span class="sub2" style="margin-left:5px">×'+s.peer+"</span></div>"+
           '<div class="rfull"><span class="bar-mini"><i style="width:'+(s.idx/maxIdx*100).toFixed(0)+"%;background:"+
@@ -3242,7 +3586,8 @@ function paneOverview(){
       "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
     "</div>";
 
-  return kpis+rowA+'<div class="mt14">'+rowB+"</div>"+'<div class="mt14">'+matrix+"</div>"+'<div class="mt14">'+rowC+"</div>";
+  return kpis+rowA+'<div class="mt14">'+rowB+"</div>"+'<div class="mt14">'+rowH+"</div>"+
+    '<div class="mt14">'+matrix+"</div>"+'<div class="mt14">'+rowC+"</div>";
 }
 
 /* ============================================================
@@ -3293,7 +3638,8 @@ function paneDetections(){
     "<th>Pattern observed</th>"+sortTh("det","notional","Notional","r")+sortTh("det","age","Age","r")+sortTh("det","status","Status")+
     "</tr></thead><tbody>"+page.map(a=>{
       const age=ageOf(a), breach=isOpen(a)&&SEV_RANK[a.sev]>=3&&age>3;
-      return '<tr class="clickable '+(a.sev==="Critical"?"sev-crit":a.sev==="High"?"sev-high":"")+'" data-alert="'+a.id+'">'+
+      return '<tr class="clickable hlmember '+(a.sev==="Critical"?"sev-crit":a.sev==="High"?"sev-high":"")+'" data-alert="'+a.id+
+        '" data-hlsrc="trader|'+a.traderId+'" '+hlAttrs(a)+">"+
         '<td class="mono">'+a.id+'<div class="sub2">'+fmtDateShort(a.date)+" "+a.date.getFullYear()+"</div></td>"+
         "<td><b>"+a.ruleId+'</b><div class="sub2">'+esc(a.rule)+"</div></td>"+
         "<td>"+sevTag(a.sev)+"</td>"+
@@ -3327,7 +3673,8 @@ function paneRules(){
     const dec=hits.filter(a=>!isOpen(a));
     const passed=dec.filter(a=>a.status==="Passed").length;
     const months=MONTH_KEYS.map((mk,i)=>hits.filter(a=>monthIdxOf(a.date)===i).length);
-    return '<div class="rulecard" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+'">'+
+    return '<div class="rulecard hlmember" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+
+      '" data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'" data-hl-cat="'+esc(r.cat)+'" data-hl-sev="'+r.sev+'">'+
       '<div class="rhd"><span class="rid">'+r.id+"</span><h4>"+esc(r.name)+"</h4>"+sevTag(r.sev)+"</div>"+
       "<p>"+esc(r.desc)+"</p>"+
       '<div class="logic"><b>Test:</b> '+esc(r.logic)+"</div>"+
@@ -3467,7 +3814,8 @@ function paneTraders(){
   const maxIdx=Math.max(1,...rows.map(r=>r.s.idx));
   const cards=rows.slice().sort((a,b)=>b.s.idx-a.s.idx).map(r=>{
     const c=r.s.idx>maxIdx*0.6?"var(--fail)":r.s.idx>maxIdx*0.3?"var(--warn)":r.s.idx>maxIdx*0.12?"var(--run)":"var(--pass)";
-    return '<div class="tcard" style="--accent:'+c+'" data-trader="'+r.t.id+'">'+
+    return '<div class="tcard hlmember" style="--accent:'+c+'" data-trader="'+r.t.id+'" data-hlsrc="trader|'+r.t.id+
+      '" data-hl-trader="'+r.t.id+'" data-hl-desk="'+r.t.deskId+'">'+
       '<div><div class="tn">'+esc(r.t.name)+'</div><div class="td">'+esc(DESK_BY_ID[r.t.deskId].name)+" · "+esc(r.t.grade)+"</div></div>"+
       '<div class="trow"><span>Risk index</span><b style="color:'+c+'">'+r.s.idx.toFixed(1)+"</b></div>"+
       '<div class="trow"><span>Versus cohort</span><b style="color:'+(r.s.peer>=2?c:"inherit")+'">×'+r.s.peer+"</b></div>"+
@@ -3481,7 +3829,7 @@ function paneTraders(){
   }).join("");
 
   const pts=rows.map(r=>({
-    id:r.t.id, x:r.s.trades, y:r.alerts, r:Math.max(1,r.susp+1), big:r.s.idx>maxIdx*0.5,
+    id:r.t.id, deskId:r.t.deskId, x:r.s.trades, y:r.alerts, r:Math.max(1,r.susp+1), big:r.s.idx>maxIdx*0.5,
     color:r.s.idx>maxIdx*0.6?"var(--fail)":r.s.idx>maxIdx*0.3?"var(--warn)":"var(--run)",
     label:r.t.name, sub:DESK_BY_ID[r.t.deskId].name,
     tip:["Deals booked|"+fmtNum(r.s.trades),"Alerts|"+r.alerts,"Critical|"+r.crit,"Upheld|"+r.susp,
@@ -3500,16 +3848,19 @@ function paneTraders(){
   const rowA='<div class="grid2">'+
     panel("Alerts against volume","bubble size = alerts upheld as suspicious",
       '<div class="panel-body"><div class="chart-well tall">'+bubbleChart(pts,{w:600,h:300})+"</div></div>",
-      "A name sitting high and to the left alerts more than its trading volume explains. <b>Click a bubble</b> for the trader file.")+
+      "A name sitting high and to the left alerts more than its trading volume explains. <b>Hover a bubble</b> to light that trader everywhere, <b>click</b> for the trader file.")+
     panel("Trader × rule","which of the "+RULES.length+" typologies each name triggers · 12 months",
       '<div class="matwrap tallmat" style="padding-top:2px"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
-      RULES.map(r=>'<th class="colhd"><div>'+r.id+" "+esc(r.name.slice(0,20))+"</div></th>").join("")+"</tr></thead><tbody>"+
-      tmat.map(row=>'<tr><th class="rowhd">'+esc(row.r.t.name)+"</th>"+
-        row.cells.map(c=>'<td><button class="mcell'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,tmMax)+
-          '" data-trrule="'+row.r.t.id+"|"+c.rule.id+'" data-tip="'+esc(row.r.t.name)+'" data-tipsub="'+esc(c.rule.id+" · "+c.rule.name)+
+      RULES.map(r=>'<th class="colhd" data-hlsrc="rule|'+r.id+'" data-hlpin="1" data-tip="'+esc(r.name)+'" data-tipsub="'+esc(r.cat)+
+        '"><div>'+r.id+" "+esc(r.name.slice(0,20))+"</div></th>").join("")+"</tr></thead><tbody>"+
+      tmat.map(row=>'<tr><th class="rowhd" data-hlsrc="trader|'+row.r.t.id+'" data-hlpin="1">'+esc(row.r.t.name)+"</th>"+
+        row.cells.map(c=>'<td><button class="mcell hlmember'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,tmMax)+
+          '" data-hl-trader="'+row.r.t.id+'" data-hl-desk="'+row.r.t.deskId+'" data-hl-rule="'+c.rule.id+'" data-hl-cat="'+esc(c.rule.cat)+
+          '" data-hl-sev="'+c.rule.sev+'" data-trrule="'+row.r.t.id+"|"+c.rule.id+'" data-tip="'+esc(row.r.t.name)+'" data-tipsub="'+esc(c.rule.id+" · "+c.rule.name)+
           '" data-tiptable="Alerts|'+c.n+'">'+(c.n||"·")+"</button></td>").join("")+"</tr>").join("")+
       "</tbody></table></div>",
-      "A row lit across several unrelated rules is the signature worth pulling — one typology can be an accident, four is a method.")+
+      "A row lit across several unrelated rules is the signature worth pulling — one typology can be an accident, four is a method. "+
+      "<b>Hover a name or a rule label</b> to carry that selection across the page; <b>click it</b> to pin.")+
     "</div>";
 
   /* Trader groups. A desk is a reporting line, so the row is a roll-up of the
@@ -3536,10 +3887,10 @@ function paneTraders(){
     '<th class="r">Alerts</th><th class="r">Critical</th><th class="r">Open</th><th class="r">Upheld</th></tr></thead><tbody>'+
     groups.map(g=>{
       const w=g.worst, c=w.s.idx>gMax*0.6?"var(--fail)":w.s.idx>gMax*0.3?"var(--warn)":"var(--run)";
-      return '<tr><td><b class="clickable" data-deskclick="'+g.d.id+'">'+esc(g.d.name)+"</b></td><td>"+esc(g.d.region)+"</td>"+
+      return '<tr '+hlAgg("desk",g.d.id,g.alerts)+' data-hlsrc="desk|'+g.d.id+'"><td><b class="clickable" data-deskclick="'+g.d.id+'">'+esc(g.d.name)+"</b></td><td>"+esc(g.d.region)+"</td>"+
         '<td class="r mono">'+g.members.length+'</td>'+
         '<td class="r mono'+(g.hot.length?" failc":"")+'">'+g.hot.length+"</td>"+
-        '<td><span class="clickable" data-trader="'+w.t.id+'"><b>'+esc(w.t.name)+"</b> "+
+        '<td><span class="clickable" data-trader="'+w.t.id+'" data-hlsrc="trader|'+w.t.id+'"><b>'+esc(w.t.name)+"</b> "+
           '<span class="mono" style="color:'+c+'">'+w.s.idx.toFixed(1)+"</span> "+
           '<span class="sub2">×'+w.s.peer+" vs cohort</span></span></td>"+
         '<td class="r mono">'+g.med.toFixed(1)+"</td>"+
@@ -3637,7 +3988,7 @@ function paneLog(){
     sortTh("log","reviewDay","Decided")+sortTh("log","day","Alert")+sortTh("log","rule","Rule")+sortTh("log","sev","Sev")+
     sortTh("log","trader","Trader")+"<th>Outcome</th><th>Reason recorded</th><th>Reviewer</th>"+sortTh("log","notional","Notional","r")+
     "</tr></thead><tbody>"+page.map(a=>
-      '<tr class="clickable" data-alert="'+a.id+'">'+
+      '<tr class="clickable hlmember" data-alert="'+a.id+'" data-hlsrc="trader|'+a.traderId+'" '+hlAttrs(a)+">"+
       '<td class="mono">'+(a.reviewDay!=null?fmtDateShort(dateForIdx(a.reviewDay)):"—")+
         '<div class="sub2">'+(a.reviewDay!=null?(a.reviewDay-a.day)+"d after alert":"")+"</div></td>"+
       '<td class="mono">'+a.id+'<div class="sub2">'+fmtDateShort(a.date)+"</div></td>"+
@@ -3952,6 +4303,9 @@ function render(){
   $("#pane").innerHTML=PANES[state.tab]();
   $$(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
   Object.keys(MSEL_OPTS).forEach(refreshMselBtn);
+  // The pane is rebuilt from scratch, so a pinned selection has to be
+  // re-attached to the new nodes and its aggregate cache re-cut to the rail.
+  hlRefresh();
 }
 function goDetections(patch){
   Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0},patch||{});
@@ -4005,6 +4359,8 @@ document.addEventListener("click",e=>{
   const pg=t.closest("[data-page]"); if(pg){ const p=pg.dataset.page.split("|"); state[p[0]].page=+p[1]; render();
     window.scrollTo({top:document.body.scrollHeight*0.35,behavior:"instant"}); return; }
   if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return; }
+  const pin=t.closest("[data-hlpin]");
+  if(pin&&state.highlight){ e.preventDefault(); hlPin(pin.getAttribute("data-hlsrc")); return; }
   if(t.closest("#b-clear")){ Object.assign(state.blot,{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",
     from:isoDate(dateAt(29)),to:isoDate(TODAY),page:0}); render(); return; }
 
@@ -4023,6 +4379,7 @@ document.addEventListener("click",e=>{
 
 document.addEventListener("change",e=>{
   const t=e.target;
+  if(t.id==="hl-toggle"){ state.highlight=t.checked; hlPinned=null; hlApply(null); return; }
   const mv=t.dataset.mselv;
   if(mv){ const p=mv.split("|"); const set=state.filters[p[0]];
     if(t.checked) set.add(p[1]); else set.delete(p[1]);
@@ -4055,7 +4412,7 @@ document.addEventListener("input",e=>{
               "l-search":v=>{state.log.search=v;state.log.page=0;}};
   if(live[id]){ clearTimeout(_typing); _typing=setTimeout(()=>liveInput(id,live[id]),160); }
 });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ closeDrawer(); closeMsel(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); } });
 
 /* ============================================================
    Boot
