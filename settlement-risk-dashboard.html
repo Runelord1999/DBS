@@ -209,7 +209,18 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .block .trendkey{padding:2px 0 8px;gap:12px}
 .machk{display:inline-flex;align-items:center;gap:6px;font-size:0.65625rem;color:var(--ink-2);font-weight:600;cursor:pointer;white-space:nowrap}
 .machk input{accent-color:var(--violet);width:13px;height:13px;cursor:pointer}
-.chart-well.donut-well{gap:22px;flex-wrap:wrap}
+.chart-well.donut-well{gap:18px;flex-wrap:wrap;height:auto;min-height:206px;padding:4px 0}
+.grid3 .chart-well.donut-well{height:auto;min-height:206px}
+/* Compact legend so all three slices plus the excess line fit beside the donut. */
+.dlegend{flex:1;min-width:15em}
+.dlegend .drow{display:flex;align-items:center;gap:7px;margin-bottom:7px;font-size:0.6875rem}
+.dlegend .drow:last-of-type{margin-bottom:0}
+.dlegend .dot{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+.dlegend .dlabel{flex:1;min-width:0;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dlegend .damt{width:5.8em;text-align:right;color:var(--ink-3)}
+.dlegend .dpct{width:3.8em;text-align:right;font-weight:700}
+.dlegend .dhd{display:flex;gap:7px;font-size:0.5625rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.dlegend .dexcess{margin-top:8px;padding-top:8px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:7px;font-size:0.625rem}
 .chart-well.donut-well svg.donut{width:auto;height:auto;flex:0 0 auto}
 /* Evenly distributed stat lists so 5-row and 10-row panels still end flush. */
 .dist-list{display:flex;flex-direction:column;justify-content:space-between;height:252px}
@@ -1999,11 +2010,11 @@ function paneOverviewPortfolio(){
   <div class="grid3">
     <div class="panel"><div class="panel-hd" data-tip="Total SR pool split into Utilized (drawn against customer limits, capped at 100% per customer), Available (unused allocated capacity) and Reserved (held back, not yet allocated)."><h3>SR pool composition</h3><span class="slo">Utilized · Available · Reserved</span></div>
       <div class="panel-body"><div class="chart-well donut-well">
-        ${donut(pieSegs,fmtM(grand),"total pool")}
-        <div style="flex:1;min-width:210px">
-        <div class="colhd" style="margin-bottom:9px"><div style="width:18px"></div><div style="flex:1"></div><div style="width:62px;text-align:right">Amount</div><div style="width:60px;text-align:right">Share of pool</div></div>
-        ${pieSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${s.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${s.label}</span><span class="num muted" style="width:62px;text-align:right">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="num" style="font-weight:700;width:60px;text-align:right">${s.v.toFixed(1)}%</span></div>`).join("")}
-        ${excessM>0?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
+        ${donut(pieSegs,fmtM(grand),"total pool",150,24)}
+        <div class="dlegend">
+        <div class="dhd"><span style="width:9px"></span><span style="flex:1"></span><span style="width:5.8em;text-align:right">Amount</span><span style="width:3.8em;text-align:right">Share</span></div>
+        ${pieSegs.map(s=>`<div class="drow"><span class="dot" style="background:${s.color}"></span><span class="dlabel">${s.label}</span><span class="damt num">${fmtM(s.label==="Utilized"?utilizedRaw:s.label==="Available"?available:reserved)}</span><span class="dpct num">${s.v.toFixed(1)}%</span></div>`).join("")}
+        ${excessM>0?`<div class="dexcess"><span class="tag t-fail">Excess</span><span style="flex:1;color:var(--ink-2)">Drawn above approved limits</span><span class="num failc" style="font-weight:700">${fmtM(excessM)}</span></div>`:""}</div>
       </div></div>
 </div>
     <div class="panel"><div class="panel-hd" data-tip="How many customers sit in each utilization band right now. The two right-hand bands are the risk tail."><h3>Utilization distribution</h3><span class="slo">customer count by band</span></div>
@@ -2072,8 +2083,10 @@ function paneOverviewCustomer(c){
     <div class="panel"><div class="panel-hd"><h3>SR limit composition — ${esc(c.name)}</h3><span class="slo">Utilized · Available</span></div>
       <div class="panel-body"><div class="chart-well donut-well">
         ${donut(pieSegs,fmtM(c.limitM),"SR limit")}
-        <div style="flex:1;min-width:190px">${pieSegs.map(sg=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${sg.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${sg.label}</span><span class="num muted" style="margin-right:10px">${fmtM(sg.label==="Utilized"?Math.min(1,cur)*c.limitM:Math.max(0,1-Math.min(1,cur))*c.limitM)}</span><span class="num" style="font-weight:700;width:46px;text-align:right">${sg.v.toFixed(1)}%</span></div>`).join("")}
-        ${cur>1?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Breach</span><span style="flex:1;color:var(--ink-2)">${fmtPct(cur-1)} over approved limit</span><span class="num failc" style="font-weight:700">${fmtM((cur-1)*c.limitM)}</span></div>`:""}</div>
+        <div class="dlegend">
+        <div class="dhd"><span style="width:9px"></span><span style="flex:1"></span><span style="width:5.8em;text-align:right">Amount</span><span style="width:3.8em;text-align:right">Share</span></div>
+        ${pieSegs.map(sg=>`<div class="drow"><span class="dot" style="background:${sg.color}"></span><span class="dlabel">${sg.label}</span><span class="damt num">${fmtM(sg.label==="Utilized"?Math.min(1,cur)*c.limitM:Math.max(0,1-Math.min(1,cur))*c.limitM)}</span><span class="dpct num">${sg.v.toFixed(1)}%</span></div>`).join("")}
+        ${cur>1?`<div class="dexcess"><span class="tag t-fail">Breach</span><span style="flex:1;color:var(--ink-2)">${fmtPct(cur-1)} over approved limit</span><span class="num failc" style="font-weight:700">${fmtM((cur-1)*c.limitM)}</span></div>`:""}</div>
       </div></div></div>
     <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation &amp; drawn against the ${fmtM(c.limitM)} limit</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
