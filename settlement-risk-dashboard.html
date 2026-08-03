@@ -384,6 +384,11 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
   background:var(--ink);opacity:.6;box-shadow:0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)}
 .hl-active .hlrow.hl-has .hlmark{display:block}
 .hlrow,[data-hlsrc]{cursor:pointer}
+.filterrow th.fcell{padding:5px 8px;background:color-mix(in srgb,var(--panel-3) 45%,transparent);border-bottom:1px solid var(--hair)}
+.fin{width:100%;min-width:0;font-size:0.65625rem;padding:4px 6px;border-radius:5px;border:1px solid var(--hair);
+  background:var(--panel);color:var(--ink);font-family:var(--sans)}
+.fin:focus{outline:none;border-color:var(--brand)}
+.sub2{font-size:0.59375rem;color:var(--ink-3);margin-top:1px;white-space:nowrap}
 .hlpin{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:950;display:none;
   background:var(--panel-3);border:1px solid var(--hair);border-radius:999px;padding:7px 16px;
   font-size:0.71875rem;font-weight:600;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 26%,transparent)}
@@ -1178,7 +1183,8 @@ function daysUntilBelow(proj,target){
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
   carveCustomer:null, carveScope:"country", showMA:true,
-  heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit", highlight:true};
+  heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit", highlight:true,
+  reqFilters:{customer:"",type:"",requester:"",approver:"",status:""}};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -1191,6 +1197,7 @@ const SORTS={
   dormant:{key:"days",dir:-1},
   breach:{key:"util",dir:-1},
   carveouts:{key:"amount",dir:-1},
+  requests:{key:"created",dir:-1},
   allcarve:{key:"customer",dir:1},
 };
 const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold"]);
@@ -1259,7 +1266,75 @@ function seedCarveouts(){
 }
 const SEED_CARVEOUTS=seedCarveouts();
 let CARVEOUTS=loadLS("sr-dash-carveouts-v3",SEED_CARVEOUTS);
-let REQUESTS=loadLS("sr-dash-requests",[]);
+/* Limit increase requests — a seeded book so the tab has something to sort and
+   filter. Requester is the covering RM; approver the credit officer who decided
+   it. Pending requests carry neither an approver nor a decision date. */
+const REQUESTERS=[
+  ["Amanda Chok","GFM Sales"],["Benedict Rao","FI Coverage"],["Cheryl Lim","Corporate Banking"],
+  ["Daniel Osei","Treasury Sales"],["Elaine Tan","GFM Sales"],["Farhan Idris","FI Coverage"],
+  ["Grace Wong","Private Bank"],["Hafiz Rahman","Corporate Banking"],["Ivy Chandra","GFM Sales"],
+  ["Jerome Pang","Institutional Sales"],["Karen Sim","Private Bank"],["Lionel Goh","FI Coverage"],
+  ["Mei Ling Ho","Corporate Banking"],["Nadia Suryani","Treasury Sales"],["Owen Chen","GFM Sales"],
+  ["Priya Menon","Institutional Sales"],["Rachel Ng","Private Bank"],["Samuel Teo","FI Coverage"],
+  ["Tanvi Shah","Corporate Banking"],["Vanessa Koh","GFM Sales"],["Wei Jie Lim","Treasury Sales"],
+  ["Xavier Dsouza","Institutional Sales"],
+];
+const APPROVERS=[
+  ["Adrian Yeo","Senior Credit Officer"],["Beatrice Sim","Credit Risk"],["Cheng Wei Tan","Regional Credit"],
+  ["Dhruv Kapoor","Credit Risk"],["Evelyn Cheah","Head of Credit"],["Gerald Ma","Senior Credit Officer"],
+  ["Hui Min Neo","Credit Risk"],["Ismail Bakar","Regional Credit"],["Joanna Lau","Head of Credit"],
+  ["Kelvin Ong","Senior Credit Officer"],
+];
+const RQ_REASONS=[
+  "Seasonal flow ahead of quarter-end index rebalancing.",
+  "New FX hedging mandate signed; the existing limit binds within two weeks.",
+  "Temporary settlement bridge while the client migrates custodian.",
+  "Repo programme expanding to a second booking centre.",
+  "Client onboarding additional entities under the same group limit.",
+  "Recurring breaches on the eFX line — the limit no longer reflects flow.",
+  "Block equity trade scheduled; one-off uplift for the settlement window.",
+  "Bond issuance participation requires headroom over the pricing week.",
+  "Annual review: utilization has averaged above 85% for two quarters.",
+  "Structured note programme launch; uplift requested for the tenor.",
+  "Cross-border sweep consolidating three smaller limits into one.",
+  "Post-merger entity now trades on the parent relationship.",
+];
+function seedRequests(){
+  // Weighted towards names that are actually stretched — the ones a desk would raise.
+  const hot=WITH_LIMIT.filter(c=>custUtilCur(c)>0.55);
+  const src=hot.length>=120?hot:WITH_LIMIT;
+  const out=[];
+  for(let i=0;i<90;i++){
+    const c=choice(src);
+    const type=weightedChoice([["Temporary",0.38],["Time-bound",0.27],["Permanent",0.35]]);
+    const newLimit=Math.max(c.limitM+1,Math.round(c.limitM*rand(1.15,2.30)));
+    const submittedOff=randInt(1,150);
+    const status=weightedChoice([["Approved",0.52],["Pending",0.31],["Rejected",0.17]]);
+    const decidedOff=status==="Pending"?null:Math.max(0,submittedOff-randInt(1,12));
+    const [rqName,rqDesk]=choice(REQUESTERS);
+    const [apName,apRole]=choice(APPROVERS);
+    // dateAt() counts backwards from today, so a smaller offset is a later date and
+    // a negative one is in the future. The effective window runs forward from just
+    // after submission — clamping these at 0 collapsed every window to a single day.
+    const startOff=submittedOff-randInt(0,10);
+    const endOff=startOff-randInt(21,180);
+    out.push({
+      id:"REQ-"+String(i+1).padStart(4,"0"),
+      customerId:c.id, type, current:c.limitM, newLimit,
+      start:type==="Permanent"?"":fmtDate(dateAt(startOff)),
+      end:  type==="Permanent"?"":fmtDate(dateAt(endOff)),
+      requester:rqName, requesterDesk:rqDesk,
+      approver:status==="Pending"?"":apName, approverRole:status==="Pending"?"":apRole,
+      notes:choice(RQ_REASONS), status,
+      created:fmtDate(dateAt(submittedOff)), createdTs:dateAt(submittedOff).getTime(),
+      decided:decidedOff===null?"":fmtDate(dateAt(decidedOff)),
+      decidedTs:decidedOff===null?0:dateAt(decidedOff).getTime(),
+    });
+  }
+  return out.sort((a,b)=>b.createdTs-a.createdTs);
+}
+/* Key bumped: an empty array stored against the old build would hide the seeds. */
+let REQUESTS=loadLS("sr-dash-requests-v2",seedRequests());
 
 /* Drawn against a carve-out = the customer's current utilization rate, scaled by
    that carve-out's own draw bias, applied to its allocated amount and capped at it. */
@@ -1789,7 +1864,7 @@ function custSearchControl(){
   return `<div class="panel mt14" style="margin-top:0;margin-bottom:14px"><div class="panel-body" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <div class="eyebrow" style="flex:0 0 auto">Customer view</div>
     <input class="dinput" id="ov-cust-search" list="ov-cust-list" style="max-width:300px" placeholder="Search a customer to view their SR data…" value="${c?esc(c.name):''}">
-    <datalist id="ov-cust-list">${WITH_LIMIT.map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
+    <datalist id="ov-cust-list">${WITH_LIMIT.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
     ${c?`<button type="button" class="btn-ghost" id="ov-cust-clear">← Back to portfolio overview</button>`:`<span class="muted" style="font-size:0.71875rem">Showing the overall SR pool. Pick a customer to pivot the whole page to their data (independent of the sidebar filters).</span>`}
   </div></div>`;
 }
@@ -2253,10 +2328,76 @@ function paneRequests(){
         <div class="mt14"><button type="submit" class="btn">Submit request</button></div>
       </form>
     </div></div>
-  <div class="panel mt14"><div class="panel-hd"><h3>Requests</h3><span class="slo">${REQUESTS.length} submitted</span></div>
-    ${REQUESTS.length?`<table><thead><tr><th>Customer</th><th>Type</th><th class="r">Current → requested</th><th>Effective</th><th class="muted">Submitted</th><th>Status</th><th class="r"></th></tr></thead>
-    <tbody>${REQUESTS.map((rq,i)=>{const c=CUST_BY_ID[rq.customerId];const statusCls=rq.status==='Approved'?'t-pass':rq.status==='Rejected'?'t-fail':'t-warn';
-      return `<tr><td>${c?esc(c.name):esc(rq.customerId)}</td><td class="muted">${rq.type}</td><td class="r num">${fmtM(+rq.current)} → ${fmtM(+rq.newLimit)}</td><td class="muted">${rq.type==='Permanent'?'—':(rq.start||'—')+' to '+(rq.end||'—')}</td><td class="muted">${rq.created}</td><td><span class="tag ${statusCls}">${rq.status}</span></td><td class="r">${rq.status==='Pending'?`<button class="btn-ghost" data-reqapprove="${i}">Approve</button> <button class="btn-ghost btn-danger" data-reqreject="${i}">Reject</button>`:""}</td></tr>`;}).join("")}</tbody></table>`:`<div class="empty">No requests submitted yet — use the form above.</div>`}</div>`;
+  ${requestsTable()}`;
+}
+
+/* Distinct values for a filter dropdown, alphabetical. */
+function rqOptions(field,sel){
+  const vals=[...new Set(REQUESTS.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  return vals.map(v=>`<option value="${esc(v)}"${sel===v?" selected":""}>${esc(v)}</option>`).join("");
+}
+function requestsTable(){
+  const f=state.reqFilters;
+  const rows=REQUESTS.filter(r=>{
+    const c=CUST_BY_ID[r.customerId];
+    const q=f.customer.toLowerCase();
+    const name=(c?c.name:r.customerId).toLowerCase();
+    if(q && !name.includes(q) && !(r.id||"").toLowerCase().includes(q)) return false;
+    if(f.type && r.type!==f.type) return false;
+    if(f.requester && r.requester!==f.requester) return false;
+    if(f.approver && (r.approver||"")!==f.approver) return false;
+    if(f.status && r.status!==f.status) return false;
+    return true;
+  });
+  const sorted=applySort(rows,"requests",{
+    id:r=>r.id||"",
+    customer:r=>{const c=CUST_BY_ID[r.customerId];return c?c.name:r.customerId;},
+    type:r=>r.type,
+    current:r=>+r.current||0,
+    newLimit:r=>+r.newLimit||0,
+    uplift:r=>(+r.current>0?(+r.newLimit-+r.current)/+r.current:0),
+    requester:r=>r.requester||"",
+    approver:r=>r.approver||"",
+    created:r=>r.createdTs||0,
+    decided:r=>r.decidedTs||0,
+    status:r=>r.status,
+  });
+  const active=Object.values(f).some(Boolean);
+  const fc=inner=>`<th class="fcell">${inner}</th>`;
+  return `<div class="panel mt14"><div class="panel-hd" data-tip="Every limit increase request with the covering RM who raised it and the credit officer who decided it. Sort any column; filter with the controls beneath the headers."><h3>Requests</h3>
+    <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="slo">${rows.length.toLocaleString()} of ${REQUESTS.length.toLocaleString()} · ${REQUESTS.filter(r=>r.status==="Pending").length} pending</span>${active?`<button type="button" class="btn-ghost" id="rq-clearfilters">Clear filters</button>`:""}</span></div>
+    <div class="table-wrap"><table><thead>
+      <tr>${sortTh("requests","id","Request")}${sortTh("requests","customer","Customer")}${sortTh("requests","type","Type")}${sortTh("requests","current","Current","r")}${sortTh("requests","newLimit","Requested","r")}${sortTh("requests","uplift","Uplift","r")}<th>Effective</th>${sortTh("requests","requester","Requester")}${sortTh("requests","approver","Approver")}${sortTh("requests","created","Submitted")}${sortTh("requests","decided","Decided")}${sortTh("requests","status","Status")}<th class="r"></th></tr>
+      <tr class="filterrow">
+        ${fc(`<input class="fin" id="rqf-customer" placeholder="ID or name…" value="${esc(f.customer)}">`)}
+        <th class="fcell"></th>
+        ${fc(`<select class="fin" id="rqf-type"><option value="">All</option>${["Temporary","Time-bound","Permanent"].map(t=>`<option value="${t}"${f.type===t?" selected":""}>${t}</option>`).join("")}</select>`)}
+        <th class="fcell"></th><th class="fcell"></th><th class="fcell"></th><th class="fcell"></th>
+        ${fc(`<select class="fin" id="rqf-requester"><option value="">All</option>${rqOptions("requester",f.requester)}</select>`)}
+        ${fc(`<select class="fin" id="rqf-approver"><option value="">All</option>${rqOptions("approver",f.approver)}</select>`)}
+        <th class="fcell"></th><th class="fcell"></th>
+        ${fc(`<select class="fin" id="rqf-status"><option value="">All</option>${["Pending","Approved","Rejected"].map(t=>`<option value="${t}"${f.status===t?" selected":""}>${t}</option>`).join("")}</select>`)}
+        <th class="fcell"></th>
+      </tr></thead>
+    <tbody>${sorted.length?sorted.map(rq=>{
+      const c=CUST_BY_ID[rq.customerId];
+      const cls=rq.status==="Approved"?"t-pass":rq.status==="Rejected"?"t-fail":"t-warn";
+      const cur=+rq.current||0, nl=+rq.newLimit||0, up=cur>0?(nl-cur)/cur:0;
+      return `<tr data-tip="${esc(rq.notes||"")}">
+        <td class="mono">${esc(rq.id||"—")}</td>
+        <td>${c?`<span class="clickable" data-cust="${c.id}" style="cursor:pointer">${esc(c.name)}</span><div class="sub2">${SEGMENT_LABEL[c.segment]} · ${esc(c.country)}</div>`:esc(rq.customerId)}</td>
+        <td class="muted">${esc(rq.type)}</td>
+        <td class="r num">${fmtM(cur)}</td>
+        <td class="r num">${fmtM(nl)}</td>
+        <td class="r num ${up>=0.75?"warnc":"passc"}">+${(up*100).toFixed(0)}%</td>
+        <td class="muted">${rq.type==="Permanent"?"—":esc(rq.start||"—")+" → "+esc(rq.end||"—")}</td>
+        <td>${esc(rq.requester||"—")}${rq.requesterDesk?`<div class="sub2">${esc(rq.requesterDesk)}</div>`:""}</td>
+        <td>${rq.approver?esc(rq.approver):`<span class="muted">awaiting</span>`}${rq.approverRole?`<div class="sub2">${esc(rq.approverRole)}</div>`:""}</td>
+        <td class="muted">${esc(rq.created||"—")}</td>
+        <td class="muted">${esc(rq.decided||"—")}</td>
+        <td><span class="tag ${cls}">${rq.status}</span></td>
+        <td class="r">${rq.status==="Pending"?`<button class="btn-ghost" data-reqapprove="${esc(rq.id)}">Approve</button> <button class="btn-ghost btn-danger" data-reqreject="${esc(rq.id)}">Reject</button>`:""}</td></tr>`;
+    }).join(""):`<tr><td colspan="13"><div class="empty">No requests match these filters.</div></td></tr>`}</tbody></table></div></div>`;
 }
 
 /* ============================================================
@@ -2436,8 +2577,16 @@ document.addEventListener("click",e=>{
   }
   if(e.target.closest("#confirm-cancel")||e.target.id==="confirm-scrim"){closeConfirm();return;}
   if(e.target.closest("#confirm-ok")){const fn=_confirmAction;closeConfirm();if(fn)fn();return;}
-  const reqapprove=e.target.closest("[data-reqapprove]"); if(reqapprove){REQUESTS[+reqapprove.dataset.reqapprove].status="Approved";saveLS("sr-dash-requests",REQUESTS);render();return;}
-  const reqreject=e.target.closest("[data-reqreject]"); if(reqreject){REQUESTS[+reqreject.dataset.reqreject].status="Rejected";saveLS("sr-dash-requests",REQUESTS);render();return;}
+  const rqDecide=(id,status)=>{
+    const rq=REQUESTS.find(r=>r.id===id); if(!rq) return;
+    rq.status=status;
+    if(!rq.approver){ const [n,role]=choice(APPROVERS); rq.approver=n; rq.approverRole=role; }
+    const now=new Date(); rq.decided=fmtDate(now); rq.decidedTs=now.getTime();
+    saveLS("sr-dash-requests-v2",REQUESTS); render();
+  };
+  const reqapprove=e.target.closest("[data-reqapprove]"); if(reqapprove){rqDecide(reqapprove.dataset.reqapprove,"Approved");return;}
+  const reqreject=e.target.closest("[data-reqreject]"); if(reqreject){rqDecide(reqreject.dataset.reqreject,"Rejected");return;}
+  const rqclear=e.target.closest("#rq-clearfilters"); if(rqclear){state.reqFilters={customer:"",type:"",requester:"",approver:"",status:""};render();return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
   if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
 });
@@ -2449,6 +2598,11 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("input",e=>{
   if(e.target.id==="cust-search"){state.custSearch=e.target.value;render();
     requestAnimationFrame(()=>{const el=$("#cust-search");if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}});
+  }
+  if(e.target.id==="rqf-customer"){
+    state.reqFilters.customer=e.target.value; render();
+    requestAnimationFrame(()=>{const el=$("#rqf-customer");if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}});
+    return;
   }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
@@ -2466,6 +2620,8 @@ document.addEventListener("change",e=>{
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
   if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
   if(e.target.id==="hm-sort"){ state.heatSort=e.target.value; render(); return; }
+  const RQF={"rqf-type":"type","rqf-requester":"requester","rqf-approver":"approver","rqf-status":"status"};
+  if(RQF[e.target.id]){ state.reqFilters[RQF[e.target.id]]=e.target.value; render(); return; }
   if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
@@ -2513,10 +2669,14 @@ function wireRequestForm(){
   f.addEventListener("submit",e=>{
     e.preventDefault();
     const c=CUST_BY_ID[$("#rq-customer").value];
-    REQUESTS.push({customerId:$("#rq-customer").value,type:f.querySelector('input[name="rq-type"]:checked').value,
-      start:$("#rq-start").value,end:$("#rq-end").value,current:c?c.limitM:0,newLimit:$("#rq-newlimit").value,
-      notes:$("#rq-notes").value,status:"Pending",created:fmtDate(new Date())});
-    saveLS("sr-dash-requests",REQUESTS);
+    const now=new Date();
+    REQUESTS.unshift({id:"REQ-"+String(REQUESTS.length+1).padStart(4,"0"),
+      customerId:$("#rq-customer").value,type:f.querySelector('input[name="rq-type"]:checked').value,
+      start:$("#rq-start").value,end:$("#rq-end").value,current:c?c.limitM:0,newLimit:+$("#rq-newlimit").value,
+      requester:"You",requesterDesk:"Submitted from this dashboard",approver:"",approverRole:"",
+      notes:$("#rq-notes").value,status:"Pending",
+      created:fmtDate(now),createdTs:now.getTime(),decided:"",decidedTs:0});
+    saveLS("sr-dash-requests-v2",REQUESTS);
     render();
   });
 }
