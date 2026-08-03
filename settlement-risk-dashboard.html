@@ -1638,15 +1638,25 @@ const HEAT_SORTS={
 function heatSort(){ return HEAT_SORTS[state.heatSort]||HEAT_SORTS.limit; }
 function heatRank(all){
   const S=heatSort();
-  const rows=(state.heatHideNoSR ? all.filter(c=>c.hasLimit) : all.slice())
-    .map(c=>({c,v:S.val(c)}));
+  const rows=all.map(c=>({c,v:S.val(c)}));
   // Name is the tie-break so the order is fully determined — no incidental
   // reshuffling when many names share a value.
   rows.sort((a,b)=>(b.v-a.v) || a.c.name.localeCompare(b.c.name));
   return rows.map(o=>o.c);
 }
+/* Who is eligible to be drawn at all in the current view. A treemap sizes tiles
+   by the sort criterion, so a name with nothing to measure — no limit, or nothing
+   drawn when sizing by utilized — has no area and cannot appear. Excluding those
+   here rather than inside treemap() keeps the "Showing X of Y" count honest. */
+function heatEligible(all){
+  if(state.heatView==="tree"){
+    const S=heatSort();
+    return all.filter(c=>c.hasLimit && S.area(c)>0);
+  }
+  return state.heatHideNoSR ? all.filter(c=>c.hasLimit) : all;
+}
 function heatSelection(all){
-  const rows=heatRank(all);
+  const rows=heatRank(heatEligible(all));
   const n=state.heatTop|0;
   return n>0 ? rows.slice(0,n) : rows;
 }
@@ -1729,13 +1739,15 @@ function heatTools(shown,total){
                   ["lg","L",state.heatView==="tree"?"Tall treemap.":sizeTips.lg]];
   return `<div class="hmtools">
     ${segControl("View","heatview",[["heat","Heatmap","Equal-sized tile per customer — compares utilization rates."],["tree","Treemap","Tiles sized by approved SR limit — shows where the exposure actually sits. Names with no limit have no area and are excluded."]])}
-    ${segControl("Show","heattop",HEAT_TOPS.map(([v,l])=>[v,l,v?`The ${l} largest customers by approved SR limit.`:"Every customer in the current filter — slowest to draw."]))}
+    ${segControl("Show","heattop",HEAT_TOPS.map(([v,l])=>[v,l,v?`The top ${l} by the chosen sort criterion.`:"Every eligible customer in the current filter — slowest to draw."]))}
     <span class="hmtool"><span class="szlbl">Sort by</span><select class="mini-sel" id="hm-sort" data-tip="Ranks every customer and drives both the Top-N cut and the display order, so raising the count appends names rather than reshuffling them. In treemap view it also sizes the tiles.">${
       Object.entries(HEAT_SORTS).map(([k,v])=>`<option value="${k}"${state.heatSort===k?" selected":""}>${v.label}</option>`).join("")}</select></span>
-    <span class="hmtool"><label class="machk" data-tip="Hide customers that hold no SR limit, leaving only the live book."><input type="checkbox" id="hm-hidenosr"${state.heatHideNoSR?" checked":""}> Hide names without SR</label></span>
+    ${state.heatView==="tree"
+      ? `<span class="hmtool" style="color:var(--ink-3);font-size:0.59375rem" data-tip="A treemap sizes each tile by the sort criterion, so a name with no SR limit has no area to draw and is never shown. Switch to Heatmap to see them.">Names without SR not shown</span>`
+      : `<span class="hmtool"><label class="machk" data-tip="Hide customers that hold no SR limit, leaving only the live book."><input type="checkbox" id="hm-hidenosr"${state.heatHideNoSR?" checked":""}> Hide names without SR</label></span>`}
     <span class="hmtool"><label class="machk" data-tip="Data Highlight: hovering a country, limit type, segment or utilization band anywhere on this page dims everything that does not belong to it. Click to pin the selection so it survives scrolling; click again or press Esc to release."><input type="checkbox" id="hm-highlight"${state.highlight?" checked":""}> Data highlight</label></span>
     ${segControl(state.heatView==="tree"?"Height":"Tile size","heatsize",sizeOpts)}
-    <span class="hmtool" style="color:var(--ink-3);font-size:0.59375rem">Showing ${shown.toLocaleString()} of ${total.toLocaleString()}</span>
+    <span class="hmtool" style="color:var(--ink-3);font-size:0.59375rem">Showing ${shown.toLocaleString()} of ${total.toLocaleString()}${state.heatView==="tree"?" with an SR limit":""}</span>
   </div>`;
 }
 function heatLegend(){
@@ -1748,7 +1760,7 @@ function heatLegend(){
     <span class="sep"></span>
     <span data-tip="Drawn above the approved limit — unapproved risk."><i style="background:${utilRamp(1)};border:2px solid var(--fail)"></i>Over limit</span>
     <span data-tip="An approved limit with nothing drawn against it — committed capacity earning nothing."><i style="background:color-mix(in srgb, var(--violet) 12%, var(--panel));border-style:dashed;border-color:color-mix(in srgb,var(--violet) 45%,transparent)"></i>Dormant 0%</span>
-    <span data-tip="No SR limit in place — the customer cannot settle on credit. Sales whitespace."><i style="background:repeating-linear-gradient(135deg,transparent,transparent 3px,color-mix(in srgb,var(--ink-3) 22%,transparent) 3px,color-mix(in srgb,var(--ink-3) 22%,transparent) 6px);border-style:dashed"></i>No SR limit</span>
+    ${state.heatView==="tree"?"":`<span data-tip="No SR limit in place — the customer cannot settle on credit. Sales whitespace."><i style="background:repeating-linear-gradient(135deg,transparent,transparent 3px,color-mix(in srgb,var(--ink-3) 22%,transparent) 3px,color-mix(in srgb,var(--ink-3) 22%,transparent) 6px);border-style:dashed"></i>No SR limit</span>`}
   </div>`;
 }
 /* Legend shared by every instance of the trend chart. */
@@ -2014,10 +2026,12 @@ function paneOverviewPortfolio(){
       <div class="dist-list">${byType.map(x=>`<div class="hlrow" data-hl-type="${esc(x.label)}" data-hlsrc="type|${esc(x.label)}" data-hl-drawn="${x.utilized.toFixed(3)}" data-hl-rate="${Math.min(100,x.pct*100).toFixed(1)}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:1px 3px"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i><i class="hlmark"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer ${state.heatView==="tree"?"exposure treemap":"utilization heatmap"}${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
-      <span class="slo">${heatList.length.toLocaleString()} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit.toLocaleString()} without an SR limit · click a tile for detail</span></div>
+  <div class="panel mt14"><div class="panel-hd" data-tip="${state.heatView==='tree' ? 'Tiles sized by the chosen sort criterion and shaded by utilization, from pale green at idle to deep red at the limit. Names without an SR limit have no area to draw and are not shown — switch to Heatmap for those. Click any tile to open that customer.' : 'Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer.'}"><h3>Customer ${state.heatView==="tree"?"exposure treemap":"utilization heatmap"}${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
+      <span class="slo">${state.heatView==="tree"
+        ? `${heatEligible(heatList).length.toLocaleString()} customer${heatEligible(heatList).length===1?"":"s"} with an SR limit · sized by ${heatSort().label} · click a tile for detail`
+        : `${heatList.length.toLocaleString()} customer${heatList.length===1?"":"s"} in view · ${heatNoLimit.toLocaleString()} without an SR limit · click a tile for detail`}</span></div>
     ${segFilterNote?`<div style="padding:10px 16px 0">${segFilterNote}</div>`:""}
-    ${heatTools(heatShown.length,heatList.length)}
+    ${heatTools(heatShown.length,heatEligible(heatList).length)}
     ${heatLegend()}
     ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>
 
