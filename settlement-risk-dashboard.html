@@ -224,6 +224,14 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .chart-well.donut-well svg.donut{width:auto;height:auto;flex:0 0 auto}
 /* Evenly distributed stat lists so 5-row and 10-row panels still end flush. */
 .dist-list{display:flex;flex-direction:column;justify-content:space-between;height:252px}
+/* Ranking list: scrolls inside the tile instead of stretching the row. */
+.rank-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:9px 16px 0}
+.rank-tools .mini-sel{max-width:11.5em}
+.rank-list{display:flex;flex-direction:column;gap:9px;height:180px;overflow-y:auto;padding-right:4px}
+.grid3 .rank-list{height:170px}
+.rank-list::-webkit-scrollbar{width:8px}
+.rank-list::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink-3) 40%,transparent);border-radius:4px}
+.rank-list::-webkit-scrollbar-track{background:transparent}
 .dist-list>div{margin-bottom:0 !important}
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:0.625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
@@ -1195,7 +1203,8 @@ const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitTy
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
   carveCustomer:null, carveScope:"country", showMA:true,
   heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit", highlight:true,
-  reqFilters:{customer:"",type:"",requester:"",approver:"",status:""}};
+  reqFilters:{customer:"",type:"",requester:"",approver:"",status:""},
+  expo:{dir:"top",n:10,seg:""}};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -1659,6 +1668,37 @@ function heatRank(all){
    by the sort criterion, so a name with nothing to measure — no limit, or nothing
    drawn when sizing by utilized — has no area and cannot appear. Excluding those
    here rather than inside treemap() keeps the "Showing X of Y" count honest. */
+/* Exposure ranking — Top or Bottom N by drawn exposure, optionally narrowed to one
+   segment. The list scrolls inside its tile so raising the count never stretches
+   the row out of line with the two concentration panels beside it. */
+const EXPO_COUNTS=[10,25,50,100,250];
+function exposurePanel(list){
+  const e=state.expo;
+  const scope=list.filter(c=>!e.seg || c.segment===e.seg);
+  // Bottom is dominated by dormant names all sitting at $0 drawn, so ties break on
+  // the approved limit — the biggest unused limits surface first, which is the
+  // question a Bottom ranking is actually asked.
+  const cmp = e.dir==="top"
+    ? (a,b)=>custDrawnM(b)-custDrawnM(a) || b.limitM-a.limitM || a.name.localeCompare(b.name)
+    : (a,b)=>custDrawnM(a)-custDrawnM(b) || b.limitM-a.limitM || a.name.localeCompare(b.name);
+  const shown=[...scope].sort(cmp).slice(0,e.n);
+  const word=e.dir==="top"?"Top":"Bottom";
+  const segLabel=e.seg?SEGMENT_LABEL[e.seg]:"all segments";
+  return `<div class="panel"><div class="panel-hd" data-tip="Customers ranked by drawn dollar exposure. Switch between the largest and the smallest, choose how many to list, and narrow to one segment. Click a row to open that customer."><h3>${word} ${Math.min(e.n,shown.length)} exposures</h3><span class="slo">by drawn · ${esc(segLabel)}</span></div>
+    <div class="rank-tools">
+      <span class="szseg" role="group" aria-label="Ranking direction">
+        <button type="button" data-expodir="top" aria-pressed="${e.dir==="top"}" data-tip="The largest drawn exposures — where the risk sits.">Top</button>
+        <button type="button" data-expodir="bottom" aria-pressed="${e.dir==="bottom"}" data-tip="The smallest drawn exposures — limits that are barely being used.">Bottom</button>
+      </span>
+      <select class="mini-sel" id="expo-n" data-tip="How many customers to list. The tile scrolls.">${EXPO_COUNTS.map(n=>`<option value="${n}"${e.n===n?" selected":""}>${n} names</option>`).join("")}</select>
+      <select class="mini-sel" id="expo-seg" data-tip="Restrict the ranking to one customer segment."><option value="">All segments</option>${SEGMENTS.map(sg=>`<option value="${sg}"${e.seg===sg?" selected":""}>${SEGMENT_LABEL[sg]}</option>`).join("")}</select>
+      <span style="color:var(--ink-3);font-size:0.59375rem">${shown.length.toLocaleString()} of ${scope.length.toLocaleString()}</span>
+    </div>
+    <div class="panel-body" style="padding:10px 16px 14px"><div class="colhd"><div style="width:24px"></div><div style="flex:1"></div><div style="width:52px;text-align:right">Limit</div><div style="width:52px;text-align:right">Drawn</div><div style="width:38px;text-align:right">Util.</div></div>
+    <div class="rank-list">${shown.length?shown.map((c,i)=>{const u=custUtilCur(c);
+      return `<div class="toprow" data-cust="${c.id}" ${hlAttrs(c)} data-hlsrc="cust|${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer;flex:0 0 auto"><span class="muted num" style="width:24px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num muted" style="width:52px;text-align:right">${fmtM(c.limitM)}</span><span class="num failc" style="width:52px;text-align:right">${fmtM(custDrawnM(c))}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:38px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;
+    }).join(""):`<div class="empty" style="padding:14px">No customers in this segment.</div>`}</div></div></div>`;
+}
 function heatEligible(all){
   if(state.heatView==="tree"){
     const S=heatSort();
@@ -1994,7 +2034,6 @@ function paneOverviewPortfolio(){
   const buckets=bandDefs.map(([lo,hi],i)=>({label:bandDefs[i][2],color:bandColors[i],count:list.filter(c=>{const u=custUtilCur(c);return u>=lo&&u<hi;}).length}));
 
   // top 10 exposures
-  const top10=[...list].sort((a,b)=>Math.min(1,custUtilCur(b))*b.limitM-Math.min(1,custUtilCur(a))*a.limitM).slice(0,10);
 
   const segFilterNote = state.overviewSegClick ? `<div class="filterchip">Drilled into <b style="color:var(--ink);margin:0 2px">${esc(SEGMENT_LABEL[state.overviewSegClick])}</b> <button id="clearsegdrill">×</button></div>` : "";
   /* The heatmap covers EVERY customer in view, not just the ones holding a limit —
@@ -2026,9 +2065,7 @@ function paneOverviewPortfolio(){
 
 
   <div class="grid3 mt14">
-    <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
-      <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
-      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" ${hlAttrs(c)} data-hlsrc="cust|${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div></div>
+    ${exposurePanel(list)}
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
       <div class="dist-list">${byCountry.map(x=>`<div class="hlrow" data-hl-country="${esc(x.label)}" data-hlsrc="country|${esc(x.label)}" data-hl-drawn="${x.utilized.toFixed(3)}" data-hl-rate="${Math.min(100,x.pct*100).toFixed(1)}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:1px 3px"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i><i class="hlmark"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
@@ -2578,6 +2615,7 @@ document.addEventListener("click",e=>{
     return;   // aggregate rows pin; anything with its own click action keeps it
   }
   const hsize=e.target.closest("[data-heatsize]"); if(hsize){state.heatSize=hsize.dataset.heatsize;render();return;}
+  const xdir=e.target.closest("[data-expodir]"); if(xdir){state.expo.dir=xdir.dataset.expodir;render();return;}
   const hview=e.target.closest("[data-heatview]"); if(hview){state.heatView=hview.dataset.heatview;render();return;}
   const htop=e.target.closest("[data-heattop]"); if(htop){state.heatTop=+htop.dataset.heattop;render();return;}
   const segdrill=e.target.closest("[data-segclick]"); if(segdrill){state.overviewSegClick=state.overviewSegClick===segdrill.dataset.segclick?"":segdrill.dataset.segclick;render();return;}
@@ -2647,6 +2685,8 @@ document.addEventListener("change",e=>{
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
   if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
   if(e.target.id==="hm-sort"){ state.heatSort=e.target.value; render(); return; }
+  if(e.target.id==="expo-n"){ state.expo.n=+e.target.value; render(); return; }
+  if(e.target.id==="expo-seg"){ state.expo.seg=e.target.value; render(); return; }
   const RQF={"rqf-type":"type","rqf-requester":"requester","rqf-approver":"approver","rqf-status":"status"};
   if(RQF[e.target.id]){ state.reqFilters[RQF[e.target.id]]=e.target.value; render(); return; }
   if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
