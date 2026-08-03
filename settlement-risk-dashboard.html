@@ -368,6 +368,28 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 
 .tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:0.9375rem;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
+/* Data Highlight: everything that can participate dims, then the matching
+   rule above lifts the selection back. */
+.hl-active .hmcell,.hl-active .tmcell,.hl-active .toprow,.hl-active .hlrow,
+.hl-active .hmgrid,.hl-active .tmwrap rect,.hl-active svg rect[data-hl-seg],.hl-active svg rect[data-hl-band]{
+  transition:opacity .12s ease,filter .12s ease}
+.hl-active .hmcell,.hl-active .tmcell,.hl-active .toprow{opacity:.14;filter:saturate(.3)}
+/* Aggregate rows and bars are a different cut of the book, not members of the
+   selection: they stay lit whenever the selection is present in them. */
+.hl-active .hlrow:not(.hl-has),
+.hl-active svg rect[data-hl-seg]:not(.hl-has),
+.hl-active svg rect[data-hl-band]:not(.hl-has){opacity:.16;filter:saturate(.3)}
+.bar-mini{position:relative}
+.hlmark{position:absolute;left:0;top:0;height:100%;width:0;border-radius:3px;display:none;
+  background:var(--ink);opacity:.6;box-shadow:0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)}
+.hl-active .hlrow.hl-has .hlmark{display:block}
+.hlrow,[data-hlsrc]{cursor:pointer}
+.hlpin{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:950;display:none;
+  background:var(--panel-3);border:1px solid var(--hair);border-radius:999px;padding:7px 16px;
+  font-size:0.71875rem;font-weight:600;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 26%,transparent)}
+.hlpin.on{display:block}
+.hlpin b{color:var(--brand)}
+.hlpin span{color:var(--ink-3);font-weight:400;margin-left:8px}
 .tt.rich{max-width:330px;padding:11px 13px}
 .tt .tt-t{font-weight:700;line-height:1.3}
 .tt .tt-s{font-size:0.8125rem;color:var(--ink-3);margin-top:2px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--hair)}
@@ -528,6 +550,137 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
   });
   document.addEventListener("mouseleave",()=>{if(box)box.classList.remove("show");lastEl=null;});
 })();
+
+/* ============================================================
+   Data Highlight (brushing & linking)
+   Hovering any aggregate — a country, a limit type, a segment, a
+   utilization band — dims everything that does not belong to it and
+   lifts everything that does, across every panel at once. One <style>
+   rule is rewritten per hover, so the browser does the matching and the
+   cost is the same whether 100 or 4,000 tiles are on screen.
+============================================================ */
+const HL_KEYS={country:"data-hl-country",type:"data-hl-type",seg:"data-hl-seg",band:"data-hl-band",cust:"data-hl-cust"};
+let hlPinned=null, hlStyleEl=null;
+function hlStyle(){
+  if(!hlStyleEl){ hlStyleEl=document.createElement("style"); document.head.appendChild(hlStyleEl); }
+  return hlStyleEl;
+}
+/* Which utilization band a customer falls in. Boundaries mirror bandDefs, so a
+   histogram bar and the tiles it represents always agree. */
+function hlBandOf(c){
+  if(!c.hasLimit) return "none";
+  const u=custUtilCur(c);
+  return u<0.001?"0%":u<0.5?"0-50%":u<0.75?"50-75%":u<0.9?"75-90%":u<1.0?"90-100%":">100%";
+}
+function hlMatches(c,key,val){
+  switch(key){
+    case "country": return c.country===val;
+    case "seg":     return c.segment===val;
+    case "type":    return c.hasLimit && c.typeAlloc[val]>=0.22;
+    case "band":    return hlBandOf(c)===val;
+    case "cust":    return c.id===val;
+  }
+  return false;
+}
+/* What the hovered selection contributes to every OTHER dimension. Without this a
+   segment hover leaves the country and limit-type panels dark, because those rows
+   carry no segment attribute — they are different cuts of the same book, not
+   members of it. Memoised per selection; one pass over CUSTOMERS. */
+const HL_AGG=new Map();
+function hlAggregate(spec){
+  if(HL_AGG.has(spec)) return HL_AGG.get(spec);
+  const [key,val]=spec.split("|");
+  const country={}, type={}, seg={}, band={};
+  let n=0, drawn=0;
+  CUSTOMERS.forEach(c=>{
+    if(!hlMatches(c,key,val)) return;
+    n++;
+    const d=custDrawnM(c);
+    drawn+=d;
+    country[c.country]=(country[c.country]||0)+d;
+    seg[c.segment]=(seg[c.segment]||0)+d;
+    band[hlBandOf(c)]=(band[hlBandOf(c)]||0)+1;
+    if(c.hasLimit) LIMIT_TYPES.forEach(t=>{ type[t]=(type[t]||0)+custTypeDrawnM(c,t); });
+  });
+  const r={country,type,seg,band,n,drawn};
+  HL_AGG.set(spec,r);
+  return r;
+}
+/* Paint the aggregate panels: a row keeps full opacity when the selection is
+   present in it, and a marker inside its bar shows how much of that bar is the
+   selection. */
+function hlPaintAggregates(agg){
+  document.querySelectorAll(".hlrow").forEach(row=>{
+    const mark=row.querySelector(".hlmark");
+    if(!agg){ row.classList.remove("hl-has"); if(mark) mark.style.width="0%"; return; }
+    const co=row.getAttribute("data-hl-country"), ty=row.getAttribute("data-hl-type");
+    const sub = co!=null ? (agg.country[co]||0) : ty!=null ? (agg.type[ty]||0) : 0;
+    const total=+row.getAttribute("data-hl-drawn")||0;
+    const rate=+row.getAttribute("data-hl-rate")||0;
+    row.classList.toggle("hl-has", sub>0.0001);
+    if(mark) mark.style.width=(total>0 ? Math.min(100, rate*Math.min(1,sub/total)) : 0).toFixed(1)+"%";
+  });
+  document.querySelectorAll("rect[data-hl-seg],rect[data-hl-band]").forEach(r=>{
+    if(!agg){ r.classList.remove("hl-has"); return; }
+    const sg=r.getAttribute("data-hl-seg"), bd=r.getAttribute("data-hl-band");
+    const present = sg!=null ? (agg.seg[sg]||0)>0 : (agg.band[bd]||0)>0;
+    r.classList.toggle("hl-has", present);
+  });
+}
+function hlApply(spec){
+  const st=hlStyle();
+  if(!spec || !state.highlight){
+    st.textContent=""; document.body.classList.remove("hl-active"); hlPaintAggregates(null); return;
+  }
+  const [key,val]=spec.split("|");
+  const attr=HL_KEYS[key];
+  if(!attr){ st.textContent=""; document.body.classList.remove("hl-active"); hlPaintAggregates(null); return; }
+  const op = key==="type" ? "~=" : "=";
+  const sel=`[${attr}${op}${JSON.stringify(val)}]`;
+  st.textContent=
+    `.hl-active ${sel}{opacity:1 !important;filter:none !important}`+
+    `.hl-active .hmcell${sel},.hl-active .tmcell${sel}{outline:2px solid var(--ink);outline-offset:-2px;z-index:6}`+
+    `.hl-active .hlrow${sel}{background:color-mix(in srgb,var(--brand) 18%,transparent);border-radius:4px}`+
+    `.hl-active rect${sel}{stroke:var(--ink);stroke-width:1.5}`;
+  document.body.classList.add("hl-active");
+  hlPaintAggregates(hlAggregate(spec));
+}
+function hlSet(spec){ if(hlPinned) return; hlApply(spec); }
+function hlClear(){ if(!hlPinned) hlApply(null); }
+const HL_NOUN={country:"Country",type:"Limit type",seg:"Segment",band:"Utilization",cust:"Customer"};
+function hlBadge(){
+  let el=document.getElementById("hl-pin");
+  if(!el){ el=document.createElement("div"); el.id="hl-pin"; el.className="hlpin"; document.body.appendChild(el); }
+  if(hlPinned && state.highlight){
+    const [k,v]=hlPinned.split("|");
+    const label = k==="cust" ? (CUST_BY_ID[v]||{}).name||v : v;
+    el.innerHTML=`Pinned: <b></b><span>click again or press Esc to release</span>`;
+    el.querySelector("b").textContent=(HL_NOUN[k]||k)+" · "+label;
+    el.classList.add("on");
+  } else el.classList.remove("on");
+}
+function hlPin(spec){
+  if(hlPinned===spec){ hlPinned=null; hlApply(null); }
+  else { hlPinned=spec; hlApply(spec); }
+  hlBadge();
+}
+document.addEventListener("mouseover",e=>{
+  if(!state.highlight) return;
+  const src=e.target.closest("[data-hlsrc]");
+  if(src) hlSet(src.getAttribute("data-hlsrc")); else hlClear();
+});
+/* Customer-level elements cross-highlight their own country when hovered. */
+document.addEventListener("mouseout",e=>{
+  if(!state.highlight) return;
+  if(!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest("[data-hlsrc]")) hlClear();
+});
+/* Attributes every customer-bearing element carries, so one rule lights them all. */
+function hlAttrs(c){
+  const types=c.hasLimit ? LIMIT_TYPES.filter(t=>c.typeAlloc[t]>=0.22) : [];
+  const band = hlBandOf(c);
+  return `data-hl-cust="${c.id}" data-hl-country="${esc(c.country)}" data-hl-seg="${esc(c.segment)}"`
+    +` data-hl-type="${esc(types.join(" "))}" data-hl-band="${band}"`;
+}
 
 /* ============================================================
    Confirmation modal
@@ -1025,7 +1178,7 @@ function daysUntilBelow(proj,target){
 const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitType:new Set()},dateRangeDays:90,
   custSort:{key:"utilCur",dir:-1}, blotterFilter:{assetClass:""}, overviewSegClick:"", customerView:null,
   carveCustomer:null, carveScope:"country", showMA:true,
-  heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit"};
+  heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit", highlight:true};
 
 /* ============================================================
    Shared column-sort engine — every table registers here and uses
@@ -1237,9 +1390,9 @@ function groupedBar(cats){ // cats: [{label,a,b}] a=with,b=without
     const wa=c.a/max*barW, wb=c.b/max*barW;
     const tot=c.a+c.b, cov=tot?c.a/tot:0;
     svg+=`<text x="0" y="${y+11}" fill="var(--ink-2)" font-size="11">${esc(c.label)}</text>`;
-    svg+=`<rect x="${pad}" y="${y}" width="${wa.toFixed(1)}" height="13" rx="3" fill="var(--pass)" style="cursor:pointer" data-segclick="${esc(c.key)}"><title>${esc(c.label)}: ${c.a} with SR limit</title></rect>`;
+    svg+=`<rect x="${pad}" y="${y}" width="${wa.toFixed(1)}" height="13" rx="3" fill="var(--pass)" style="cursor:pointer" data-segclick="${esc(c.key)}" data-hl-seg="${esc(c.key)}" data-hlsrc="seg|${esc(c.key)}"><title>${esc(c.label)}: ${c.a} with SR limit</title></rect>`;
     svg+=`<text x="${pad+wa+6}" y="${y+10.5}" fill="var(--pass)" font-size="10" font-family="var(--mono)">${c.a}</text>`;
-    svg+=`<rect x="${pad}" y="${y+16}" width="${wb.toFixed(1)}" height="13" rx="3" fill="var(--ink-3)" opacity=".55" style="cursor:pointer" data-segclick="${esc(c.key)}"><title>${esc(c.label)}: ${c.b} without SR limit</title></rect>`;
+    svg+=`<rect x="${pad}" y="${y+16}" width="${wb.toFixed(1)}" height="13" rx="3" fill="var(--ink-3)" opacity=".55" style="cursor:pointer" data-segclick="${esc(c.key)}" data-hl-seg="${esc(c.key)}" data-hlsrc="seg|${esc(c.key)}"><title>${esc(c.label)}: ${c.b} without SR limit</title></rect>`;
     svg+=`<text x="${pad+wb+6}" y="${y+26.5}" fill="var(--ink-3)" font-size="10" font-family="var(--mono)">${c.b}</text>`;
     // coverage = share of the segment that already holds a limit; the gap is the Sales whitespace
     svg+=`<text x="${W-4}" y="${y+19}" fill="${cov>=0.6?'var(--pass)':cov>=0.4?'var(--warn)':'var(--fail)'}" font-size="11" font-family="var(--mono)" font-weight="700" text-anchor="end">${Math.round(cov*100)}%</text>`;
@@ -1365,14 +1518,14 @@ function custTipAttrs(c){
 }
 function heatCell(c){
   if(!c.hasLimit){
-    return `<button type="button" class="hmcell nolimit" data-cust="${c.id}" ${custTipAttrs(c)}>
+    return `<button type="button" class="hmcell nolimit" data-cust="${c.id}" ${hlAttrs(c)} ${custTipAttrs(c)}>
       <span class="hmn">${esc(c.name)}</span><span class="hmb"><span class="hmu">NO SR LIMIT</span></span></button>`;
   }
   const u=custUtilCur(c), drawn=Math.min(1,u)*c.limitM;
   const dormant=u<0.001, breach=u>1;
   const cls="hmcell"+(breach?" breach":"")+(dormant?" dormant":"");
   const bg=dormant?"color-mix(in srgb, var(--violet) 12%, var(--panel))":utilRamp(u);
-  return `<button type="button" class="${cls}" data-cust="${c.id}" style="background:${bg}" ${custTipAttrs(c)}>
+  return `<button type="button" class="${cls}" data-cust="${c.id}" style="background:${bg}" ${hlAttrs(c)} ${custTipAttrs(c)}>
     <span class="hmn">${esc(c.name)}</span>
     <span class="hmb"><span class="hmu">${Math.round(u*100)}<i class="pcs">%</i></span><span class="hmm">${heatSort().fmt(c)}</span></span></button>`;
 }
@@ -1476,7 +1629,7 @@ function treemap(customers){
       const dormant=u<0.001, breach=u>1;
       const bg=dormant?"color-mix(in srgb, var(--violet) 12%, var(--panel))":utilRamp(u);
       const showName=k.w>52 && k.h>26, showVal=k.w>26 && k.h>15, showAmt=k.w>62 && k.h>40;
-      html+=`<button type="button" class="tmcell${breach?" breach":""}" data-cust="${c.id}" ${custTipAttrs(c)}
+      html+=`<button type="button" class="tmcell${breach?" breach":""}" data-cust="${c.id}" ${hlAttrs(c)} ${custTipAttrs(c)}
         style="left:${pcx(k.x)};top:${pcy(k.y)};width:${pcx(k.w)};height:${pcy(k.h)};background:${bg}">`
         +(showName?`<span class="tmn">${esc(c.name)}</span>`:"")
         +(showVal?`<span class="tmv">${Math.round(u*100)}%</span>`:"")
@@ -1505,6 +1658,7 @@ function heatTools(shown,total){
     <span class="hmtool"><span class="szlbl">Sort by</span><select class="mini-sel" id="hm-sort" data-tip="Ranks every customer and drives both the Top-N cut and the display order, so raising the count appends names rather than reshuffling them. In treemap view it also sizes the tiles.">${
       Object.entries(HEAT_SORTS).map(([k,v])=>`<option value="${k}"${state.heatSort===k?" selected":""}>${v.label}</option>`).join("")}</select></span>
     <span class="hmtool"><label class="machk" data-tip="Hide customers that hold no SR limit, leaving only the live book."><input type="checkbox" id="hm-hidenosr"${state.heatHideNoSR?" checked":""}> Hide names without SR</label></span>
+    <span class="hmtool"><label class="machk" data-tip="Data Highlight: hovering a country, limit type, segment or utilization band anywhere on this page dims everything that does not belong to it. Click to pin the selection so it survives scrolling; click again or press Esc to release."><input type="checkbox" id="hm-highlight"${state.highlight?" checked":""}> Data highlight</label></span>
     ${segControl(state.heatView==="tree"?"Height":"Tile size","heatsize",sizeOpts)}
     <span class="hmtool" style="color:var(--ink-3);font-size:0.59375rem">Showing ${shown.toLocaleString()} of ${total.toLocaleString()}</span>
   </div>`;
@@ -1546,7 +1700,7 @@ function histogram(buckets,w=560,h=272){
   let svg=`<line x1="${pad}" y1="${baseY}" x2="${w-pad}" y2="${baseY}" stroke="var(--hair)"/>`;
   buckets.forEach((b,i)=>{
     const barH=b.count/max*maxBarH, x=pad+i*bw+bw*0.14, y=baseY-barH;
-    svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.72).toFixed(1)}" height="${Math.max(barH,1).toFixed(1)}" rx="3" fill="${b.color||'var(--agent)'}"><title>${esc(b.label)}: ${b.count} customers</title></rect>`;
+    svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw*0.72).toFixed(1)}" height="${Math.max(barH,1).toFixed(1)}" rx="3" fill="${b.color||'var(--agent)'}" style="cursor:pointer" data-hl-band="${esc(b.label)}" data-hlsrc="band|${esc(b.label)}"><title>${esc(b.label)}: ${b.count} customers</title></rect>`;
     svg+=`<text x="${(x+bw*0.36).toFixed(1)}" y="${baseY+16}" fill="var(--ink-3)" font-size="11" text-anchor="middle">${esc(b.label)}</text>`;
     svg+=`<text x="${(x+bw*0.36).toFixed(1)}" y="${(y-8).toFixed(1)}" fill="var(--ink-2)" font-size="12" text-anchor="middle" font-family="var(--mono)" font-weight="700">${b.count}</text>`;
   });
@@ -1776,13 +1930,13 @@ function paneOverviewPortfolio(){
   <div class="grid3 mt14">
     <div class="panel"><div class="panel-hd" data-tip="The ten customers drawing the largest dollar exposure right now. Click a row to open that customer."><h3>Top 10 exposures</h3><span class="slo">drawn · util.</span></div>
       <div class="panel-body" style="padding:14px 16px"><div class="colhd"><div style="width:16px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Drawn</div><div style="width:40px;text-align:right">Util.</div></div>
-      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div></div>
+      <div class="dist-list">${top10.map((c,i)=>{const u=custUtilCur(c);return `<div class="toprow" data-cust="${c.id}" ${hlAttrs(c)} data-hlsrc="cust|${c.id}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;cursor:pointer"><span class="muted" style="width:16px">${i+1}</span><span style="flex:1;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span class="num failc" style="width:56px;text-align:right">${fmtM(Math.min(1,u)*c.limitM)}</span><span class="num ${u>1?'failc':u>=0.9?'warnc':'muted'}" style="width:40px;text-align:right">${(u*100).toFixed(0)}%</span></div>`;}).join("")}</div></div></div>
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by booking country. The bar shows utilization rate; the country with the highest rate is called out below."><h3>Concentration by country</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:74px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
-      <div class="dist-list">${byCountry.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
+      <div class="dist-list">${byCountry.map(x=>`<div class="hlrow" data-hl-country="${esc(x.label)}" data-hlsrc="country|${esc(x.label)}" data-hl-drawn="${x.utilized.toFixed(3)}" data-hl-rate="${Math.min(100,x.pct*100).toFixed(1)}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:1px 3px"><div style="width:74px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--run)'}"></i><i class="hlmark"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
     <div class="panel"><div class="panel-hd" data-tip="Approved limit, drawn amount and utilization rate by product limit type. The bar shows utilization rate."><h3>Concentration by limit type</h3><span class="slo">limit · drawn · rate</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Limit</div><div style="width:56px;text-align:right">Drawn</div><div style="width:34px;text-align:right">%</div></div>
-      <div class="dist-list">${byType.map(x=>`<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
+      <div class="dist-list">${byType.map(x=>`<div class="hlrow" data-hl-type="${esc(x.label)}" data-hlsrc="type|${esc(x.label)}" data-hl-drawn="${x.utilized.toFixed(3)}" data-hl-rate="${Math.min(100,x.pct*100).toFixed(1)}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:1px 3px"><div style="width:54px;color:var(--ink-2)">${esc(x.label)}</div><div class="bar-mini" style="flex:1" data-tip="${esc(x.label)}: ${fmtM(x.utilized)} drawn of ${fmtM(x.total)} approved"><i style="width:${Math.min(100,x.pct*100).toFixed(0)}%;background:${x.pct>=0.9?'var(--fail)':x.pct>=0.75?'var(--warn)':'var(--violet)'}"></i><i class="hlmark"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(x.total)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(x.utilized)}</div><div class="num" style="width:34px;text-align:right">${(x.pct*100).toFixed(0)}%</div></div>`).join("")}</div></div></div>
   </div>
 
   <div class="panel mt14"><div class="panel-hd" data-tip="Every customer in the current view as one tile. Shade = how much of the approved SR limit is drawn, from pale green at idle to deep red at the limit. Hatched tiles have no SR limit at all. Click any tile to open that customer."><h3>Customer ${state.heatView==="tree"?"exposure treemap":"utilization heatmap"}${state.overviewSegClick?" · "+SEGMENT_LABEL[state.overviewSegClick]:""}</h3>
@@ -1819,8 +1973,9 @@ function paneOverviewCustomer(c){
   const hist=[]; for(let off=HIST_DAYS-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
   const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
   const typeRows=LIMIT_TYPES.map(t=>{
-    const amt=custLimitTypeM(c,t), utilAmt=Math.min(1,cur)*amt;
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated"><i style="width:${(Math.min(1,cur)*100).toFixed(0)}%;background:${cur>=0.9?'var(--fail)':cur>=0.75?'var(--warn)':'var(--violet)'}"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
+    const amt=custLimitTypeM(c,t), utilAmt=custTypeDrawnM(c,t);
+    const rate=amt>0?utilAmt/amt:0;
+    return `<div class="hlrow" data-hl-type="${esc(t)}" data-hlsrc="type|${esc(t)}" style="display:flex;align-items:center;gap:8px;font-size:0.71875rem"><div style="width:54px;color:var(--ink-2)">${t}</div><div class="bar-mini" style="flex:1" data-tip="${t}: ${fmtM(utilAmt)} drawn of ${fmtM(amt)} allocated (${fmtPct(rate,0)})"><i style="width:${Math.min(100,rate*100).toFixed(0)}%;background:${rate>=0.9?'var(--fail)':rate>=0.75?'var(--warn)':'var(--violet)'}"></i><i class="hlmark"></i></div><div class="num" style="width:56px;text-align:right">${fmtM(amt)}</div><div class="num failc" style="width:56px;text-align:right">${fmtM(utilAmt)}</div></div>`;
   }).join("");
   const recentTxns=TXNS.filter(t=>t.customer.id===c.id).slice(0,10);
   return `<div class="kpis kpis-4">${kpis.map(([l,v,s2,acc,cls])=>`<div class="kpi" style="--accent:${acc}" data-tip="${esc(l)}"><div class="eyebrow">${l}</div><b class="num ${cls}">${v}</b><small>${s2}</small></div>`).join("")}</div>
@@ -1831,16 +1986,16 @@ function paneOverviewCustomer(c){
         <div style="flex:1;min-width:190px">${pieSegs.map(sg=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:0.78125rem"><span style="width:10px;height:10px;border-radius:3px;background:${sg.color};flex:0 0 auto"></span><span style="flex:1;color:var(--ink-2)">${sg.label}</span><span class="num muted" style="margin-right:10px">${fmtM(sg.label==="Utilized"?Math.min(1,cur)*c.limitM:Math.max(0,1-Math.min(1,cur))*c.limitM)}</span><span class="num" style="font-weight:700;width:46px;text-align:right">${sg.v.toFixed(1)}%</span></div>`).join("")}
         ${cur>1?`<div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;font-size:0.71875rem"><span class="tag t-fail">Breach</span><span style="flex:1;color:var(--ink-2)">${fmtPct(cur-1)} over approved limit</span><span class="num failc" style="font-weight:700">${fmtM((cur-1)*c.limitM)}</span></div>`:""}</div>
       </div></div></div>
-    <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation of the ${fmtM(c.limitM)} limit</span></div>
+    <div class="panel"><div class="panel-hd"><h3>Limit type breakdown</h3><span class="slo">allocation &amp; drawn against the ${fmtM(c.limitM)} limit</span></div>
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
   </div>
   <div class="panel mt14"><div class="panel-hd" data-tip="Solid blue = this customer's actual daily utilization over 18 months; it is spiky because each booking consumes SR at once and each maturity releases it. Purple = 3-month trailing moving average. Dashed green = the settlement run-off of outstanding exposure over the next 12 months, from each trade's own remaining tenor. It only declines because future trades are unknowable. Red dashed line is the 100% limit."><h3>Utilization trend &amp; capacity run-off</h3>
     <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
     <div class="panel-body"><div class="chart-well tall">${trendChart(hist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
     ${trendLegend(state.showMA)}</div>
-  <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent, last 30 days</span></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
-    <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer in the last 30 days.</div>`}</div>`;
+    <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer.</div>`}</div>`;
 }
 
 /* ============================================================
@@ -1921,7 +2076,7 @@ function paneBlotter(){
 function paneRankings(){
   const list=filteredWithLimit();
   // Both ranking tables are capped to the same length so the two panels end flush.
-  const RANK_N=12;
+  const RANK_N=25;   // the book is ~2,000 limit holders now; a top-12 ranking was too thin to be useful
   const near100=[...list].sort((a,b)=>custUtilCur(b)-custUtilCur(a)).slice(0,RANK_N);
   const dormantAll=list.map(c=>({c,days:daysSinceNonZero(c.series)})).filter(x=>x.days>0).sort((a,b)=>b.days-a.days);
   const dormant=dormantAll.slice(0,RANK_N);
@@ -2153,15 +2308,12 @@ function drawerBreakdownTable(c){
       <div class="dsub">Each scope allocates the same ${money(c.limitM)} limit a different way, so the two subtotals are alternative cuts of one limit — not additive. Rows and colours match the allocation bars above.${cur>1?` Utilization is <b class="failc">${fmtPct(cur)}</b> of the limit; the ${money((cur-1)*c.limitM)} excess sits above every carve-out and is not attributable to one label.`:""}</div></div>`;
   }
 
-  // No carve-outs: fall back to the notional limit-type split, with utilized SR
-  // apportioned by the customer's outstanding (unsettled) transactions.
-  const live=TXNS.filter(t=>t.customer.id===c.id && t.daysToMaturity>0);
-  const byType={}; LIMIT_TYPES.forEach(t=>byType[t]=0);
-  live.forEach(t=>{ byType[t.limitType]=(byType[t.limitType]||0)+t.srConsumedM; });
-  const rawSum=LIMIT_TYPES.reduce((a,t)=>a+byType[t],0);
+  // No carve-outs: fall back to the notional limit-type split. Utilized SR uses the
+  // same product-biased split as Concentration by limit type and the customer view,
+  // so the same question never gets three different answers.
   const rows=LIMIT_TYPES.map(t=>{
     const total=custLimitTypeM(c,t);
-    const util=rawSum ? drawnTotal*byType[t]/rawSum : drawnTotal*c.typeAlloc[t];
+    const util=custTypeDrawnM(c,t);
     const up=total?util/total:0;
     return `<tr><td>${t}</td><td class="r num">${money(total)}</td><td class="r num">${(c.typeAlloc[t]*100).toFixed(0)}%</td>
       <td class="r num">${money(util)}</td><td class="r num"><b class="${up>=1?'failc':up>=0.75?'warnc':'passc'}">${fmtPct(up)}</b>${utilBar(up)}</td>
@@ -2170,7 +2322,7 @@ function drawerBreakdownTable(c){
   return `<div class="block"><div class="lbl">Limit type breakdown — total SR vs utilized SR</div>
     <div class="dwrap"><table class="dtable">${head}<tbody>${rows}</tbody>
     <tfoot><tr><td>Total</td><td class="r num">${money(c.limitM)}</td><td class="r num">100%</td><td class="r num"><b class="${cur>1?'failc':''}">${money(cur*c.limitM)}</b></td><td class="r num"><b class="${cur>1?'failc':cur>=0.75?'warnc':'passc'}">${fmtPct(cur)}</b></td><td class="r num">${money(Math.max(0,c.limitM-cur*c.limitM))}</td></tr></tfoot></table></div>
-    <div class="dsub">No carve-outs are in place for this customer, so the limit is shown against its notional limit-type split. Utilized SR is apportioned across types by outstanding, unsettled trades.</div></div>`;
+    <div class="dsub">No carve-outs are in place for this customer, so the limit is shown against its notional limit-type split. Utilized SR is split across types by product draw rate — the same basis as Concentration by limit type.</div></div>`;
 }
 /* Drawer transaction blotter — aligned columns, maturity date and days to maturity. */
 function drawerTxnTable(c){
@@ -2235,6 +2387,9 @@ function render(){
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
   if(state.tab==="requests") wireRequestForm();
   if(state.tab==="carveouts") wireCarveoutForm();
+  // Repaint the pinned selection AFTER the pane is rebuilt — the rows it marks
+  // are brand new elements, so painting first would mark the DOM being replaced.
+  if(typeof hlApply==="function"){ hlApply(hlPinned); hlBadge(); }
 }
 
 /* ============================================================
@@ -2249,6 +2404,11 @@ document.addEventListener("click",e=>{
   const mselclear=e.target.closest("[data-mselclear]"); if(mselclear){const key=mselclear.dataset.mselclear; state.filters[key]=new Set(); if(key==="segment") state.overviewSegClick=""; refreshMsel(key); render(); return;}
   const tab=e.target.closest(".tab"); if(tab){state.tab=tab.dataset.tab;render();return;}
   const clr=e.target.closest("[data-clearchip]"); if(clr){const k=clr.dataset.clearchip; state.filters[k]=new Set(); if(k==="segment") state.overviewSegClick=""; refreshMsel(k); render(); return;}
+  const hsrc=e.target.closest("[data-hlsrc]");
+  if(hsrc && state.highlight && !e.target.closest(".hmcell,.tmcell,[data-segclick],[data-cust]")){
+    hlPin(hsrc.getAttribute("data-hlsrc"));
+    return;   // aggregate rows pin; anything with its own click action keeps it
+  }
   const hsize=e.target.closest("[data-heatsize]"); if(hsize){state.heatSize=hsize.dataset.heatsize;render();return;}
   const hview=e.target.closest("[data-heatview]"); if(hview){state.heatView=hview.dataset.heatview;render();return;}
   const htop=e.target.closest("[data-heattop]"); if(htop){state.heatTop=+htop.dataset.heattop;render();return;}
@@ -2282,6 +2442,7 @@ document.addEventListener("click",e=>{
   if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
 });
 document.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && hlPinned){ hlPinned=null; hlApply(null); hlBadge(); }
   if(e.key==="Escape"){ if($("#confirm-modal").classList.contains("open")) closeConfirm(); else {closeDrawer();closeMsel();} }
   if(e.key==="Enter" && $("#confirm-modal").classList.contains("open")){ const fn=_confirmAction; closeConfirm(); if(fn) fn(); }
 });
@@ -2305,6 +2466,7 @@ document.addEventListener("change",e=>{
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
   if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
   if(e.target.id==="hm-sort"){ state.heatSort=e.target.value; render(); return; }
+  if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
     const found=WITH_LIMIT.find(c=>c.name===name);
