@@ -796,7 +796,21 @@ const SETTLE_DAYS={};
 Object.entries(SETTLE_TENORS).forEach(([p,mix])=>{
   SETTLE_DAYS[p]=mix.reduce((a,b)=>b[1]>a[1]?b:a)[0];
 });
-const DEFAULT_SETTLE_MIX=[[2,42],[30,22],[93,20],[186,12],[372,4]]; // fallback profile when a customer has no trades
+/* Fallback maturity profile for a customer with no live trades. Spread across many
+   distinct days rather than five round tenors, so the fallback run-off steps down
+   like a real book instead of falling off five cliffs. */
+const DEFAULT_SETTLE_MIX=(function(){
+  const anchors=[[2,42],[30,22],[93,20],[186,12],[372,4]];
+  const out=[];
+  anchors.forEach(([lag,w])=>{
+    const n=lag<=2?2:7;                       // T+2 cash really does land in a day or two
+    for(let i=0;i<n;i++){
+      const jitter=lag<=2 ? i+1 : Math.round(lag*(0.65+0.7*i/(n-1)));
+      out.push([Math.max(1,jitter), w/n]);
+    }
+  });
+  return out;
+})();
 const CLASS_TYPE_WEIGHTS={
   "FX":[["eFX",0.85],["FX-DERI",0.15]],
   "FX Options":[["FX-DERI",1.0]],
@@ -980,6 +994,16 @@ function genSeries(profile,bias){
       diff[d]+=size;
       diff[Math.min(diff.length-1,d+ten)]-=size;
     }
+    /* Block trade — a term repo, a large bond settlement, a block equity cross.
+       One ticket several times the size of the whole day's normal flow, which
+       chalks a visible step up and releases it whole on its value date. Tied to
+       the market driver so blocks cluster on busy days across the book. */
+    if(rng() < 0.010*MARKET_DRIVE[d]){
+      const size=rand(420,1600);
+      const ten=weightedChoice([[14,26],[30,30],[93,28],[186,16]]);
+      diff[d]+=size;
+      diff[Math.min(diff.length-1,d+ten)]-=size;
+    }
   }
   let run=0; const raw=new Array(N);
   for(let d=0; d<N; d++){ run+=diff[d]; raw[d]=Math.max(0,run); }
@@ -988,7 +1012,7 @@ function genSeries(profile,bias){
   // Scale the book so its average utilization lands on the profile's target,
   // then hold non-breach names just under their limit — breaches stay a
   // property of the profile, not an accident of a volatile draw.
-  const ceil = profile==="breach" ? 1.38 : 0.985;
+  const ceil = profile==="breach" ? 1.38 : 1.0;   // a name may touch its limit mid-history; today's status comes from the ramp below
   const out=hist.map(v=>Math.max(0,Math.min(ceil, v/mean*target2)));
   /* Ramp the recent tail towards where this profile is meant to sit TODAY, so the
      risk bands are populated by design rather than by luck of the draw — but scale
@@ -1120,7 +1144,11 @@ const TXNS=[];
     const assetClass=choice(ASSET_CLASSES);
     const product=choice(PRODUCTS[assetClass]);
     const limitType=weightedChoice(CLASS_TYPE_WEIGHTS[assetClass]);
-    const notional=Math.round(rand(2,450)*(assetClass==="Fixed Income"?2:1));
+    // ~2.5% of tickets are blocks — term repo, large bond or equity settlements.
+    const block=rng()<0.025;
+    const notional=block
+      ? Math.round(rand(900,4200)*(assetClass==="Fixed Income"?1.5:1))
+      : Math.round(rand(2,450)*(assetClass==="Fixed Income"?2:1));
     const srPct=rand(0.02,0.09);
     const srConsumed=+(notional*srPct).toFixed(1);
     const dayOffset=randInt(0,HIST_DAYS-1);
@@ -1128,13 +1156,19 @@ const TXNS=[];
     // SR is live until then, so long-dated tenors keep exposure on the book for months.
     const lag=weightedChoice(SETTLE_TENORS[product]||[[SETTLE_DAYS[product]||5,1]]);
     const tradeDate=dateAt(dayOffset);
-    const maturity=new Date(tradeDate.getTime()+lag*dayMs);
+    let maturity=new Date(tradeDate.getTime()+lag*dayMs);
+    /* Long-dated tenors settle on standard dates, not trade date + N. Forwards,
+       swaps and term repo roll to month-end, so maturities cluster there and SR
+       comes back in monthly lumps instead of trickling in evenly every day —
+       which is what makes the forward run-off a staircase rather than a curve. */
+    if(lag>=30) maturity=new Date(maturity.getFullYear(),maturity.getMonth()+1,0);
     const daysToMaturity=Math.ceil((maturity.getTime()-TODAY.getTime())/dayMs);
+    const settleLag=Math.round((maturity.getTime()-tradeDate.getTime())/dayMs);
     // Status follows maturity — a trade cannot settle before its value date, so
     // anything still short of maturity is Pending and its SR is still consumed.
     const status = rng()<0.03 ? "Failed" : (daysToMaturity>0 ? "Pending" : "Settled");
     TXNS.push({id:"T-"+(tid++),date:tradeDate,customer:c,assetClass,product,limitType,notionalM:notional,srConsumedM:srConsumed,status,
-      settleLag:lag, maturity, daysToMaturity});
+      settleLag, maturity, daysToMaturity});
   }
   TXNS.sort((a,b)=>b.date-a.date);
 })();
@@ -1174,16 +1208,21 @@ function settlementMix(txns){
 }
 /* Fraction of today's exposure still outstanding on each future day. Each tenor
    bucket matures over a short window around its lag rather than a hard cliff. */
+/* Fraction of today's exposure still outstanding on each future day. Settlement
+   happens on value dates, not continuously: each bucket falls off on ITS day, so
+   the curve is a staircase. Smoothing it into a ramp was the wrong picture — SR
+   comes back in lumps, exactly the way it was chalked up. */
 function runoffFractions(mix,horizon){
+  const drop=new Array(horizon+2).fill(0);
+  mix.b.forEach((amt,lag)=>{
+    const d=Math.max(1,Math.min(horizon+1,Math.round(lag)));
+    drop[d]+=amt;
+  });
   const out=[];
+  let remain=mix.total;
   for(let d=1;d<=horizon;d++){
-    let remain=0;
-    mix.b.forEach((amt,lag)=>{
-      const s=lag*0.55, e=Math.max(lag*1.55,lag+3);   // maturities spread around the tenor, not a cliff
-      const f = d<=s ? 1 : d>=e ? 0 : (e-d)/(e-s);
-      remain+=amt*f;
-    });
-    out.push(remain/mix.total);
+    remain-=drop[d];
+    out.push(Math.max(0,remain)/mix.total);
   }
   return out;
 }
