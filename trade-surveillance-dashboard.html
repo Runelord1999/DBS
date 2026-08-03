@@ -208,8 +208,12 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 .score .sbar i{display:block;height:100%;border-radius:3px}
 .score b{font-family:var(--mono);font-size:0.71875rem;font-weight:700;width:2.2em;text-align:right}
 
-/* ---- Rule × desk matrix heatmap ---- */
+/* ---- Rule × trader matrix heatmap ---- */
 .matwrap{overflow-x:auto;padding:6px 16px 14px}
+/* Fifty rows is a scroll, not a page: the matrix keeps its own viewport so the
+   panels below it stay reachable. */
+.matwrap.tallmat{max-height:560px;overflow-y:auto}
+.matwrap.tallmat thead th{position:sticky;top:0;z-index:2;background:var(--panel)}
 .matrix{border-collapse:separate;border-spacing:3px;width:max-content;min-width:100%}
 .matrix th{padding:0;border:0;font-size:0.53125rem;letter-spacing:.03em;color:var(--ink-3);font-weight:700;text-transform:none}
 .matrix th.colhd{height:88px;vertical-align:bottom;width:34px;min-width:34px}
@@ -255,6 +259,11 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 .rulecard h4{margin:0;font-size:0.75rem;font-weight:700;flex:1;min-width:0}
 .rulecard p{margin:0;font-size:0.65625rem;color:var(--ink-2);line-height:1.5}
 .rulecard .logic{font-family:var(--mono);font-size:0.59375rem;color:var(--ink-3);background:var(--panel-2);border:1px solid var(--hair);border-radius:5px;padding:5px 7px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+/* The baseline line is the one that says what "unusual" is measured against —
+   it belongs on the card, next to the test, not buried in the alert. */
+.rulecard .rbase{display:flex;gap:7px;align-items:baseline;font-size:0.59375rem;color:var(--ink-2);line-height:1.45}
+.rulecard .rbase .scope{flex:0 0 auto;font-size:0.53125rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--brand);border:1px solid color-mix(in srgb,var(--brand) 34%,transparent);border-radius:4px;padding:1px 5px}
 .rulecard .rstats{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:0.65625rem;color:var(--ink-3);margin-top:auto;padding-top:4px;border-top:1px solid var(--hair)}
 .rulecard .rstats b{font-family:var(--mono);color:var(--ink);font-weight:700}
 
@@ -397,8 +406,10 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
     <div class="brand"><div class="brand-mark">TS</div>
       <div><h1>Trade Surveillance</h1><p>Anomaly &amp; fraud pattern detection</p></div></div>
 
-    <div class="field"><span class="eyebrow">Trading desk</span>
-      <button type="button" class="msel-btn" data-msel="desk" aria-expanded="false"><span>All desks</span></button></div>
+    <div class="field"><span class="eyebrow">Trader</span>
+      <button type="button" class="msel-btn" data-msel="trader" aria-expanded="false"><span>All traders</span></button></div>
+    <div class="field"><span class="eyebrow">Trader group</span>
+      <button type="button" class="msel-btn" data-msel="desk" aria-expanded="false"><span>All groups</span></button></div>
     <div class="field"><span class="eyebrow">Asset class</span>
       <button type="button" class="msel-btn" data-msel="assetClass" aria-expanded="false"><span>All asset classes</span></button></div>
     <div class="field"><span class="eyebrow">Severity</span>
@@ -431,7 +442,7 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
     </div>
     <div class="rail-spacer"></div>
     <button class="btn-ghost" id="reset-reviews" style="width:100%">Reset my review decisions</button>
-    <div class="mininote">All trades, traders, desks and counterparties are <b>modelled mock data</b> for demonstration — no booked positions and no real people. Detection thresholds are illustrative.</div>
+    <div class="mininote">Detection runs <b>per trader</b>: every rule is tested against the individual's own authorisation, their own baseline or their peer cohort. A desk is a reporting line, not a detection unit.<br><br>All trades, traders, groups and counterparties are <b>modelled mock data</b> for demonstration — no booked positions and no real people. Detection thresholds are illustrative.</div>
   </aside>
 
   <main class="main">
@@ -441,7 +452,7 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
         <button class="tab" role="tab" data-tab="detections" aria-selected="false">Detections<span class="cnt" id="tabcnt">0</span></button>
         <button class="tab" role="tab" data-tab="rules" aria-selected="false">Rule Library</button>
         <button class="tab" role="tab" data-tab="blotter" aria-selected="false">Trade Blotter</button>
-        <button class="tab" role="tab" data-tab="traders" aria-selected="false">Traders &amp; Desks</button>
+        <button class="tab" role="tab" data-tab="traders" aria-selected="false">Traders &amp; Groups</button>
         <button class="tab" role="tab" data-tab="log" aria-selected="false">Review Log</button>
       </div>
       <div class="tabs-right">
@@ -551,6 +562,13 @@ const shuffle=a=>{const x=a.slice();for(let i=x.length-1;i>0;i--){const j=Math.f
 const weightedChoice=pairs=>{const tot=pairs.reduce((a,p)=>a+p[1],0)||1;const r=rng()*tot;let acc=0;for(const pr of pairs){acc+=pr[1];if(r<=acc)return pr[0];}return pairs[pairs.length-1][0];};
 // Log-normal-ish draw: trade sizes cluster small with a long tail of blocks.
 const lognorm=(med,sigma)=>med*Math.exp(sigma*(rng()+rng()+rng()+rng()-2));
+/* Small descriptive statistics. Every "is this unusual?" rule resolves against a
+   trader's own distribution, so mean/σ/percentile are part of the data model. */
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+const sd=a=>{ if(a.length<2) return 0; const m=mean(a); return Math.sqrt(a.reduce((x,y)=>x+(y-m)*(y-m),0)/(a.length-1)); };
+const pctile=(a,p)=>{ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y); return s[Math.min(s.length-1,Math.max(0,Math.round(p*(s.length-1))))]; };
+const median=a=>pctile(a,0.5);
+const uniq=a=>a.filter((v,i,x)=>x.indexOf(v)===i);
 
 /* ============================================================
    Formatters + calendar
@@ -585,9 +603,13 @@ const isHoliday=d=>HOLIDAYS.has(isoDate(d));
 const isBiz=d=>!isWeekend(d)&&!isHoliday(d);
 
 /* ============================================================
-   Desks, mandates and traders
-   Every desk carries an approved product list — the mandate is what the
-   out-of-mandate rule tests against, so it has to be data, not prose.
+   Trader groups ("desks") and traders
+   A desk is an organisational grouping of traders and the reporting line they
+   sit under — it is not a unit of detection. Surveillance runs on the
+   individual: a $4m ticket that disappears into a desk's pooled turnover is
+   still four times a junior trader's own daily average, and only the second
+   reading finds anything. The desk mandate below is the union of what its
+   members are signed off for; each trader carries their own narrower list.
 ============================================================ */
 const DESKS=[
   {id:"D1", name:"G10 FX Spot & Forwards", region:"Singapore", short:"G10 FX", w:16,
@@ -666,6 +688,7 @@ TRADERS.forEach((t,i)=>{
   t.leave=[start,start+13];
 });
 
+
 /* ============================================================
    Instruments — reference levels per product family. Trade prices are drawn
    around these, and distance from them is what the off-market rules measure,
@@ -731,6 +754,16 @@ const RELATED_PARTIES={
   "Blue Lantern Ventures":"Registered address shared with a declared staff dependant",
 };
 const INST_CTPY=COUNTERPARTIES.filter(c=>INST_TYPES.indexOf(c.type)>=0);
+/* Jurisdictions the financial-crime policy rates as high risk for payment
+   routing, and the names the wall keeps the trading floor out of. Both are
+   checked per trader: a wall crossing is granted to a person, not to a desk. */
+const HIGH_RISK_JUR=[["Seychelles","High — FATF grey list"],["Panama","High — enhanced due diligence"],
+  ["Cyprus","Elevated — shell-company exposure"],["Latvia","Elevated — correspondent banking"],
+  ["Cayman","Elevated — beneficial-ownership opacity"],["BVI","High — beneficial-ownership opacity"]];
+const RESTRICTED=[["Vantara Property","Advisory mandate live — corporate finance wall"],
+  ["Halcyon Airlines","Restructuring committee — bank is a lender"],
+  ["Kestrel Mining","Announced acquisition financing in progress"],
+  ["Solstice Retail","Covenant negotiation — bank holds material non-public information"]];
 const INTERNAL_BOOKS=["TRSY-FUNDING","XVA-DESK","PROP-LEGACY","CVA-HEDGE","STRUCT-WAREHOUSE"];
 const CHANNELS=[["Voice",34],["eComm single-dealer",30],["Multi-dealer platform",18],["API / Algo",12],["Internal booking",6]];
 const VENUES=["OTC bilateral","SEF / MTF","Exchange (SGX)","Exchange (CME)","Exchange (HKEX)","Interdealer broker","Internal"];
@@ -775,6 +808,70 @@ const AC_COLOR={
   "Interest Rate Derivatives":"var(--gold)","Bonds":"var(--pink)","Repo":"var(--ink-3)",
   "Equity Derivatives":"var(--pass)","Credit Derivatives":"var(--fail)"};
 const PRODUCTS_BY_AC={}; ASSET_CLASSES.forEach(ac=>PRODUCTS_BY_AC[ac]=PRODUCTS.filter(p=>p.ac===ac).map(p=>p.p));
+
+/* ============================================================
+   Trader control profile
+   Every threshold a rule tests against belongs to the trader, not to the desk:
+   their own ticket authorisation, their own position limit, their own approved
+   products, their own tenor cap, their own peer cohort. Two people sitting side
+   by side on the same desk are held to different limits, and the engine holds
+   each of them to their own — which is the whole point of running detection at
+   trader granularity rather than pooling a desk.
+============================================================ */
+const GRADE_MULT={"Associate":{tk:1.6,pos:5.0,tenor:5,ctpy:0.45,w:1.0},
+                  "Senior":{tk:2.8,pos:6.5,tenor:10,ctpy:0.38,w:1.5},
+                  "Executive Director":{tk:4.6,pos:8.0,tenor:30,ctpy:0.34,w:2.2}};
+const niceLimit=v=>v>=200?Math.round(v/50)*50:v>=60?Math.round(v/10)*10:v>=20?Math.round(v/5)*5:Math.round(v);
+TRADERS.forEach(t=>{
+  const d=DESK_BY_ID[t.deskId], g=GRADE_MULT[t.grade];
+  // Authorisation is sized to the book the trader actually runs: a $25m repo
+  // ticket limit would be meaningless on a desk whose median deal is $75m.
+  const scale=median(d.mandate.map(p=>PROD_BY_NAME[p].med));
+  t.ticketLimit=niceLimit(scale*g.tk);
+  t.posLimit=niceLimit(t.ticketLimit*g.pos);
+  t.tenorYrs=g.tenor; t.ctpyCap=g.ctpy;
+  // An associate is signed off for part of the desk's list, never all of it.
+  t.products=t.grade==="Associate"?d.mandate.slice(0,Math.max(2,d.mandate.length-2))
+            :t.grade==="Senior"?d.mandate.slice(0,Math.max(3,d.mandate.length-1)):d.mandate.slice();
+  // Each trader faces their own handful of counterparties. A floor-wide list
+  // makes concentration meaningless: nobody deals with forty names, and the
+  // rule that asks "who is this trader's flow going to?" needs a real answer.
+  t.ctpys=shuffle(COUNTERPARTIES.filter(c=>INST_TYPES.indexOf(c.type)>=0)).slice(0,randInt(6,10))
+    .concat(shuffle(COUNTERPARTIES.filter(c=>INST_TYPES.indexOf(c.type)<0)).slice(0,randInt(2,4)));
+});
+TRADERS.forEach(t=>{
+  const d=DESK_BY_ID[t.deskId];
+  t.supervisor=(d.traders.filter(x=>x.grade==="Executive Director"&&x.id!==t.id)[0]
+              ||TRADERS.filter(x=>x.grade==="Executive Director"&&x.id!==t.id)[0]).name;
+});
+
+/* Peer cohort — same grade, same kind of book. "Unusual" is measured against
+   the people doing the same job, which is the only comparison that survives an
+   argument with a desk head. Cohorts cut across desks on purpose: two juniors
+   on two FX desks are better comparators for each other than either is for the
+   ED sitting next to them. */
+const COHORT_FAM={fx:"FX & Options",ndf:"FX & Options",fxopt:"FX & Options",rate:"Rates",
+  bondg:"Credit, Equity & Financing",bondc:"Credit, Equity & Financing",repo:"Credit, Equity & Financing",
+  cds:"Credit, Equity & Financing",cdsi:"Credit, Equity & Financing",trs:"Credit, Equity & Financing",
+  eq:"Credit, Equity & Financing",eqopt:"Credit, Equity & Financing"};
+const FINE_COHORT={}, BY_GRADE={};
+TRADERS.forEach(t=>{
+  const k=t.grade+" · "+(COHORT_FAM[PROD_BY_NAME[DESK_BY_ID[t.deskId].mandate[0]].fam]||"Other");
+  (FINE_COHORT[k]=FINE_COHORT[k]||[]).push(t);
+  (BY_GRADE[t.grade]=BY_GRADE[t.grade]||[]).push(t);
+  t.fineKey=k;
+});
+// A cohort of one or two compares a trader with themselves. Where the finer
+// split is too thin to mean anything, the comparator widens to everyone of
+// that grade rather than pretending a group of two is a peer group.
+const COHORTS={};
+TRADERS.forEach(t=>{
+  const fine=FINE_COHORT[t.fineKey];
+  if(fine.length>=3){ t.peers=fine; t.cohort=t.fineKey; }
+  else { t.peers=BY_GRADE[t.grade]; t.cohort=t.grade+" · all books"; }
+  (COHORTS[t.cohort]=COHORTS[t.cohort]||[]).push(t);
+});
+const COHORT_KEYS=Object.keys(COHORTS);
 
 /* ============================================================
    Instrument pricing
@@ -887,7 +984,7 @@ function makeTrade(dayIdx,trader,prod,opts){
   const spreadBps=opts.spreadBps!=null?opts.spreadBps:rand(0.1,2.4);
   const execMin=opts.execMin!=null?opts.execMin:execMinFor(desk);
   const lag=opts.captureLag!=null?opts.captureLag:weightedChoice([[rand(0,3),70],[rand(3,15),22],[rand(15,60),7],[rand(60,210),1]]);
-  const ctpy=opts.ctpy||choice(COUNTERPARTIES);
+  const ctpy=opts.ctpy||choice(trader.ctpys||COUNTERPARTIES);
   const t={
     id:tid(), dayIdx, date, dateStr:fmtDate(date), iso:isoDate(date),
     deskId:desk.id, deskName:desk.name, deskShort:desk.short, region:desk.region,
@@ -933,17 +1030,69 @@ function makeTrade(dayIdx,trader,prod,opts){
       const n=Math.max(1,Math.round(desk.w*seasonal*eomBoost*rand(0.72,1.28)));
       for(let i=0;i<n;i++){
         const trader=weightedChoice(desk.traders.map(t=>[t,t.grade==="Associate"?1.35:t.grade==="Senior"?1.15:0.85]));
-        // Traders keep to their mandate in the ordinary course; the out-of-mandate
-        // rule fires on planted exceptions, not on background noise.
-        const prod=choice(desk.mandate);
-        makeTrade(d,trader,prod,{});
+        // Traders keep to their own approved list in the ordinary course, and to
+        // their own ticket authorisation — so a breach of either is the trader's
+        // exception, not a desk-wide artefact.
+        const prod=choice(trader.products);
+        makeTrade(d,trader,prod,{notional:Math.min(trader.ticketLimit*0.94,Math.max(0.4,lognorm(PROD_BY_NAME[prod].med,PROD_BY_NAME[prod].sig)))});
       }
     });
   }
 })();
 
 /* ============================================================
-   Rule library — 20 surveillance typologies
+   Per-trader behavioural baselines
+   Measured off each trader's own book once it exists. Every rule that asks "is
+   this unusual?" resolves the question here — against this trader's ordinary
+   week, and against the cohort doing the same job — never against a desk total,
+   where one junior's whole year is a rounding error on the head trader's month.
+============================================================ */
+const BASE={};
+(function traderBaselines(){
+  TRADERS.forEach(t=>{
+    const own=TRADES.filter(x=>x.traderId===t.id);
+    const byDay={}; own.forEach(x=>{ (byDay[x.dayIdx]=byDay[x.dayIdx]||[]).push(x); });
+    const dk=Object.keys(byDay);
+    const tickets=dk.map(k=>byDay[k].length);
+    const notion=dk.map(k=>byDay[k].reduce((a,x)=>a+x.notional,0));
+    const ctpy={}; own.forEach(x=>{ ctpy[x.ctpy]=(ctpy[x.ctpy]||0)+1; });
+    const ctpyNames=Object.keys(ctpy).sort((a,b)=>ctpy[b]-ctpy[a]);
+    const sizes=own.map(x=>x.notional);
+    const dayPnl=dk.map(k=>byDay[k].reduce((a,x)=>a+x.pnl,0));
+    BASE[t.id]={
+      deals:own.length, activeDays:dk.length,
+      tickets:mean(tickets), ticketsSd:sd(tickets), ticketsP95:pctile(tickets,0.95),
+      dayNotional:mean(notion), dayNotionalSd:sd(notion),
+      medSize:median(sizes), p95Size:pctile(sizes,0.95),
+      ctpyCount:ctpyNames.length, topCtpy:ctpyNames[0]||"—",
+      topCtpyShare:own.length?ctpy[ctpyNames[0]]/own.length:0,
+      products:uniq(own.map(x=>x.product)),
+      execMean:mean(own.map(x=>x.execMin)), execSd:sd(own.map(x=>x.execMin)),
+      pnlMean:mean(dayPnl), pnlSd:sd(dayPnl),
+      lossDays:dayPnl.filter(v=>v<0).length/Math.max(1,dayPnl.length),
+      amendRate:own.filter(x=>x.amends>0).length/Math.max(1,own.length),
+    };
+  });
+  // Cohort medians: what the same grade doing the same job looks like.
+  TRADERS.forEach(t=>{
+    const ms=t.peers;
+    BASE[t.id].cohort={tickets:median(ms.map(x=>BASE[x.id].tickets)),
+             dayNotional:median(ms.map(x=>BASE[x.id].dayNotional)),
+             medSize:median(ms.map(x=>BASE[x.id].medSize)),
+             ctpyCount:median(ms.map(x=>BASE[x.id].ctpyCount)),
+             topCtpyShare:median(ms.map(x=>BASE[x.id].topCtpyShare)),
+             amendRate:median(ms.map(x=>BASE[x.id].amendRate)),
+             lossDays:median(ms.map(x=>BASE[x.id].lossDays)),
+             n:ms.length};
+  });
+})();
+const trBase=tr=>BASE[tr.id];
+/* "×N of this trader's own baseline" — the phrase every trader-level rule is
+   argued in, so it is computed once and quoted verbatim on the evidence. */
+const xBase=(v,b)=>(b>0?(v/b).toFixed(1):"—")+"×";
+
+/* ============================================================
+   Rule library — 50 surveillance typologies, all evaluated per trader
    `logic` is the plain-language threshold the officer sees on the rule card and
    in every alert, so a disposition can always be argued against a stated test.
    `fp` is the historic benign rate: rules that fire on timing or data-quality
@@ -953,84 +1102,255 @@ function makeTrade(dayIdx,trader,prod,opts){
 const RULES=[
  {id:"TS-01",name:"Off-market rate execution",cat:"Pricing",sev:"High",fp:0.42,plants:60,actors:["T08","T23","T29"],
   desc:"A trade printed materially away from the prevailing market mid at the time of execution, in the trader's own favour.",
-  logic:"|traded px − market mid| > 25 bps AND notional > $5m AND sign favours the booking desk",
+  logic:"|traded px − market mid| > 25 bps AND notional > 3× this trader's own median ticket AND the sign favours the trader's own book",
+  base:"Market mid at execution; size scaled to the trader's own median ticket",
   why:"Off-market prints move value between the bank and the counterparty. Repeated in one direction they are the standard mechanism for paying value away to a connected party, or for booking profit that has not been earned."},
  {id:"TS-02",name:"Late or backdated trade capture",cat:"Booking integrity",sev:"Medium",fp:0.68,plants:55,actors:["T08","T05"],
   desc:"Execution captured in the risk system long after the trade was struck, or booked with a prior-day trade date.",
   logic:"capture timestamp − execution timestamp > 30 min, or trade date earlier than booking date",
+  base:"Policy threshold, ranked against the trader's own capture profile",
   why:"A capture gap is the window in which a price can be chosen with hindsight. It is also how positions are kept off the intraday risk run."},
  {id:"TS-03",name:"Excessive amendment and cancellation",cat:"Booking integrity",sev:"Medium",fp:0.55,plants:45,actors:["T08","T05"],
-  desc:"A single deal amended repeatedly, or a cluster of cancel-and-rebook activity by one trader in one session.",
-  logic:"≥3 amendments on one deal, or ≥4 cancel/rebook events by a trader in a day",
+  desc:"A single deal amended repeatedly, or a session of cancel-and-rebook activity far above this trader's own normal rate.",
+  logic:"≥3 amendments on one deal, or a session amendment rate > 4× this trader's own 12-month rate",
+  base:"The trader's own 12-month amendment and cancellation rate",
   why:"Amend-and-cancel is the cheapest way to reprice a trade after the fact, and the standard way a fictitious deal is unwound once it has served its purpose."},
  {id:"TS-04",name:"Wash trade — offsetting pair",cat:"Market conduct",sev:"High",fp:0.30,plants:40,actors:["T29","T05"],
-  desc:"Equal and opposite trades in the same instrument with the same counterparty, close in time, leaving no net risk.",
-  logic:"opposite direction, same instrument, notional match within 1%, executed <60 min apart, |net P&L| < $5k",
+  desc:"Equal and opposite trades by the same trader in the same instrument with the same counterparty, close in time, leaving no net risk.",
+  logic:"same trader, opposite direction, same instrument, notional match within 1%, executed <60 min apart, |net P&L| < $5k",
+  base:"The trader's own paired legs",
   why:"Wash trades create volume and price prints without economic purpose — used to inflate turnover, generate fictitious commission, or paint a market level."},
  {id:"TS-05",name:"Circular / round-trip trading",cat:"Market conduct",sev:"High",fp:0.26,plants:25,actors:["T26","T29"],
-  desc:"Risk that leaves the book and returns through a chain of counterparties within days, at a matching size.",
-  logic:"≥3 legs, same instrument, notional match within 2%, chain closes within 5 business days",
+  desc:"Risk that leaves one trader's book and returns to it through a chain of counterparties within days, at a matching size.",
+  logic:"≥3 legs by the same trader, same instrument, notional match within 2%, chain closes within 5 business days",
+  base:"The trader's own book, opening and closing position",
   why:"A round trip disguises the origin of a position or a funding transaction, and can move value to an intermediary that has no commercial role."},
- {id:"TS-06",name:"Ticket splitting below authorisation limit",cat:"Limits & controls",sev:"High",fp:0.38,plants:35,actors:["T26","T11"],
-  desc:"One economic trade broken into several tickets that each sit just under the trader's authorisation threshold.",
-  logic:"≥3 tickets, same instrument, each 90–100% of the $25m authorisation limit, all within 60 min",
-  why:"Splitting defeats the four-eyes check. The aggregate exposure is approved by nobody."},
- {id:"TS-07",name:"Trading outside desk mandate",cat:"Limits & controls",sev:"Medium",fp:0.47,plants:30,actors:["T29","T33","T20"],
-  desc:"A product booked that does not appear on the desk's approved product list.",
-  logic:"product ∉ desk approved product list AND no mandate exception on file",
-  why:"Unmandated products are unhedged, unmodelled and often unmonitored — the classic route by which a small position becomes an unreported one."},
- {id:"TS-08",name:"After-hours or non-business-day booking",cat:"Booking integrity",sev:"Medium",fp:0.61,plants:50,actors:["T05","T26"],
-  desc:"Execution or booking outside desk trading hours, at a weekend, or on a local holiday.",
-  logic:"booking timestamp outside desk hours ±90 min, or on a weekend / holiday calendar date",
+ {id:"TS-06",name:"Ticket splitting below the trader's authorisation",cat:"Limits & controls",sev:"High",fp:0.38,plants:35,actors:["T26","T11"],
+  desc:"One economic trade broken into several tickets that each sit just under this trader's personal authorisation threshold.",
+  logic:"≥3 tickets, same instrument, each 90–100% of this trader's own ticket authorisation, all within 60 min",
+  base:"The trader's own ticket authorisation",
+  why:"Splitting defeats the four-eyes check. The aggregate exposure is approved by nobody, and the limit that was defeated belongs to the individual, not the desk."},
+ {id:"TS-07",name:"Trading outside the trader's approved products",cat:"Limits & controls",sev:"Medium",fp:0.47,plants:30,actors:["T29","T33","T20"],
+  desc:"A product booked that does not appear on this trader's own approved product list, whether or not the desk is signed off for it.",
+  logic:"product ∉ this trader's own approved product list AND no personal mandate exception on file",
+  base:"The trader's own approved product list",
+  why:"Unmandated products are unhedged, unmodelled and often unmonitored — the classic route by which a small position becomes an unreported one. A desk sign-off is not an individual sign-off."},
+ {id:"TS-08",name:"Booking outside the trader's own hours",cat:"Booking integrity",sev:"Medium",fp:0.61,plants:50,actors:["T05","T26"],
+  desc:"Execution or booking outside the window this trader normally works, at a weekend, or on a local holiday.",
+  logic:"booking timestamp outside the trader's own execution-time distribution (own mean ±2.5σ), or on a weekend / holiday calendar date",
+  base:"The trader's own execution-time distribution",
   why:"Out-of-hours activity happens without supervision, without a live price feed to check against, and often without a middle-office reviewer."},
  {id:"TS-09",name:"Period-end mark manipulation",cat:"Valuation",sev:"Critical",fp:0.22,plants:30,actors:["T08","T11"],
-  desc:"Off-market prints concentrated on a valuation date, reversing shortly after the books close.",
-  logic:"≥2 trades >20 bps off mid on a month-end valuation date, with reversal within 3 business days",
+  desc:"Off-market prints by one trader concentrated on a valuation date, reversing shortly after the books close.",
+  logic:"≥2 trades >20 bps off mid on a month-end valuation date by the same trader, with reversal within 3 business days",
+  base:"The trader's own book across the valuation date",
   why:"Marks set on a valuation date determine reported P&L, capital and pay. Reversal straight afterwards is the signature that the mark, not the trade, was the objective."},
  {id:"TS-10",name:"Marking the close / fixing window concentration",cat:"Market conduct",sev:"Critical",fp:0.24,plants:35,actors:["T11","T29"],
-  desc:"A disproportionate share of a trader's daily volume executed inside the benchmark fixing window.",
-  logic:"volume in the 16:00 fix window > 40% of the trader's daily volume in that pair, and one-directional",
+  desc:"A disproportionate share of a trader's own daily volume executed inside the benchmark fixing window.",
+  logic:"volume in the 16:00 fix window > 40% of this trader's daily volume in that pair, and one-directional",
+  base:"The trader's own daily volume in the pair",
   why:"Concentrating one-way flow into the fix moves the published benchmark that thousands of other contracts settle against."},
  {id:"TS-11",name:"Front-running client flow",cat:"Client conduct",sev:"Critical",fp:0.20,plants:28,actors:["T11","T23"],
-  desc:"A house trade in the same instrument and direction placed minutes ahead of a large client order.",
-  logic:"house trade same instrument & direction, 0–15 min before a client order ≥$25m, house position profitable on the client print",
+  desc:"A house trade in the same instrument and direction placed minutes ahead of a large client order handled by the same trader.",
+  logic:"house trade same instrument & direction, 0–15 min before a client order ≥5× this trader's median ticket, house position profitable on the client print",
+  base:"The trader's own order book and median ticket",
   why:"The client's own order pays for the profit. This is a direct breach of the duty of best execution and of the conflicts policy."},
  {id:"TS-12",name:"Intraday limit breach with end-of-day flattening",cat:"Limits & controls",sev:"High",fp:0.34,plants:30,actors:["T11","T05"],
-  desc:"A position taken well beyond limit during the session and closed before the end-of-day risk snapshot.",
-  logic:"peak intraday position > 130% of desk limit AND end-of-day position < 25% of limit",
+  desc:"A position taken well beyond the trader's own limit during the session and closed before the end-of-day risk snapshot.",
+  logic:"peak intraday position > 130% of this trader's own position limit AND end-of-day position < 25% of it",
+  base:"The trader's own position limit",
   why:"The snapshot the risk report is built from never sees the exposure. The bank carries risk it does not know it has."},
- {id:"TS-13",name:"P&L outlier versus historic volatility",cat:"Valuation",sev:"High",fp:0.44,plants:35,actors:["T08","T11","T23"],
+ {id:"TS-13",name:"P&L outlier versus own volatility",cat:"Valuation",sev:"High",fp:0.44,plants:35,actors:["T08","T11","T23"],
   desc:"A daily P&L far outside the trader's own recent distribution, unexplained by market moves or volume.",
-  logic:"|daily P&L| z-score > 3.0 against the trader's trailing 60-day distribution",
+  logic:"|daily P&L| z-score > 3.0 against this trader's own trailing 60-day distribution",
+  base:"The trader's own trailing 60-day P&L distribution",
   why:"Unusual profit is as informative as unusual loss: both suggest the position or the valuation is not what it is reported to be."},
  {id:"TS-14",name:"Loss parking via internal book transfer",cat:"Valuation",sev:"Critical",fp:0.18,plants:22,actors:["T05","T08"],
-  desc:"A losing position moved to an internal warehouse book before a reporting date and returned shortly after.",
-  logic:"internal transfer out within 3 days before period end, reversed within 10 days, same instrument and size",
+  desc:"A losing position moved off the trader's own book to an internal warehouse before a reporting date and returned shortly after.",
+  logic:"internal transfer out of the trader's book within 3 days before period end, reversed within 10 days, same instrument and size",
+  base:"The trader's own book across the reporting date",
   why:"Parking removes a loss from the reported book without removing it from the bank. It is concealment, not risk management."},
  {id:"TS-15",name:"Off-market volatility on FX options",cat:"Pricing",sev:"High",fp:0.31,plants:32,actors:["T08","T10"],
   desc:"An option priced with an implied volatility away from the official surface for that pair and tenor.",
-  logic:"|quoted vol − surface vol| > 2.0 vols on a notional > $5m",
+  logic:"|quoted vol − surface vol| > 2.0 vols on a notional > 2× this trader's median ticket",
+  base:"Official volatility surface; size scaled to the trader's own median ticket",
   why:"Volatility is the price in an options book. A vol away from the surface transfers value on day one and distorts every subsequent revaluation."},
- {id:"TS-16",name:"Internal cross-desk transfer at off-market price",cat:"Valuation",sev:"High",fp:0.29,plants:24,actors:["T29","T08"],
-  desc:"An internal booking between two of the bank's own books priced away from the market, shifting P&L between them.",
+ {id:"TS-16",name:"Internal transfer at an off-market price",cat:"Valuation",sev:"High",fp:0.29,plants:24,actors:["T29","T08"],
+  desc:"An internal booking out of the trader's own book into another of the bank's books, priced away from the market.",
   logic:"internal counterparty AND |px − mid| > 15 bps AND P&L effect > $150k",
+  base:"Market mid on the trader's own transfer",
   why:"No external counterparty means no market discipline on the price. Value simply moves between books — and between the people paid on them."},
  {id:"TS-17",name:"Settlement instruction changed after execution",cat:"Settlement",sev:"Critical",fp:0.27,plants:26,actors:["T23","T05"],
   desc:"Standing settlement instructions amended after the trade was struck, redirecting the payment.",
   logic:"SSI amended after execution timestamp AND destination bank or country differs from the counterparty static record",
+  base:"Counterparty static record",
   why:"This is the payment-diversion pattern. The trade is genuine; the money goes somewhere else."},
  {id:"TS-18",name:"Repo roll concealing reporting-date balance sheet",cat:"Financing",sev:"High",fp:0.36,plants:20,actors:["T26"],
-  desc:"Large repo financing maturing immediately before a reporting date and re-struck immediately after.",
-  logic:"repo > $250m maturing within 2 business days before a quarter end and re-opened within 3 days after",
+  desc:"Large repo financing on one trader's book maturing immediately before a reporting date and re-struck immediately after.",
+  logic:"repo > 4× this trader's median financing ticket maturing within 2 business days before a quarter end and re-opened within 3 days after",
+  base:"The trader's own financing book across the reporting date",
   why:"The balance sheet is reported on one date. Financing timed around that date reports a leverage position the bank does not actually run."},
  {id:"TS-19",name:"Trading during mandatory block leave",cat:"Limits & controls",sev:"Critical",fp:0.16,plants:18,actors:["T08","T05","T26"],
-  desc:"Deals booked under a trader's ID inside their mandatory two-week block-leave window.",
-  logic:"any trade booked by a trader between the start and end of their declared block leave",
+  desc:"Deals booked under a trader's ID inside their own mandatory two-week block-leave window.",
+  logic:"any trade booked under a trader's ID between the start and end of that trader's declared block leave",
+  base:"The trader's own declared leave window",
   why:"Block leave exists precisely so that a position nobody else can explain has to surface. Trading through it defeats the only control designed to find concealment."},
  {id:"TS-20",name:"Positioning ahead of a market announcement",cat:"Information misuse",sev:"Critical",fp:0.21,plants:22,actors:["T23","T24"],
   desc:"Protection bought or risk reversed in a single name shortly before an announcement affecting that name.",
-  logic:"directional position ≥$10m in a name, 1–5 business days before a scheduled announcement, mark-to-market gain >$400k on the news",
+  logic:"directional position ≥$10m in a name, 1–5 business days before a scheduled announcement, mark-to-market gain >$400k on the news, no prior activity by this trader in the name",
+  base:"The trader's own 6-month history in the name",
   why:"Trading ahead of information the market does not have is market abuse. The pattern is a position that is early, one-directional, and immediately profitable."},
+
+ {id:"TS-21",name:"Off-market forward points",cat:"Pricing",sev:"High",fp:0.36,plants:22,actors:["T08","T05"],
+  desc:"A forward or swap struck with forward points away from the interest-rate-implied curve for that pair and tenor.",
+  logic:"|traded fwd points − curve-implied points| > 18 bps of the outright AND notional > 2× this trader's median ticket",
+  base:"Curve-implied points; size scaled to the trader's own median ticket",
+  why:"The spot leg is checked by everyone; the points leg is checked by almost nobody. It is the quietest place on an FX ticket to move value."},
+ {id:"TS-22",name:"Persistent price improvement to one counterparty",cat:"Pricing",sev:"High",fp:0.30,plants:20,actors:["T29","T08"],
+  desc:"A trader repeatedly filling one counterparty on the better side of mid while the rest of their own book prints inside the spread.",
+  logic:"≥8 trades with one counterparty over 20 business days, mean execution favouring that counterparty by >6 bps, against <1 bp across the trader's other flow",
+  base:"The trader's own execution quality on the rest of their book",
+  why:"No single fill breaches anything. The pattern is the finding: value flowing consistently one way, to one name, from one trader."},
+ {id:"TS-23",name:"Off-market NDF fixing rate",cat:"Pricing",sev:"High",fp:0.33,plants:16,actors:["T05"],
+  desc:"A non-deliverable forward settled against a rate away from the published official fixing for the pair.",
+  logic:"|settlement rate − published fixing| > 20 bps on an NDF, with the difference in the trader's own favour",
+  base:"Published official fixing for the pair",
+  why:"An NDF never delivers: the fixing is the entire economics. A rate chosen rather than observed is a payment decided by the trader."},
+ {id:"TS-24",name:"Execution at the session extreme",cat:"Pricing",sev:"Medium",fp:0.48,plants:18,actors:["T11","T29"],
+  desc:"Fills clustered at the best price of the trader's own day — the high when selling, the low when buying — beyond what timing luck explains.",
+  logic:"≥4 trades in a session priced within 2 bps of the day's extreme in the trader's favour, against an expected ≤1 for that trader's ticket count",
+  base:"The trader's own intraday range and ticket count",
+  why:"Consistently perfect timing is either a pricing feed being chosen after the fact, or a timestamp being written after the fact."},
+ {id:"TS-25",name:"Trade cancelled minutes after execution",cat:"Booking integrity",sev:"Medium",fp:0.58,plants:24,actors:["T05","T08"],
+  desc:"Deals booked and pulled within minutes, before the position reaches the intraday risk run.",
+  logic:"cancellation < 15 min after capture, ≥3 occurrences by the same trader in one session",
+  base:"The trader's own cancellation rate",
+  why:"A trade that exists only between two risk runs still moved a price, still showed a counterparty a level, and still left no trace on the position."},
+ {id:"TS-26",name:"Cancellation after value date",cat:"Booking integrity",sev:"High",fp:0.31,plants:14,actors:["T08"],
+  desc:"A deal cancelled after its value date has passed, when settlement should already have occurred.",
+  logic:"cancellation timestamp > value date AND the deal was previously confirmed",
+  base:"Settlement calendar for the product",
+  why:"Either the cash moved and the record now says it did not, or the trade was never real. Both need an answer."},
+ {id:"TS-27",name:"Economic terms amended after execution",cat:"Booking integrity",sev:"High",fp:0.34,plants:20,actors:["T08","T05"],
+  desc:"Price, notional, tenor or value date changed after capture — an economic amendment, not a static-data correction.",
+  logic:"amendment touches price, notional, tenor or value date more than 60 min after capture",
+  base:"Amendment field register",
+  why:"Static-data fixes are routine. Economic fields are the trade. Changing them after the fact rewrites what was agreed."},
+ {id:"TS-28",name:"Booking burst",cat:"Booking integrity",sev:"Medium",fp:0.52,plants:20,actors:["T26","T11"],
+  desc:"A dense cluster of tickets in a very short window, far beyond this trader's own normal booking cadence.",
+  logic:"≥8 tickets within 10 minutes by one trader, > 4× that trader's own 90-day peak ten-minute rate",
+  base:"The trader's own booking cadence",
+  why:"Bursts are how a batch of deals is entered from a list rather than executed one at a time — and a list is written somewhere before it is booked."},
+ {id:"TS-29",name:"Booking to a book the trader does not own",cat:"Booking integrity",sev:"High",fp:0.28,plants:16,actors:["T29","T08"],
+  desc:"Deals directed to an internal warehouse or to another trader's book instead of the trader's own.",
+  logic:"booking book ∉ this trader's own book register AND no delegation record on file",
+  base:"The trader's own book register",
+  why:"Risk booked somewhere else is risk the trader's own limits, P&L and supervisor never see."},
+ {id:"TS-30",name:"Layering — cancel-to-trade ratio",cat:"Market conduct",sev:"Critical",fp:0.25,plants:18,actors:["T11","T29"],
+  desc:"Orders placed and pulled on one side at a rate this trader's own execution history does not support.",
+  logic:"cancel-to-trade ratio > 20:1 on the API/Algo channel in a session, against a trader baseline below 6:1",
+  base:"The trader's own cancel-to-trade ratio",
+  why:"Orders with no intention to trade exist to show the market a depth that is not there. That is the definition of a misleading signal."},
+ {id:"TS-31",name:"Momentum ignition",cat:"Market conduct",sev:"Critical",fp:0.23,plants:16,actors:["T11"],
+  desc:"A rapid burst of one-way prints that moves the level, followed by the same trader reversing into the move.",
+  logic:"≥5 same-direction trades within 6 min moving the mid >8 bps, reversed by the same trader within 30 min",
+  base:"The trader's own prints, in both directions",
+  why:"The first trades pay for the move; the reversal collects it. Only looking at one trader's own sequence shows the shape."},
+ {id:"TS-32",name:"Closing-price influence",cat:"Market conduct",sev:"High",fp:0.29,plants:18,actors:["T11","T08"],
+  desc:"One-way volume concentrated into the final minutes of the trader's own session, outside any benchmark window.",
+  logic:"> 35% of this trader's daily volume in the last 15 minutes of their own session, one-directional",
+  base:"The trader's own daily volume and session hours",
+  why:"The closing level marks the book. Volume placed to set it, rather than to trade at it, is a valuation decision dressed as execution."},
+ {id:"TS-33",name:"Client cross at an off-market price",cat:"Market conduct",sev:"High",fp:0.32,plants:16,actors:["T29","T23"],
+  desc:"Two client orders crossed by the same trader at a level that favours one side.",
+  logic:"matched buy and sell with two client counterparties within 5 min, crossed >10 bps away from mid",
+  base:"Market mid on the trader's own matched pair",
+  why:"A cross is legitimate. A cross away from mid takes value from one client and hands it to another, with the trader choosing which."},
+ {id:"TS-34",name:"Threshold gaming",cat:"Limits & controls",sev:"High",fp:0.30,plants:20,actors:["T26","T05"],
+  desc:"Ticket sizes and deviations that sit persistently just inside this trader's own alerting thresholds.",
+  logic:"≥10 trades in 20 business days at 90–99.5% of this trader's own ticket authorisation or of a rule threshold",
+  base:"This trader's own thresholds",
+  why:"Sitting just under a limit once is coincidence. Doing it ten times means the limit is known and is being worked to."},
+ {id:"TS-35",name:"Tenor beyond the trader's cap",cat:"Limits & controls",sev:"Medium",fp:0.44,plants:16,actors:["T20","T33"],
+  desc:"A trade struck with a maturity longer than this trader is individually approved to write.",
+  logic:"trade tenor > this trader's own approved maximum tenor AND no exception on file",
+  base:"The trader's own tenor authorisation",
+  why:"Long-dated risk outlives the person who wrote it. Tenor authority is granted individually precisely because experience is individual."},
+ {id:"TS-36",name:"First trade in a product, at size",cat:"Limits & controls",sev:"Medium",fp:0.46,plants:18,actors:["T33","T20","T29"],
+  desc:"A product this trader has never traded, entered at material size rather than as a small first ticket.",
+  logic:"no prior trade in the product by this trader in 12 months AND notional > 2× their own median ticket",
+  base:"The trader's own 12-month product history",
+  why:"Nobody's first trade in a product should be a large one. A big first ticket is either an error or a deliberate move into unwatched ground."},
+ {id:"TS-37",name:"Surge before block leave",cat:"Limits & controls",sev:"High",fp:0.27,plants:16,actors:["T08","T05","T26"],
+  desc:"Activity accelerating sharply in the days immediately before a trader's mandatory leave.",
+  logic:"daily ticket count > 2.5× this trader's own 90-day mean in the 3 business days before their block leave",
+  base:"The trader's own 90-day activity",
+  why:"Whatever has to be tidied before two weeks of enforced absence gets tidied in those three days. It is the most informative window in the year."},
+ {id:"TS-38",name:"Daily volume spike versus own baseline",cat:"Limits & controls",sev:"Medium",fp:0.50,plants:22,actors:["T26","T29"],
+  desc:"A day whose notional is far outside anything this trader normally books, unexplained by a market event.",
+  logic:"daily notional z-score > 3.0 against this trader's own 90-day distribution",
+  base:"The trader's own 90-day notional distribution",
+  why:"Pooled at desk level this disappears entirely. Against the individual's own week it is the clearest signal there is that something changed."},
+ {id:"TS-39",name:"Implausibly smooth P&L",cat:"Valuation",sev:"High",fp:0.26,plants:14,actors:["T08","T05"],
+  desc:"A run of trading days with almost no losing sessions, against a book whose risk should produce them.",
+  logic:"loss days < 10% over 40 business days where this trader's own 12-month rate is above 30%",
+  base:"The trader's own loss-day frequency",
+  why:"Markets produce losing days. A book that stops producing them has usually stopped being marked, not stopped being wrong."},
+ {id:"TS-40",name:"Day-one P&L beyond model tolerance",cat:"Valuation",sev:"High",fp:0.33,plants:16,actors:["T08","T10"],
+  desc:"A structured trade booking day-one profit well beyond the tolerance for its model and inputs.",
+  logic:"day-one P&L > 2.5% of notional on a model-priced structure",
+  base:"Model tolerance for the structure",
+  why:"Day-one profit is an assertion about inputs nobody else can see. Beyond tolerance it is a valuation choice, and it is recognised immediately."},
+ {id:"TS-41",name:"Give-back after a valuation date",cat:"Valuation",sev:"Critical",fp:0.21,plants:16,actors:["T08","T11"],
+  desc:"Losses printed in the first days of the new period that reverse a gain this trader reported at the period end.",
+  logic:"losses in the 3 business days after month end > 70% of the same trader's reported month-end gain",
+  base:"The trader's own month-end P&L",
+  why:"A gain reported on the last day and given back on the first is not a gain. It is a date."},
+ {id:"TS-42",name:"Split settlement across accounts",cat:"Settlement",sev:"High",fp:0.29,plants:14,actors:["T23","T05"],
+  desc:"One trade settled to more than one account, or to an account that is not the counterparty's.",
+  logic:"settlement of a single trade split across ≥2 accounts, or destination account ∉ counterparty static record",
+  base:"Counterparty static record",
+  why:"A split payment is how a share of a settlement is separated from the trade that justified it."},
+ {id:"TS-43",name:"Payment to a high-risk jurisdiction",cat:"Settlement",sev:"Critical",fp:0.24,plants:14,actors:["T23","T29"],
+  desc:"Settlement routed through a jurisdiction on the high-risk list and unconnected to the counterparty's domicile.",
+  logic:"settlement country ∈ high-risk list AND ≠ counterparty domicile",
+  base:"High-risk jurisdiction list",
+  why:"Money leaving for a country with no commercial connection to either side of the trade is the last controllable point before it is gone."},
+ {id:"TS-44",name:"Confirmation unmatched beyond policy",cat:"Settlement",sev:"Medium",fp:0.56,plants:18,actors:["T05","T08"],
+  desc:"A trade the counterparty has not confirmed, aged well past the confirmation deadline for its product.",
+  logic:"confirmation outstanding > 5 business days AND this trader's unconfirmed count > 3× their own 12-month rate",
+  base:"The trader's own confirmation record",
+  why:"An unconfirmed trade is a trade only one party agrees exists. Sustained, it is the standard signature of a fictitious deal."},
+ {id:"TS-45",name:"Post-trade allocation changed between clients",cat:"Client conduct",sev:"Critical",fp:0.22,plants:14,actors:["T23","T11"],
+  desc:"A block allocated after execution, with the profitable fills moving to one account.",
+  logic:"allocation amended after execution AND the reallocated fills sit >8 bps better than the block average",
+  base:"The trader's own block average execution",
+  why:"Allocating with hindsight is cherry-picking: the good fills go to a favoured account, the rest go to everybody else."},
+ {id:"TS-46",name:"Counterparty concentration",cat:"Client conduct",sev:"Medium",fp:0.45,plants:18,actors:["T29","T26"],
+  desc:"A trader's flow dominated by a single counterparty, well beyond their own historic mix and their cohort's.",
+  logic:"one counterparty > this trader's concentration cap of their tickets over 20 business days, against a peer-cohort median below 20%",
+  base:"The trader's own counterparty mix and their peer cohort",
+  why:"A relationship that concentrates is a relationship worth understanding. It is also where every off-market pattern eventually points."},
+ {id:"TS-47",name:"Trading a restricted name",cat:"Information misuse",sev:"Critical",fp:0.19,plants:14,actors:["T23","T24"],
+  desc:"A trade in a name on the restricted list at the time of execution, without a wall-crossing record for this trader.",
+  logic:"instrument issuer ∈ restricted list on the trade date AND no wall-crossing approval recorded for this trader",
+  base:"Restricted list, checked per trader",
+  why:"The restricted list is the control that keeps one side of the bank from trading on what the other side knows."},
+ {id:"TS-48",name:"Exit ahead of an announcement",cat:"Information misuse",sev:"Critical",fp:0.20,plants:14,actors:["T23","T24"],
+  desc:"A long-held position closed out in the days before an announcement that would have damaged it.",
+  logic:"position held ≥20 business days closed 1–5 business days before a scheduled announcement, loss avoided > $400k",
+  base:"The trader's own position history in the name",
+  why:"Avoiding a loss on information is the same abuse as making a gain on it, and it leaves a cleaner record: a position that ends for no visible reason."},
+ {id:"TS-49",name:"Financing with a connected counterparty",cat:"Financing",sev:"High",fp:0.28,plants:14,actors:["T26","T05"],
+  desc:"Repo struck with a counterparty on the related-party register at a rate away from the general collateral level.",
+  logic:"repo counterparty ∈ related-party register AND |repo rate − GC| > 15 bps",
+  base:"GC level and the related-party register",
+  why:"Financing is where an off-market rate is least visible and most repeatable — the same spread, every roll, to the same name."},
+ {id:"TS-50",name:"Collateral substitution before a reporting date",cat:"Financing",sev:"Medium",fp:0.40,plants:14,actors:["T26"],
+  desc:"Collateral swapped into higher-quality paper immediately before a reporting date and swapped back after.",
+  logic:"substitution within 2 business days before a reporting date, reversed within 5 business days after, same trader",
+  base:"The trader's own financing book across the reporting date",
+  why:"The collateral reported is not the collateral held. The ratio improves on the one day it is measured."},
 ];
 const RULE_BY_ID={}; RULES.forEach(r=>RULE_BY_ID[r.id]=r);
 const RULE_CATS=[]; RULES.forEach(r=>{ if(RULE_CATS.indexOf(r.cat)<0) RULE_CATS.push(r.cat); });
@@ -1056,6 +1376,12 @@ const MONTH_END=[];   // last business day index of each month in range
   }
 })();
 const QUARTER_END=MONTH_END.filter(d=>[2,5,8,11].indexOf(dateForIdx(d).getMonth())>=0);
+const bizBack=(day,k)=>BIZ_DAYS[Math.max(0,BIZ_DAYS.indexOf(day)-k)];
+const bizFwd=(day,k)=>BIZ_DAYS[Math.min(BIZ_DAYS.length-1,BIZ_DAYS.indexOf(day)+k)];
+/* Month ends with room left in the book for the reversal leg. Without this the
+   last month end in range clamps forward onto itself and the evidence reads
+   "reversed 0 days later", which is not a pattern, it is an artefact. */
+const MONTH_END_REV=MONTH_END.filter(d=>BIZ_DAYS.indexOf(d)<BIZ_DAYS.length-11);
 
 /* ============================================================
    Alert construction
@@ -1078,7 +1404,7 @@ function pickDayWeighted(){ return rng()<0.06?pickDay(DAYS-45,DAYS-1):pickDay(4,
 function ensureTrades(trader,day,n,prod){
   const arr=(byTraderDay.get(trader.id+"|"+day)||[]).filter(t=>!prod||t.product===prod);
   const out=shuffle(arr).slice(0,n);
-  while(out.length<n) out.push(makeTrade(day,trader,prod||choice(DESK_BY_ID[trader.deskId].mandate),{}));
+  while(out.length<n) out.push(makeTrade(day,trader,prod||choice(trader.products),{}));
   return out;
 }
 function mkAlert(rule,day,trader,trades,ev,summary,opts){
@@ -1122,10 +1448,10 @@ const mkt=t=>t.mktPx.toFixed(t.dp)+(t.unit==="%"?"%":t.unit==="bps"?" bps":t.uni
 const PLANT={};
 
 PLANT["TS-01"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const t=ensureTrades(tr,day,1)[0];
   const bps=rand(28,240);
-  t.notional=Math.max(t.notional,rand(6,85));
+  t.notional=Math.max(t.notional,b.medSize*rand(3.2,9));
   applyDev(t,bps);
   t.pnl=+(t.notional*bps*rand(0.05,0.11)).toFixed(1);
   if(rng()<0.3){ const rp=choice(Object.keys(RELATED_PARTIES)); t.ctpy=rp; t.ctpyType="Private Client"; }
@@ -1135,24 +1461,29 @@ PLANT["TS-01"]=function(rule){
     ev("Traded price",px(t),true), ev("Market mid at execution",mkt(t)),
     ev("Deviation",Math.abs(t.devBps).toFixed(1)+" bps ("+(t.devBps>0?"above":"below")+" mid)",true),
     ev("Rule threshold","25.0 bps"),
-    ev("Notional",fmtM(t.notional)), ev("Counterparty",t.ctpy+" · "+t.ctpyType),
+    ev("Notional",fmtM(t.notional),true),
+    ev("This trader's median ticket",fmtM(b.medSize)+" — deal is "+xBase(t.notional,b.medSize)+" their own normal size",true),
+    ev("This trader's ticket authorisation",fmtM(tr.ticketLimit)+(t.notional>tr.ticketLimit?" — exceeded, "+xBase(t.notional,tr.ticketLimit):" — within authority"),t.notional>tr.ticketLimit),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType),
     ev("Booking P&L effect",fmtK(t.pnl),true),
     ev("Related-party register",related?"MATCH — "+related:"No match",!!related),
-  ],"Trade printed "+Math.abs(t.devBps).toFixed(0)+" bps away from mid on "+fmtM(t.notional)+" of "+t.product,
+  ],"Trade printed "+Math.abs(t.devBps).toFixed(0)+" bps away from mid on "+fmtM(t.notional)+" of "+t.product+" — "+xBase(t.notional,b.medSize)+" this trader's median ticket",
   {sev:related?"Critical":Math.abs(t.devBps)>120?"Critical":"High",scoreAdj:related?9:0});
 };
 
 PLANT["TS-02"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
-  const t=ensureTrades(tr,day,1)[0];
+  const t=ensureTrades(tr,day,1)[0], b=trBase(tr);
   t.captureLag=Math.round(rand(180,1900));
   const nextDay=t.execMin+t.captureLag>1440;
   t.status=rng()<0.4?"Amended":t.status;
+  const ownLag=rand(2,9);
   return mkAlert(rule,day,tr,[t],[
     ev("Execution timestamp",fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" "+t.region),
     ev("Captured in risk system",(nextDay?"+1 business day ":"")+fmtTime((t.execMin+t.captureLag)%1440),true),
     ev("Capture lag",(t.captureLag/60).toFixed(1)+" hours",true),
     ev("Policy threshold","30 minutes"),
+    ev("This trader's median capture lag",ownLag.toFixed(0)+" minutes across "+fmtNum(b.deals)+" deals",true),
     ev("Trade / product",t.id+" · "+t.product+" · "+t.instrument),
     ev("Notional",fmtM(t.notional)),
     ev("Booking channel",t.channel),
@@ -1162,7 +1493,7 @@ PLANT["TS-02"]=function(rule){
 };
 
 PLANT["TS-03"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const ts=ensureTrades(tr,day,randInt(3,5));
   let amends=0, cancels=0;
   ts.forEach((t,i)=>{
@@ -1170,21 +1501,24 @@ PLANT["TS-03"]=function(rule){
     if(i>0&&rng()<0.5){ t.cancelled=true; t.status="Cancelled"; cancels++; }
     else t.status="Amended";
   });
+  const sessionRate=amends/ts.length, ownRate=Math.max(0.04,b.amendRate);
   return mkAlert(rule,day,tr,ts,[
     ev("Deals touched",String(ts.length)),
     ev("Total amendments",String(amends),true),
     ev("Cancel & rebook events",String(cancels),cancels>0),
-    ev("Desk daily average","0.4 amendments per deal"),
-    ev("Rule threshold","3 amendments on one deal, or 4 cancels in a day"),
+    ev("Amendments per deal this session",sessionRate.toFixed(1),true),
+    ev("This trader's own 12-month rate",ownRate.toFixed(2)+" per deal — session runs at "+xBase(sessionRate,ownRate),true),
+    ev("Peer cohort ("+tr.cohort+")",Math.max(0.03,b.cohort.amendRate).toFixed(2)+" per deal"),
+    ev("Rule threshold","3 amendments on one deal, or 4× the trader's own rate"),
     ev("Largest amended ticket",fmtM(Math.max.apply(null,ts.map(t=>t.notional)))),
     ev("Amended after value date",rng()<0.4?"Yes — 1 deal":"No",rng()<0.4),
-  ],amends+" amendments and "+cancels+" cancellations across "+ts.length+" deals in a single session",
+  ],amends+" amendments and "+cancels+" cancellations in one session — "+xBase(sessionRate,ownRate)+" this trader's own rate",
   {sev:amends>18?"High":"Medium"});
 };
 
 PLANT["TS-04"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
   const notional=rand(12,140), ctpy=rng()<0.35?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
   const m1=execMinFor(desk), gap=randInt(3,52);
   const L=longDir(prod);
@@ -1208,7 +1542,7 @@ PLANT["TS-04"]=function(rule){
 
 PLANT["TS-05"]=function(rule){
   const tr=pickActor(rule), day=pickDay(4,DAYS-8);
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
   const notional=rand(40,320), hops=randInt(3,4), legs=[];
   const parties=shuffle(COUNTERPARTIES.filter(c=>c.type==="Broker"||c.type==="Bank")).slice(0,hops);
   for(let i=0;i<hops;i++){
@@ -1231,39 +1565,47 @@ PLANT["TS-05"]=function(rule){
 
 PLANT["TS-06"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
+  const L=tr.ticketLimit;
   const n=randInt(3,6), t0=execMinFor(desk), ctpy=choice(INST_CTPY), ts=[];
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:rand(22.4,24.85),dir:longDir(prod),ctpy,execMin:t0+i*randInt(2,10)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:L*rand(0.902,0.995),dir:longDir(prod),ctpy,execMin:t0+i*randInt(2,10)}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   return mkAlert(rule,day,tr,ts,[
     ev("Instrument",prod+" · "+inst.name),
     ev("Tickets booked",String(n),true),
     ev("Individual sizes",ts.map(t=>"$"+t.notional.toFixed(1)+"m").join(", "),true),
-    ev("Trader authorisation limit","$25.0m per ticket"),
-    ev("Largest ticket as % of limit",(Math.max.apply(null,ts.map(t=>t.notional))/25*100).toFixed(1)+"%",true),
-    ev("Aggregate notional",fmtM(tot),true),
+    ev("This trader's ticket authorisation",fmtM(L)+" per ticket ("+tr.grade+")"),
+    ev("Largest ticket as % of their own limit",(Math.max.apply(null,ts.map(t=>t.notional))/L*100).toFixed(1)+"%",true),
+    ev("Aggregate notional",fmtM(tot)+" — "+(tot/L).toFixed(1)+"× the limit that was avoided",true),
     ev("Window",(ts[n-1].execMin-t0)+" minutes",true),
     ev("Counterparty (all tickets)",ctpy.name),
+    ev("Supervisor who would have signed",tr.supervisor),
     ev("Independent approval obtained","None — each ticket self-approved",true),
-  ],n+" tickets of "+prod+" each just under the $25m authorisation limit, "+fmtM(tot)+" in "+(ts[n-1].execMin-t0)+" minutes");
+  ],n+" tickets of "+prod+" each just under this trader's own "+fmtM(L)+" authorisation, "+fmtM(tot)+" in "+(ts[n-1].execMin-t0)+" minutes");
 };
 
 PLANT["TS-07"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const desk=DESK_BY_ID[tr.deskId];
-  const outside=PRODUCTS.filter(p=>desk.mandate.indexOf(p.p)<0);
-  const prod=choice(outside).p;
-  const t=makeTrade(day,tr,prod,{notional:rand(4,70)});
+  // Two shapes: a product nobody on the floor near them trades, or — the more
+  // interesting one — a product the desk is signed off for but this trader is not.
+  const deskOnly=desk.mandate.filter(p=>tr.products.indexOf(p)<0);
+  const offFloor=PRODUCTS.filter(p=>desk.mandate.indexOf(p.p)<0).map(p=>p.p);
+  const deskApproved=deskOnly.length&&rng()<0.45;
+  const prod=deskApproved?choice(deskOnly):choice(offFloor);
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(0.6,5.5)});
   return mkAlert(rule,day,tr,[t],[
-    ev("Desk",desk.name),
+    ev("Trader",tr.name+" · "+tr.grade+" · "+desk.name),
     ev("Product booked",prod+" ("+t.ac+")",true),
-    ev("Desk approved products",desk.mandate.join(", ")),
-    ev("Mandate exception on file","None",true),
+    ev("This trader's approved products",tr.products.join(", ")),
+    ev("Desk-level approval",deskApproved?"Held by the desk — NOT extended to this trader":"Not held by the desk either",true),
+    ev("Personal mandate exception on file","None",true),
+    ev("Prior deals in this product by this trader",b.products.indexOf(prod)>=0?"Some — see the blotter":"None in 12 months",b.products.indexOf(prod)<0),
     ev("Notional",fmtM(t.notional)),
     ev("Instrument",t.instrument), ev("Counterparty",t.ctpy),
-    ev("Risk captured in desk limit","No — booked to "+t.book,true),
-  ],prod+" booked on "+desk.short+", which is not on the desk's approved product list",
-  {sev:t.notional>40?"High":"Medium"});
+    ev("Risk captured in this trader's limits","No — booked to "+t.book,true),
+  ],prod+" booked by "+tr.name+", which is not on their own approved product list"+(deskApproved?" (the desk holds it; they do not)":""),
+  {sev:t.notional>b.medSize*3?"High":"Medium"});
 };
 
 PLANT["TS-08"]=function(rule){
@@ -1272,30 +1614,36 @@ PLANT["TS-08"]=function(rule){
   let day;
   if(weekend){ day=randInt(4,DAYS-1); for(let i=0;i<40&&isBiz(dateForIdx(day));i++) day=randInt(4,DAYS-1); }
   else day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], h=DESK_HOURS[desk.region];
+  const desk=DESK_BY_ID[tr.deskId], h=DESK_HOURS[desk.region], b=trBase(tr);
   const em=weekend?Math.round(rand(9,20)*60):(rng()<0.5?Math.round(rand(0,h[0]*60-95)):Math.round(rand(h[1]*60+95,1435)));
-  const t=makeTrade(day,tr,choice(desk.mandate),{execMin:em,notional:rand(5,120),captureLag:rand(5,90)});
+  const t=makeTrade(day,tr,choice(tr.products),{execMin:em,notional:b.medSize*rand(0.5,7),captureLag:rand(5,90)});
   const d=dateForIdx(day);
+  // The trader's own working window, not the desk's — some names never book
+  // before ten, and 07:20 for one of them is the finding.
+  const lo=b.execMean-2.5*b.execSd, hi=b.execMean+2.5*b.execSd;
+  const zOwn=b.execSd?Math.abs(em-b.execMean)/b.execSd:0;
   return mkAlert(rule,day,tr,[t],[
     ev("Booking timestamp",fmtDate(d)+" "+fmtTime(em)+" "+desk.region,true),
     ev("Calendar status",isWeekend(d)?["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()]+" — non-business day":isHoliday(d)?"Local holiday — non-business day":"Business day",!isBiz(d)),
-    ev("Desk trading hours",fmtTime(h[0]*60)+" – "+fmtTime(h[1]*60)+" "+desk.region),
+    ev("This trader's own window (±2.5σ)",fmtTime(Math.max(0,lo))+" – "+fmtTime(Math.min(1439,hi))+" "+desk.region+", from "+fmtNum(b.deals)+" deals"),
+    ev("Distance from their own mean",zOwn.toFixed(1)+"σ",true),
+    ev("Desk hours for reference",fmtTime(h[0]*60)+" – "+fmtTime(h[1]*60)+" "+desk.region),
     ev("Outside window by",isBiz(d)?(em<h[0]*60?((h[0]*60-em)/60).toFixed(1)+"h before open":((em-h[1]*60)/60).toFixed(1)+"h after close"):"Full day",true),
     ev("Supervisor on desk","No",true),
     ev("Product / notional",t.product+" · "+fmtM(t.notional)),
     ev("Counterparty",t.ctpy),
-  ],t.product+" booked at "+fmtTime(em)+" "+desk.region+(isBiz(d)?" — outside desk hours":" on a non-business day"),
+  ],t.product+" booked at "+fmtTime(em)+" "+desk.region+(isBiz(d)?" — "+zOwn.toFixed(1)+"σ outside this trader's own working window":" on a non-business day"),
   {sev:!isBiz(d)?"High":"Medium"});
 };
 
 PLANT["TS-09"]=function(rule){
   const tr=pickActor(rule);
-  const day=choice(MONTH_END);
+  const day=choice(MONTH_END_REV);
   const ts=ensureTrades(tr,day,randInt(2,4));
   let pnl=0;
   ts.forEach(t=>{ applyDev(t,rand(22,95)); t.notional=Math.max(t.notional,rand(8,60)); t.pnl=+(t.notional*Math.abs(t.devBps)*0.075).toFixed(1); pnl+=t.pnl; });
   // The reversal is the point: the mark exists for the close, not for the book.
-  const revDay=BIZ_DAYS[Math.min(BIZ_DAYS.length-1,BIZ_DAYS.indexOf(day)+randInt(1,3))];
+  const revGap=randInt(1,3), revDay=bizFwd(day,revGap);
   const rev=makeTrade(revDay,tr,ts[0].product,{inst:{name:ts[0].instrument,mid:ts[0].mktPx,sd:0.0004,unit:ts[0].unit,dp:ts[0].dp},
     notional:ts[0].notional,dir:oppDir(ts[0].dir),pnl:+(-pnl*rand(0.72,0.95)).toFixed(1)});
   return mkAlert(rule,day,tr,ts.concat([rev]),[
@@ -1304,16 +1652,16 @@ PLANT["TS-09"]=function(rule){
     ev("Average deviation from mid",(ts.reduce((a,t)=>a+Math.abs(t.devBps),0)/ts.length).toFixed(1)+" bps",true),
     ev("Direction","All "+ts[0].dir+" — one-sided",true),
     ev("P&L booked on valuation date",fmtK(pnl),true),
-    ev("Reversal",fmtDate(dateForIdx(revDay))+" · "+rev.dir+" "+fmtM(rev.notional)+" · "+fmtK(rev.pnl),true),
+    ev("Reversal",fmtDate(dateForIdx(revDay))+" — "+revGap+" business day"+(revGap>1?"s":"")+" later · "+rev.dir+" "+fmtM(rev.notional)+" · "+fmtK(rev.pnl),true),
     ev("Net economic result",fmtK(pnl+rev.pnl)),
     ev("Independent price verification","Not performed — trades post-dated the IPV run",true),
-  ],ts.length+" one-sided off-market marks on the month-end valuation date, reversed "+(revDay-day)+" days later");
+  ],ts.length+" one-sided off-market marks on the month-end valuation date, reversed "+revGap+" business day"+(revGap>1?"s":"")+" later");
 };
 
 PLANT["TS-10"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
   const desk=DESK_BY_ID[tr.deskId];
-  const prod=desk.mandate.indexOf("FX Spot")>=0?"FX Spot":choice(desk.mandate);
+  const prod=tr.products.indexOf("FX Spot")>=0?"FX Spot":choice(tr.products);
   const inst=instrumentFor(prod);
   const n=randInt(5,9), ts=[], ctpy=choice(INST_CTPY);
   // 16:00–16:03 London: the WM/Reuters benchmark window.
@@ -1336,14 +1684,14 @@ PLANT["TS-10"]=function(rule){
 };
 
 PLANT["TS-11"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
   const clientCtpy=choice(COUNTERPARTIES.filter(c=>c.type==="Asset Manager"||c.type==="Corporate"||c.type==="Insurer"));
   const gap=randInt(1,14);
   const em=execMinFor(desk);
   const L=longDir(prod);
-  const house=makeTrade(day,tr,prod,{inst,notional:rand(8,45),dir:L,ctpy:choice(COUNTERPARTIES.filter(c=>c.type==="Broker")),execMin:em,channel:"API / Algo"});
-  const client=makeTrade(day,tr,prod,{inst,notional:rand(28,180),dir:L,ctpy:clientCtpy,execMin:em+gap,channel:"Voice"});
+  const house=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1.2,4),dir:L,ctpy:choice(COUNTERPARTIES.filter(c=>c.type==="Broker")),execMin:em,channel:"API / Algo"});
+  const client=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(5.5,16),dir:L,ctpy:clientCtpy,execMin:em+gap,channel:"Voice"});
   applyDev(client,rand(6,19));
   house.pnl=+(house.notional*rand(1.6,5.2)).toFixed(1);
   return mkAlert(rule,day,tr,[house,client],[
@@ -1352,7 +1700,7 @@ PLANT["TS-11"]=function(rule){
     ev("Client order",client.dir+" "+fmtM(client.notional)+" @ "+px(client)+" · "+fmtTime(client.execMin)+" · "+clientCtpy.name),
     ev("Lead time",gap+" minutes ahead of the client",true),
     ev("Direction","Same side as the client order",true),
-    ev("Client order size","≥$25m threshold — "+fmtM(client.notional)),
+    ev("Client order size",fmtM(client.notional)+" — "+xBase(client.notional,b.medSize)+" this trader's median ticket",true),
     ev("Price move between the two",Math.abs(client.devBps).toFixed(1)+" bps against the client",true),
     ev("House P&L on the client print",fmtK(house.pnl),true),
     ev("Order handling record","No pre-hedge authorisation recorded",true),
@@ -1361,24 +1709,26 @@ PLANT["TS-11"]=function(rule){
 
 PLANT["TS-12"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
-  const limit=Math.round(rand(120,320));
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
+  const limit=tr.posLimit;
   const build=[], n=randInt(3,5); let pos=0;
   const t0=execMinFor(desk);
   const L=longDir(prod);
-  for(let i=0;i<n;i++){ const t=makeTrade(day,tr,prod,{inst,notional:rand(40,110),dir:L,execMin:t0+i*randInt(8,40)}); pos+=t.notional; build.push(t); }
+  const leg=limit*rand(1.32,1.85)/n;
+  for(let i=0;i<n;i++){ const t=makeTrade(day,tr,prod,{inst,notional:leg*rand(0.82,1.18),dir:L,execMin:t0+i*randInt(8,40)}); pos+=t.notional; build.push(t); }
   const flat=makeTrade(day,tr,prod,{inst,notional:pos*rand(0.88,0.97),dir:oppDir(L),execMin:Math.min(1439,DESK_HOURS[desk.region][1]*60-randInt(5,25))});
   const eod=pos-flat.notional;
   return mkAlert(rule,day,tr,build.concat([flat]),[
     ev("Instrument",prod+" · "+inst.name),
-    ev("Desk position limit",fmtM(limit)),
+    ev("This trader's position limit",fmtM(limit)+" ("+tr.grade+", "+desk.short+")"),
     ev("Peak intraday position",fmtM(pos)+" at "+fmtTime(build[n-1].execMin),true),
-    ev("Peak as % of limit",(pos/limit*100).toFixed(0)+"%",true),
+    ev("Peak as % of their own limit",(pos/limit*100).toFixed(0)+"%",true),
     ev("Flattening trade",flat.dir+" "+fmtM(flat.notional)+" at "+fmtTime(flat.execMin),true),
-    ev("End-of-day position",fmtM(eod)+" ("+(eod/limit*100).toFixed(0)+"% of limit)"),
+    ev("End-of-day position",fmtM(eod)+" ("+(eod/limit*100).toFixed(0)+"% of their limit)"),
     ev("Breach visible on EOD risk report","No",true),
-    ev("Limit escalation raised","None",true),
-  ],"Position peaked at "+(pos/limit*100).toFixed(0)+"% of limit intraday and was flattened before the end-of-day snapshot");
+    ev("Limit escalation raised","None — no snapshot ever saw it",true),
+    ev("Supervisor",tr.supervisor),
+  ],"Position peaked at "+(pos/limit*100).toFixed(0)+"% of this trader's own limit intraday and was flattened before the end-of-day snapshot");
 };
 
 PLANT["TS-13"]=function(rule){
@@ -1405,10 +1755,10 @@ PLANT["TS-13"]=function(rule){
 
 PLANT["TS-14"]=function(rule){
   const tr=pickActor(rule);
-  const me=choice(MONTH_END);
+  const me=choice(MONTH_END_REV);
   const outDay=BIZ_DAYS[Math.max(0,BIZ_DAYS.indexOf(me)-randInt(1,3))];
   const backDay=BIZ_DAYS[Math.min(BIZ_DAYS.length-1,BIZ_DAYS.indexOf(me)+randInt(2,8))];
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
   const notional=rand(45,260), book=choice(INTERNAL_BOOKS);
   const loss=-Math.abs(rand(420,3100));
   const out=makeTrade(outDay,tr,prod,{inst,notional,dir:shortDir(prod),ctpy:{name:book,type:"Internal book",country:"—"},
@@ -1429,11 +1779,11 @@ PLANT["TS-14"]=function(rule){
 };
 
 PLANT["TS-15"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const desk=DESK_BY_ID[tr.deskId];
-  const prod=desk.mandate.filter(p=>PROD_BY_NAME[p].fam==="fxopt")[0]||"FX Vanilla Option";
+  const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="fxopt")[0]||"FX Vanilla Option";
   const inst=instrumentFor(prod);
-  const t=makeTrade(day,tr,prod,{inst,notional:rand(6,90)});
+  const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(2.1,8)});
   const diff=rand(2.1,6.4)*(rng()<0.5?-1:1);
   t.mktVol=+inst.vol.toFixed(2);
   t.vol=+(t.mktVol+diff).toFixed(2);
@@ -1444,16 +1794,16 @@ PLANT["TS-15"]=function(rule){
     ev("Official surface (same pair/tenor)",t.mktVol.toFixed(2)+" vols"),
     ev("Deviation",(diff>0?"+":"")+diff.toFixed(2)+" vols",true),
     ev("Rule threshold","±2.00 vols"),
-    ev("Notional",fmtM(t.notional)),
+    ev("Notional",fmtM(t.notional)+" — "+xBase(t.notional,b.medSize)+" this trader's median ticket",true),
     ev("Day-one P&L effect",fmtK(t.pnl),true),
     ev("Counterparty",t.ctpy+" · "+t.ctpyType),
-    ev("Surface override approval","None recorded",true),
+    ev("Surface override approval","None recorded for this trader",true),
   ],prod+" priced "+Math.abs(diff).toFixed(1)+" vols away from the official surface on "+fmtM(t.notional));
 };
 
 PLANT["TS-16"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(desk.mandate), inst=instrumentFor(prod);
+  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
   const toBook=choice(INTERNAL_BOOKS);
   const notional=rand(25,190), bps=rand(16,95);
   const t=makeTrade(day,tr,prod,{inst,notional,ctpy:{name:toBook,type:"Internal book",country:"—"},
@@ -1500,12 +1850,14 @@ PLANT["TS-18"]=function(rule){
   const startDay=BIZ_DAYS[Math.max(0,qi-randInt(8,20))];
   const matDay=BIZ_DAYS[Math.max(0,qi-randInt(1,2))];
   const reDay=BIZ_DAYS[Math.min(BIZ_DAYS.length-1,qi+randInt(1,3))];
-  const notional=rand(280,1250), inst=instrumentFor("Repo");
+  const bs=trBase(tr);
+  const notional=bs.medSize*rand(4.2,14), inst=instrumentFor("Repo");
   const a=makeTrade(startDay,tr,"Repo",{inst,notional,dir:"Borrow",tenor:"1M"});
   const b=makeTrade(reDay,tr,"Repo",{inst,notional:notional*rand(0.98,1.02),dir:"Borrow",tenor:"1M"});
   return mkAlert(rule,startDay,tr,[a,b],[
     ev("Reporting date",fmtDate(dateForIdx(qe))+" — quarter end",true),
     ev("Financing",fmtM(notional)+" "+a.instrument),
+    ev("This trader's median financing ticket",fmtM(bs.medSize)+" — roll is "+xBase(notional,bs.medSize)+" their own normal size",true),
     ev("Matures",fmtDate(dateForIdx(matDay))+" — "+(qi-BIZ_DAYS.indexOf(matDay))+" business days before reporting date",true),
     ev("Re-struck",fmtDate(dateForIdx(reDay))+" — "+(BIZ_DAYS.indexOf(reDay)-qi)+" business days after",true),
     ev("Size on re-strike",fmtM(b.notional)+" (within 2% of original)",true),
@@ -1523,7 +1875,7 @@ PLANT["TS-19"]=function(rule){
   for(let i=0;i<20&&!isBiz(dateForIdx(day));i++) day=randInt(lo,hi);
   const n=randInt(1,4), ts=[];
   const desk=DESK_BY_ID[tr.deskId];
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,choice(desk.mandate),{notional:rand(6,120)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,choice(tr.products),{notional:trBase(tr).medSize*rand(0.6,8)}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   return mkAlert(rule,day,tr,ts,[
     ev("Block leave window",fmtDate(dateForIdx(lo))+" – "+fmtDate(dateForIdx(hi)),true),
@@ -1543,8 +1895,8 @@ PLANT["TS-20"]=function(rule){
   const lead=randInt(1,5);
   const day=BIZ_DAYS[Math.max(0,BIZ_DAYS.indexOf(annDay)-lead)];
   const desk=DESK_BY_ID[tr.deskId];
-  const creditDesk=desk.mandate.filter(p=>PROD_BY_NAME[p].fam==="cds"||PROD_BY_NAME[p].fam==="bondc");
-  const prod=creditDesk.length?choice(creditDesk):choice(desk.mandate);
+  const creditBooks=tr.products.filter(p=>PROD_BY_NAME[p].fam==="cds"||PROD_BY_NAME[p].fam==="bondc");
+  const prod=creditBooks.length?choice(creditBooks):choice(tr.products);
   const inst=instrumentFor(prod);
   const nameOnly=inst.name.replace(/ 5Y CDS| \d.*$/,"");
   const news=choice([
@@ -1572,13 +1924,690 @@ PLANT["TS-20"]=function(rule){
   ],ts[0].dir+" "+fmtM(tot)+" of "+nameOnly+" risk built "+lead+" days before "+news[0].toLowerCase()+", gaining "+fmtK(gain));
 };
 
+/* ------------------------------------------------------------
+   TS-21 … TS-50. Every generator resolves its threshold from the trader's own
+   profile — their authorisation, their baseline, their cohort — so the evidence
+   an officer reads is an argument about one person's book, not a desk average.
+------------------------------------------------------------ */
+
+PLANT["TS-21"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const fwd=tr.products.filter(p=>["FX Forward","FX Swap","NDF"].indexOf(p)>=0);
+  const prod=fwd.length?choice(fwd):choice(tr.products);
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(2.2,9)});
+  const bps=rand(19,88);
+  applyDev(t,bps);
+  const curve=rand(18,140);
+  t.pnl=+(t.notional*bps*rand(0.05,0.10)).toFixed(1);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Instrument",prod+" · "+t.instrument+" · "+t.tenor),
+    ev("Traded forward points",(curve+bps).toFixed(1)+" pts",true),
+    ev("Curve-implied points",curve.toFixed(1)+" pts"),
+    ev("Difference",bps.toFixed(1)+" bps of the outright",true),
+    ev("Rule threshold","18.0 bps"),
+    ev("Spot leg","On market — within 0.4 bps of mid"),
+    ev("Notional",fmtM(t.notional)+" — "+xBase(t.notional,b.medSize)+" this trader's median ticket",true),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType),
+    ev("Value transferred",fmtK(t.pnl),true),
+  ],prod+" points struck "+bps.toFixed(0)+" bps off the curve while the spot leg printed on market",
+  {sev:bps>50?"Critical":"High"});
+};
+
+PLANT["TS-22"]=function(rule){
+  const tr=pickActor(rule), day=pickDay(24,DAYS-1), b=trBase(tr);
+  const ctpy=rng()<0.45?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const n=randInt(8,13), ts=[], favour=rand(6.5,21);
+  for(let i=0;i<n;i++){
+    const t=makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:b.medSize*rand(0.6,2.4),ctpy,dir:i%2?longDir(prod):shortDir(prod)});
+    applyDev(t,-favour*rand(0.75,1.25));   // the fill sits on the counterparty's side of mid
+    t.pnl=+(-t.notional*favour*0.06).toFixed(1);
+    ts.push(t);
+  }
+  const give=ts.reduce((a,t)=>a+Math.abs(t.devBps),0)/n;
+  const paid=ts.reduce((a,t)=>a+t.pnl,0);
+  const rel=RELATED_PARTIES[ctpy.name];
+  return mkAlert(rule,day,tr,ts,[
+    ev("Counterparty",ctpy.name+" · "+ctpy.type,true),
+    ev("Trades with this name (20 business days)",String(n),true),
+    ev("Mean execution versus mid",give.toFixed(1)+" bps in the counterparty's favour",true),
+    ev("This trader's other flow","0.8 bps — inside the spread, as expected"),
+    ev("Rule threshold","6.0 bps sustained across ≥8 trades"),
+    ev("Aggregate value paid away",fmtK(paid),true),
+    ev("This trader's largest counterparty (12m)",b.topCtpy+" at "+fmtPct(b.topCtpyShare,1)+" of tickets"),
+    ev("Related-party register",rel?"MATCH — "+rel:"No match",!!rel),
+  ],n+" fills to "+ctpy.name+" averaging "+give.toFixed(1)+" bps in their favour while the rest of this trader's book printed inside the spread",
+  {sev:rel?"Critical":"High"});
+};
+
+PLANT["TS-23"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=tr.products.indexOf("NDF")>=0?"NDF":choice(tr.products);
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.5,7)});
+  const bps=rand(21,95);
+  applyDev(t,bps);
+  t.pnl=+(t.notional*bps*rand(0.06,0.12)).toFixed(1);
+  const src=choice(["EMTA","ABS Benchmarks","Reuters SPOT","the local central bank reference"]);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Instrument",prod+" · "+t.instrument+" · "+t.tenor),
+    ev("Settlement rate applied",px(t),true),
+    ev("Published official fixing",mkt(t)+" ("+src+")"),
+    ev("Difference",Math.abs(t.devBps).toFixed(1)+" bps in the trader's favour",true),
+    ev("Rule threshold","20.0 bps"),
+    ev("Fixing source on the confirmation",src),
+    ev("Notional",fmtM(t.notional)),
+    ev("Cash settlement effect",fmtK(t.pnl),true),
+    ev("Rate override approval","None recorded for this trader",true),
+  ],prod+" cash-settled "+Math.abs(t.devBps).toFixed(0)+" bps away from the published "+src+" fixing");
+};
+
+PLANT["TS-24"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const n=randInt(4,7), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[];
+  const L=rng()<0.5?longDir(prod):shortDir(prod);
+  const buySide=["Buy","Pay","Borrow"].indexOf(L)>=0;
+  for(let i=0;i<n;i++){
+    const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.7,2.6),dir:L,execMin:Math.min(1439,t0+i*randInt(12,70))});
+    applyDev(t,-rand(0.2,1.9));
+    ts.push(t);
+  }
+  const range=rand(9,34), expected=Math.max(1,Math.round(b.tickets*0.08));
+  const stamped=rng()<0.4;
+  return mkAlert(rule,day,tr,ts,[
+    ev("Instrument",prod+" · "+inst.name),
+    ev("Trades at the session extreme",String(n),true),
+    ev("Direction","All "+L+" — the extreme is the day's "+(buySide?"low":"high"),true),
+    ev("Session range for the instrument",range.toFixed(1)+" bps"),
+    ev("Mean distance from the extreme",(ts.reduce((a,t)=>a+Math.abs(t.devBps),0)/n).toFixed(2)+" bps",true),
+    ev("Expected at this trader's ticket count","≤"+expected+" per session"),
+    ev("This trader's daily ticket average",b.tickets.toFixed(1)),
+    ev("Timestamps amended after capture",stamped?"Yes — 2 tickets":"No",stamped),
+  ],n+" fills placed within 2 bps of the day's best price for this trader, against an expected "+expected,
+  {sev:stamped?"High":"Medium"});
+};
+
+PLANT["TS-25"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const n=randInt(3,6), ts=ensureTrades(tr,day,n), gaps=[];
+  ts.forEach(t=>{ t.cancelled=true; t.status="Cancelled"; t.amends=Math.max(1,t.amends); gaps.push(randInt(2,14)); });
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  return mkAlert(rule,day,tr,ts,[
+    ev("Deals booked and pulled",String(n),true),
+    ev("Time to cancellation",gaps.join(", ")+" minutes",true),
+    ev("Policy threshold","3 cancellations inside 15 minutes in one session"),
+    ev("This trader's own cancellation rate",fmtPct(Math.max(0.004,b.amendRate*0.3),1)+" of tickets across "+fmtNum(b.deals)+" deals"),
+    ev("Aggregate notional pulled",fmtM(tot),true),
+    ev("Position visible on the intraday risk run","No — every deal cancelled between runs",true),
+    ev("Counterparties",uniq(ts.map(t=>t.ctpy)).slice(0,3).join(", ")),
+    ev("Prices shown to the market before cancellation","Yes",true),
+  ],n+" deals booked and cancelled within minutes, none of them reaching an intraday risk run");
+};
+
+PLANT["TS-26"]=function(rule){
+  const tr=pickActor(rule), b=trBase(tr);
+  const shortSettle=tr.products.filter(p=>SETTLE_DAYS[p]!=null&&SETTLE_DAYS[p]<=2);
+  const prod=shortSettle.length?choice(shortSettle):"FX Spot";
+  const day=pickDay(4,DAYS-25), settle=SETTLE_DAYS[prod]||2;
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(0.8,4)});
+  t.cancelled=true; t.status="Cancelled"; t.amends=Math.max(1,t.amends);
+  const after=randInt(2,15), alertDay=Math.min(DAYS-1,day+settle+after);
+  return mkAlert(rule,alertDay,tr,[t],[
+    ev("Trade",t.id+" · "+t.product+" · "+fmtM(t.notional)),
+    ev("Trade date",t.dateStr),
+    ev("Value date",fmtDate(t.valueDate),true),
+    ev("Cancelled",fmtDate(dateForIdx(alertDay))+" — "+after+" days after value date",true),
+    ev("Confirmation status before cancellation","Confirmed and matched",true),
+    ev("Settlement record","Cash movement shows as settled",true),
+    ev("Cancelled by","Front office — "+tr.name,true),
+    ev("Middle-office authorisation","None on file",true),
+    ev("Counterparty notified of the cancellation","No record",true),
+  ],fmtM(t.notional)+" "+prod+" cancelled "+after+" days after it should already have settled");
+};
+
+PLANT["TS-27"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const t=ensureTrades(tr,day,1)[0];
+  t.status="Amended"; t.amends=randInt(2,4);
+  t.notional=Math.max(t.notional,b.medSize*rand(1.2,5));
+  const field=choice([["Traded price","moved "+rand(9,60).toFixed(1)+" bps in the trader's favour"],
+                      ["Notional","increased by "+rand(18,140).toFixed(0)+"%"],
+                      ["Tenor","extended by "+randInt(1,9)+" months"],
+                      ["Value date","moved "+randInt(1,6)+" business days later"]]);
+  const hrs=rand(1.2,52);
+  applyDev(t,rand(12,70));
+  t.pnl=+(t.notional*Math.abs(t.devBps)*0.07).toFixed(1);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Trade",t.id+" · "+t.product+" · "+t.instrument),
+    ev("Field amended",field[0]+" — "+field[1],true),
+    ev("Amended",hrs.toFixed(1)+" hours after capture",true),
+    ev("Policy threshold","60 minutes for economic fields"),
+    ev("Amendment type","Economic — not a static-data correction",true),
+    ev("Amendments on this deal",String(t.amends),true),
+    ev("Counterparty re-confirmation","Not on file",true),
+    ev("P&L effect of the amendment",fmtK(t.pnl),true),
+    ev("This trader's own amendment rate",fmtPct(b.amendRate,1)+" of tickets"),
+  ],field[0].toLowerCase()+" on a "+fmtM(t.notional)+" "+t.product+" changed "+hrs.toFixed(0)+"h after capture, worth "+fmtK(t.pnl));
+};
+
+PLANT["TS-28"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const n=randInt(8,15), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[];
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.5,1.8),
+    execMin:Math.min(1439,t0+randInt(0,9)),captureLag:rand(0,3)}));
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  const peak=Math.max(2,Math.round(b.tickets*0.45));
+  return mkAlert(rule,day,tr,ts,[
+    ev("Tickets in the window",String(n),true),
+    ev("Window","10 minutes from "+fmtTime(t0),true),
+    ev("This trader's 90-day peak ten-minute rate",peak+" tickets"),
+    ev("Burst versus their own peak",xBase(n,peak),true),
+    ev("This trader's daily ticket average",b.tickets.toFixed(1)),
+    ev("Aggregate notional",fmtM(tot)),
+    ev("Counterparties in the burst",String(uniq(ts.map(t=>t.ctpy)).length)),
+    ev("Booking channel",uniq(ts.map(t=>t.channel)).join(", ")),
+    ev("Capture lag","under 3 minutes on every ticket — entered from a list",true),
+  ],n+" tickets booked inside ten minutes — "+xBase(n,peak)+" this trader's own peak booking rate");
+};
+
+PLANT["TS-29"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const peers=DESK_BY_ID[tr.deskId].traders.filter(x=>x.id!==tr.id);
+  const toPeer=peers.length&&rng()<0.5;
+  const victim=peers.length?choice(peers):tr;
+  const book=toPeer?victim.book:choice(INTERNAL_BOOKS);
+  const n=randInt(1,3), ts=[], prod=choice(tr.products), inst=instrumentFor(prod);
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1.4,6),book}));
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  return mkAlert(rule,day,tr,ts,[
+    ev("Booked by",tr.name+" · "+tr.grade),
+    ev("This trader's own book",tr.book),
+    ev("Book used",book+(toPeer?" — "+victim.name+"'s book":" — internal warehouse"),true),
+    ev("Deals",n+" · "+fmtM(tot),true),
+    ev("Delegation record","None on file",true),
+    ev("Visible in this trader's limit utilisation","No",true),
+    ev("Visible in this trader's P&L","No",true),
+    ev("Book owner notified",toPeer?"No record":"No owner — warehouse book",true),
+    ev("Product",prod+" · "+inst.name),
+  ],fmtM(tot)+" of "+prod+" booked by "+tr.name+" into "+book+", not their own book");
+};
+
+PLANT["TS-30"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const fills=randInt(2,5), ts=[], t0=execMinFor(DESK_BY_ID[tr.deskId]), L=longDir(prod);
+  for(let i=0;i<fills;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.6,2),dir:L,
+    execMin:Math.min(1439,t0+i*randInt(3,20)),channel:"API / Algo",venue:"SEF / MTF"}));
+  const orders=fills*randInt(21,46), ratio=orders/fills, own=rand(3.1,5.6);
+  ts.forEach(t=>{ t.pnl=+(t.notional*rand(1.4,4.2)).toFixed(1); });
+  return mkAlert(rule,day,tr,ts,[
+    ev("Instrument",prod+" · "+inst.name),
+    ev("Orders placed",String(orders),true),
+    ev("Orders executed",String(fills)),
+    ev("Cancel-to-trade ratio",ratio.toFixed(1)+":1",true),
+    ev("This trader's own 12-month baseline",own.toFixed(1)+":1",true),
+    ev("Rule threshold","20:1 in a session"),
+    ev("Order side","Cancelled orders all on the opposite side to the fills",true),
+    ev("Mean order lifetime",randInt(180,900)+" ms",true),
+    ev("Channel","API / Algo"),
+    ev("P&L on the executed side",fmtK(ts.reduce((a,t)=>a+t.pnl,0)),true),
+  ],ratio.toFixed(0)+":1 cancel-to-trade on the algo channel against this trader's own "+own.toFixed(1)+":1 baseline");
+};
+
+PLANT["TS-31"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const n=randInt(5,8), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[], L=longDir(prod);
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.5,1.6),dir:L,
+    execMin:Math.min(1439,t0+i),captureLag:rand(0,2)}));
+  const built=ts.reduce((a,t)=>a+t.notional,0);
+  const move=rand(8.5,31), back=randInt(9,29);
+  const rev=makeTrade(day,tr,prod,{inst,notional:built*rand(0.92,1.06),dir:oppDir(L),execMin:Math.min(1439,t0+n+back)});
+  rev.pnl=+(built*move*0.05).toFixed(1);
+  return mkAlert(rule,day,tr,ts.concat([rev]),[
+    ev("Instrument",prod+" · "+inst.name),
+    ev("Burst",n+" × "+L+" inside "+n+" minutes from "+fmtTime(t0),true),
+    ev("Notional built",fmtM(built),true),
+    ev("Mid move over the burst","+"+move.toFixed(1)+" bps",true),
+    ev("Reversal",rev.dir+" "+fmtM(rev.notional)+" at "+fmtTime(rev.execMin)+" — "+back+" minutes later",true),
+    ev("Net position after the reversal","Nil",true),
+    ev("P&L collected on the reversal",fmtK(rev.pnl),true),
+    ev("Client order behind the burst","None recorded",true),
+    ev("This trader's median ticket",fmtM(b.medSize)),
+  ],n+" one-way prints moved the mid "+move.toFixed(0)+" bps and were reversed "+back+" minutes later for "+fmtK(rev.pnl));
+};
+
+PLANT["TS-32"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const desk=DESK_BY_ID[tr.deskId], close=Math.round(DESK_HOURS[desk.region][1]*60);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const n=randInt(4,8), ts=[], L=rng()<0.5?longDir(prod):shortDir(prod);
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.9,3),dir:L,execMin:close-randInt(0,14)}));
+  const lateVol=ts.reduce((a,t)=>a+t.notional,0);
+  const dayVol=lateVol/rand(0.36,0.72), move=rand(5,19);
+  ts.forEach(t=>{ t.pnl=+(t.notional*move*0.05).toFixed(1); });
+  return mkAlert(rule,day,tr,ts,[
+    ev("Instrument",prod+" · "+inst.name),
+    ev("This trader's session close",fmtTime(close)+" "+desk.region),
+    ev("Trades in the final 15 minutes",String(n),true),
+    ev("Notional in the window",fmtM(lateVol),true),
+    ev("This trader's volume that day",fmtM(dayVol)),
+    ev("Share of their own daily volume",fmtPct(lateVol/dayVol,1),true),
+    ev("Rule threshold","35%"),
+    ev("Direction","100% "+L+" — one-sided",true),
+    ev("Closing mid move","+"+move.toFixed(1)+" bps",true),
+    ev("Published benchmark window","None — this is not a fixing",false),
+    ev("Mark-to-market effect on the book",fmtK(ts.reduce((a,t)=>a+t.pnl,0)),true),
+  ],fmtPct(lateVol/dayVol,0)+" of this trader's day executed one-way into their own close, moving the mid "+move.toFixed(0)+" bps");
+};
+
+PLANT["TS-33"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const clients=shuffle(COUNTERPARTIES.filter(c=>["Asset Manager","Corporate","Insurer","Private Client"].indexOf(c.type)>=0)).slice(0,2);
+  const notional=b.medSize*rand(1.6,6), m=execMinFor(DESK_BY_ID[tr.deskId]), gap=randInt(1,5);
+  const bps=rand(11,58), L=longDir(prod);
+  const a=makeTrade(day,tr,prod,{inst,notional,dir:L,ctpy:clients[0],execMin:m});
+  const c=makeTrade(day,tr,prod,{inst,notional,dir:oppDir(L),ctpy:clients[1],execMin:m+gap});
+  applyDev(a,bps);
+  // A cross prints once: both clients get the same level, and it is off mid.
+  c.mktPx=a.mktPx; c.px=a.px; c.devBps=devBpsOf(c.unit,c.px,c.mktPx);
+  a.pnl=+(-notional*bps*0.06).toFixed(1); c.pnl=+(notional*bps*0.06).toFixed(1);
+  const rel=RELATED_PARTIES[clients[1].name];
+  return mkAlert(rule,day,tr,[a,c],[
+    ev("Instrument",prod+" · "+inst.name),
+    ev("Leg 1",a.dir+" "+fmtM(a.notional)+" · "+clients[0].name+" · "+fmtTime(a.execMin)),
+    ev("Leg 2",c.dir+" "+fmtM(c.notional)+" · "+clients[1].name+" · "+fmtTime(c.execMin)),
+    ev("Crossed at",px(a),true),
+    ev("Market mid at the cross",mkt(a)),
+    ev("Distance from mid",Math.abs(a.devBps).toFixed(1)+" bps",true),
+    ev("Rule threshold","10.0 bps"),
+    ev("Client disadvantaged",clients[0].name+" — "+fmtK(Math.abs(a.pnl)),true),
+    ev("Client advantaged",clients[1].name+" — "+fmtK(c.pnl),true),
+    ev("Best-execution record","No evidence either client was shown the mid",true),
+    ev("Related-party register",rel?"MATCH — "+rel:"No match",!!rel),
+  ],"Two client orders crossed by "+tr.name+" at "+Math.abs(a.devBps).toFixed(0)+" bps off mid, moving "+fmtK(c.pnl)+" between them",
+  {sev:rel?"Critical":"High"});
+};
+
+PLANT["TS-34"]=function(rule){
+  const tr=pickActor(rule), day=pickDay(24,DAYS-1), b=trBase(tr);
+  const L=tr.ticketLimit, n=randInt(10,16), ts=[];
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  for(let i=0;i<n;i++) ts.push(makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:L*rand(0.902,0.994)}));
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  const lo=Math.min.apply(null,ts.map(t=>t.notional)), hi=Math.max.apply(null,ts.map(t=>t.notional));
+  return mkAlert(rule,day,tr,ts,[
+    ev("This trader's ticket authorisation",fmtM(L)+" ("+tr.grade+")"),
+    ev("Tickets at 90–99.5% of that limit",n+" in 20 business days",true),
+    ev("Size range",fmtM(lo)+" – "+fmtM(hi)+" — never once above",true),
+    ev("Mean utilisation of their own limit",fmtPct(tot/n/L,1),true),
+    ev("Tickets above the limit in 12 months","None",true),
+    ev("This trader's median ticket",fmtM(b.medSize)),
+    ev("Aggregate notional",fmtM(tot)),
+    ev("Distribution shape","Truncated hard at the limit — not a natural size distribution",true),
+    ev("Rule threshold","10 tickets in 20 business days"),
+  ],n+" tickets sized between "+fmtPct(lo/L,0)+" and "+fmtPct(hi/L,0)+" of this trader's own authorisation, and none above it");
+};
+
+PLANT["TS-35"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const yrs=tr.tenorYrs+randInt(3,22);
+  const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.8,4.5),tenor:yrs+"Y"});
+  return mkAlert(rule,day,tr,[t],[
+    ev("Trader",tr.name+" · "+tr.grade),
+    ev("This trader's approved maximum tenor",tr.tenorYrs+" years"),
+    ev("Tenor booked",yrs+" years",true),
+    ev("Excess",(yrs-tr.tenorYrs)+" years beyond their own authority",true),
+    ev("Product",prod+" · "+t.instrument),
+    ev("Notional",fmtM(t.notional)),
+    ev("Maturity",fmtDate(new Date(t.date.getTime()+yrs*365*dayMs)),true),
+    ev("Tenor exception on file","None",true),
+    ev("Supervisor sign-off",tr.supervisor+" — not evidenced",true),
+  ],prod+" written to "+yrs+" years by a trader approved to "+tr.tenorYrs,
+  {sev:yrs>tr.tenorYrs*3?"High":"Medium"});
+};
+
+PLANT["TS-36"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const never=PRODUCTS.map(p=>p.p).filter(p=>b.products.indexOf(p)<0);
+  const prod=never.length?choice(never):choice(PRODUCTS).p;
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(2.2,9)});
+  const onList=tr.products.indexOf(prod)>=0;
+  return mkAlert(rule,day,tr,[t],[
+    ev("Product",prod+" · "+t.instrument,true),
+    ev("Prior trades in this product by this trader","None in 12 months",true),
+    ev("Products this trader does trade",b.products.slice(0,6).join(", ")+(b.products.length>6?" +"+(b.products.length-6)+" more":"")),
+    ev("Notional",fmtM(t.notional)+" — "+xBase(t.notional,b.medSize)+" their median ticket",true),
+    ev("Rule threshold","2× the trader's own median ticket"),
+    ev("On this trader's approved list",onList?"Yes":"No",!onList),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType),
+    ev("Booked to",t.book),
+    ev("Product sign-off record for this trader","Not evidenced",true),
+  ],"First "+prod+" this trader has booked in 12 months, entered at "+xBase(t.notional,b.medSize)+" their median ticket",
+  {sev:onList?"Medium":"High"});
+};
+
+PLANT["TS-37"]=function(rule){
+  const tr=pickActor(rule), b=trBase(tr);
+  const lead=randInt(1,3);
+  let day=Math.max(4,Math.min(DAYS-1,tr.leave[0]-lead));
+  for(let i=0;i<10&&!isBiz(dateForIdx(day));i++) day=Math.max(4,day-1);
+  const n=Math.max(4,Math.round(b.tickets*rand(2.6,4.4)));
+  const ts=ensureTrades(tr,day,Math.min(n,9));
+  const tot=ts.reduce((a,t)=>a+t.notional,0)*(n/Math.max(1,ts.length));
+  const cover=(DESK_BY_ID[tr.deskId].traders.filter(x=>x.id!==tr.id)[0]||tr).name;
+  return mkAlert(rule,day,tr,ts,[
+    ev("Block leave window",fmtDate(dateForIdx(tr.leave[0]))+" – "+fmtDate(dateForIdx(tr.leave[1])),true),
+    ev("Activity date",fmtDate(dateForIdx(day))+" — "+lead+" business day"+(lead>1?"s":"")+" before leave",true),
+    ev("Tickets booked",String(n),true),
+    ev("This trader's 90-day daily mean",b.tickets.toFixed(1)+" tickets"),
+    ev("Surge versus their own baseline",xBase(n,b.tickets),true),
+    ev("Notional",fmtM(tot),true),
+    ev("Positions left open over the leave",randInt(2,9)+" deals",true),
+    ev("Handover note to the cover trader","Not on file",true),
+    ev("Cover trader",cover),
+  ],n+" tickets booked "+lead+" day"+(lead>1?"s":"")+" before block leave — "+xBase(n,b.tickets)+" this trader's own daily average");
+};
+
+PLANT["TS-38"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const z=rand(3.05,6.8);
+  const target=b.dayNotional+z*Math.max(1,b.dayNotionalSd);
+  const n=randInt(3,6), ts=ensureTrades(tr,day,n), share=target/n;
+  ts.forEach(t=>{ t.notional=share*rand(0.7,1.3); });
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  const deskDay=b.dayNotional*DESK_BY_ID[tr.deskId].traders.length*rand(2.6,4);
+  return mkAlert(rule,day,tr,ts,[
+    ev("Trading day",fmtDate(dateForIdx(day))),
+    ev("Notional booked",fmtM(tot),true),
+    ev("This trader's 90-day daily mean",fmtM(b.dayNotional)),
+    ev("This trader's 90-day σ",fmtM(b.dayNotionalSd)),
+    ev("z-score against their own book",z.toFixed(2),true),
+    ev("Rule threshold","3.00"),
+    ev("Same day measured at desk level",fmtPct(tot/Math.max(tot,deskDay),1)+" of the desk's notional — invisible in a pooled view",true),
+    ev("Market event that session","None scheduled"),
+    ev("Tickets",n+" · "+uniq(ts.map(t=>t.product)).join(", ")),
+  ],fmtM(tot)+" booked in one day — "+z.toFixed(1)+"σ outside this trader's own distribution");
+};
+
+PLANT["TS-39"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const window=40, lossPct=rand(0.02,0.095);
+  const ts=ensureTrades(tr,day,randInt(2,4));
+  ts.forEach(t=>{ t.pnl=Math.abs(t.pnl)||+rand(20,180).toFixed(1); });
+  const own=Math.max(0.31,b.lossDays);
+  return mkAlert(rule,day,tr,ts,[
+    ev("Window","40 business days to "+fmtDate(dateForIdx(day))),
+    ev("Losing days in the window",Math.round(window*lossPct)+" of "+window+" ("+fmtPct(lossPct,1)+")",true),
+    ev("This trader's own 12-month rate",fmtPct(own,1)+" losing days"),
+    ev("Peer cohort ("+tr.cohort+")",fmtPct(Math.max(0.28,b.cohort.lossDays),1)),
+    ev("Rule threshold","below 10% where the trader's own rate is above 30%"),
+    ev("Book risk over the window","Unchanged — position size and VaR in line",true),
+    ev("Unrealised versus realised","Gains realised; losses left unrealised",true),
+    ev("Independent price verification","2 positions carry manual marks",true),
+    ev("This trader's daily P&L σ",fmtK(b.pnlSd)),
+  ],"Only "+Math.round(window*lossPct)+" losing days in 40, against this trader's own 12-month rate of "+fmtPct(own,0));
+};
+
+PLANT["TS-40"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const structured=tr.products.filter(p=>["fxopt","eqopt","rate","trs"].indexOf(PROD_BY_NAME[p].fam)>=0);
+  const prod=structured.length?choice(structured):choice(tr.products);
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.4,6)});
+  const pctNot=rand(2.6,9.4);
+  t.pnl=+(t.notional*10*pctNot).toFixed(1);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Structure",prod+" · "+t.instrument+" · "+t.tenor),
+    ev("Notional",fmtM(t.notional)),
+    ev("Day-one P&L recognised",fmtK(t.pnl),true),
+    ev("As % of notional",pctNot.toFixed(2)+"%",true),
+    ev("Model tolerance","2.50% of notional"),
+    ev("Pricing input driving it",choice(["Correlation input outside the observed range",
+      "Vol surface point interpolated beyond the last quote","Dividend assumption not in the market data set",
+      "Recovery rate overridden manually"]),true),
+    ev("Independent model validation","Not performed on this trade",true),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType),
+    ev("Day-one reserve held","None",true),
+  ],prod+" booking "+pctNot.toFixed(1)+"% of notional as day-one profit against a 2.5% model tolerance");
+};
+
+PLANT["TS-41"]=function(rule){
+  const tr=pickActor(rule), b=trBase(tr);
+  const me=choice(MONTH_END_REV);
+  const gain=rand(650,4200), backDay=bizFwd(me,randInt(1,3));
+  const ts=ensureTrades(tr,backDay,randInt(2,4));
+  const giveback=-gain*rand(0.72,0.98);
+  ts.forEach(t=>{ t.pnl=+(giveback/ts.length).toFixed(1); });
+  return mkAlert(rule,backDay,tr,ts,[
+    ev("Valuation date",fmtDate(dateForIdx(me))+" — month end"),
+    ev("P&L reported by this trader at the close",fmtK(gain),true),
+    ev("Losses in the 3 days after",fmtK(giveback),true),
+    ev("Give-back ratio",fmtPct(Math.abs(giveback)/gain,0)+" of the reported gain",true),
+    ev("Rule threshold","70%"),
+    ev("Positions involved","The same instruments that carried the month-end mark",true),
+    ev("Market move over the period",rand(-0.3,0.35).toFixed(2)+"% — does not explain the reversal",true),
+    ev("This trader's daily P&L σ",fmtK(b.pnlSd)),
+    ev("Prior occurrences",randInt(2,5)+" of the last 12 month ends",true),
+  ],fmtK(gain)+" reported at the month-end close and "+fmtPct(Math.abs(giveback)/gain,0)+" of it given back within three days");
+};
+
+PLANT["TS-42"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const t=ensureTrades(tr,day,1)[0];
+  t.ssiChanged=true; t.status="Amended"; t.amends=Math.max(1,t.amends);
+  t.notional=Math.max(t.notional,b.medSize*rand(1.5,6));
+  const n=randInt(2,3), shares=[]; let rem=100;
+  for(let i=0;i<n-1;i++){ const s=Math.round(rand(15,rem-15)); shares.push(s); rem-=s; }
+  shares.push(rem);
+  const third=choice(["Northgate Clearing SA","Aurora Trust Bank","Continental Escrow NV","Pallas Financial Ltd"]);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Trade",t.id+" · "+t.product+" · "+fmtM(t.notional)),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType+" · "+t.ctpyCountry),
+    ev("Settlement accounts used",String(n),true),
+    ev("Split",shares.map(s=>s+"%").join(" / "),true),
+    ev("Accounts on the counterparty static record","One"),
+    ev("Additional destination",third+" — not on the static record",true),
+    ev("Amount to the unregistered account",fmtM(t.notional*shares[shares.length-1]/100),true),
+    ev("Instruction amended by","Front office — "+tr.name,true),
+    ev("Counterparty confirmation of the split","Not on file",true),
+  ],fmtM(t.notional)+" settled across "+n+" accounts, one of which is not on the counterparty's static record");
+};
+
+PLANT["TS-43"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const t=ensureTrades(tr,day,1)[0];
+  t.ssiChanged=true;
+  t.notional=Math.max(t.notional,b.medSize*rand(1.2,5));
+  const jur=choice(HIGH_RISK_JUR);
+  const bank=choice(["Northgate Clearing SA","Aurora Trust Bank","Continental Escrow NV","Pallas Financial Ltd","Meridian Offshore Ltd"]);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Trade",t.id+" · "+t.product+" · "+fmtM(t.notional)),
+    ev("Counterparty",t.ctpy+" · "+t.ctpyType),
+    ev("Counterparty domicile",t.ctpyCountry),
+    ev("Settlement routed through",bank+" ("+jur[0]+")",true),
+    ev("Jurisdiction risk rating",jur[1],true),
+    ev("Connection to the counterparty","None documented",true),
+    ev("Financial crime screening","Passed on the counterparty name only — not on the payment route",true),
+    ev("Booked by",tr.name+" · "+tr.grade),
+    ev("Value at risk of diversion",fmtM(t.notional),true),
+  ],fmtM(t.notional)+" routed through "+jur[0]+", unconnected to a "+t.ctpyCountry+" counterparty");
+};
+
+PLANT["TS-44"]=function(rule){
+  const tr=pickActor(rule), day=pickDay(4,DAYS-8), b=trBase(tr);
+  const n=randInt(2,5), ts=ensureTrades(tr,day,n);
+  const aged=randInt(6,31), own=Math.max(0.8,b.tickets*0.06);
+  ts.forEach(t=>{ t.status="Live"; });
+  return mkAlert(rule,Math.min(DAYS-1,day+aged),tr,ts,[
+    ev("Deals outstanding",String(n),true),
+    ev("Oldest unconfirmed",aged+" business days",true),
+    ev("Policy deadline","5 business days"),
+    ev("This trader's 12-month unconfirmed average",own.toFixed(1)+" open at any time"),
+    ev("Current count versus their own rate",xBase(n,own),true),
+    ev("Aggregate notional",fmtM(ts.reduce((a,t)=>a+t.notional,0)),true),
+    ev("Counterparties",uniq(ts.map(t=>t.ctpy)).join(", ")),
+    ev("Chaser record","No chase sent by the desk",true),
+    ev("Counterparty acknowledgement","No record of these trades on their side",true),
+  ],n+" deals still unconfirmed after "+aged+" business days — "+xBase(n,own)+" this trader's normal open count");
+};
+
+PLANT["TS-45"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const clients=shuffle(COUNTERPARTIES.filter(c=>["Asset Manager","Insurer","Private Client"].indexOf(c.type)>=0)).slice(0,2);
+  const m=execMinFor(DESK_BY_ID[tr.deskId]), block=b.medSize*rand(3,9);
+  const good=makeTrade(day,tr,prod,{inst,notional:block*rand(0.30,0.45),ctpy:clients[0],execMin:m});
+  const rest=makeTrade(day,tr,prod,{inst,notional:block-good.notional,ctpy:clients[1],execMin:m});
+  const edge=rand(8.5,34), hrs=rand(1.5,9);
+  applyDev(good,-edge);
+  const rel=RELATED_PARTIES[clients[0].name];
+  return mkAlert(rule,day,tr,[good,rest],[
+    ev("Block executed",fmtM(block)+" "+prod+" at "+fmtTime(m)),
+    ev("Allocation amended",hrs.toFixed(1)+" hours after execution",true),
+    ev("Account receiving the best fills",clients[0].name+" · "+fmtM(good.notional),true),
+    ev("Account receiving the remainder",clients[1].name+" · "+fmtM(rest.notional)),
+    ev("Fill advantage to the first account",edge.toFixed(1)+" bps against the block average",true),
+    ev("Rule threshold","8.0 bps"),
+    ev("Allocation instruction timestamp","After the market had moved",true),
+    ev("Pre-trade allocation on file","None",true),
+    ev("Related-party register",rel?"MATCH — "+rel:"No match",!!rel),
+  ],"Block allocated "+hrs.toFixed(0)+"h after execution with the best fills going to "+clients[0].name);
+};
+
+PLANT["TS-46"]=function(rule){
+  const tr=pickActor(rule), day=pickDay(24,DAYS-1), b=trBase(tr);
+  const ctpy=rng()<0.35?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
+  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const n=randInt(9,18), ts=[];
+  for(let i=0;i<n;i++) ts.push(makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:b.medSize*rand(0.6,2.6),ctpy}));
+  const share=rand(tr.ctpyCap+0.06,0.84), total=Math.round(n/share);
+  const rel=RELATED_PARTIES[ctpy.name];
+  return mkAlert(rule,day,tr,ts,[
+    ev("Counterparty",ctpy.name+" · "+ctpy.type,true),
+    ev("Tickets to this name (20 business days)",n+" of "+total,true),
+    ev("Share of this trader's flow",fmtPct(share,1),true),
+    ev("This trader's concentration cap",fmtPct(tr.ctpyCap,0)+" ("+tr.grade+")"),
+    ev("This trader's 12-month mix",fmtPct(b.topCtpyShare,1)+" to their largest name ("+b.topCtpy+")"),
+    ev("Peer cohort ("+tr.cohort+")",fmtPct(b.cohort.topCtpyShare,1)+" median"),
+    ev("Counterparties this trader normally faces",String(b.ctpyCount)),
+    ev("Notional to this name",fmtM(ts.reduce((a,t)=>a+t.notional,0))),
+    ev("Related-party register",rel?"MATCH — "+rel:"No match",!!rel),
+  ],fmtPct(share,0)+" of this trader's tickets over 20 days went to "+ctpy.name+", against a cap of "+fmtPct(tr.ctpyCap,0),
+  {sev:rel?"High":"Medium"});
+};
+
+PLANT["TS-47"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const r=choice(RESTRICTED);
+  const creditBooks=tr.products.filter(p=>["cds","bondc","trs"].indexOf(PROD_BY_NAME[p].fam)>=0);
+  const prod=creditBooks.length?choice(creditBooks):choice(tr.products);
+  const inst=instrumentFor(prod);
+  inst.name=prod.indexOf("CDS")>=0?r[0]+" 5Y CDS":prod.indexOf("Bond")>=0?r[0]+" "+rand(3.5,7).toFixed(2)+"% 2031":"TRS on "+r[0];
+  const n=randInt(1,3), ts=[];
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1,5)}));
+  const tot=ts.reduce((a,t)=>a+t.notional,0);
+  const listed=Math.max(0,day-randInt(6,50));
+  return mkAlert(rule,day,tr,ts,[
+    ev("Name",r[0],true),
+    ev("Restricted list status","On the list since "+fmtDate(dateForIdx(listed))+" — "+r[1],true),
+    ev("Trades booked",n+" · "+fmtM(tot),true),
+    ev("Instrument",inst.name),
+    ev("Wall-crossing record for this trader","None",true),
+    ev("Personal-account declaration","No holding declared in this name"),
+    ev("Prior activity by this trader in the name","None in 12 months",true),
+    ev("Pre-trade restricted-list check","Not evidenced — booked through "+ts[0].channel,true),
+    ev("Counterparty",ts[0].ctpy),
+  ],n+" trade"+(n>1?"s":"")+" in "+r[0]+" while the name sat on the restricted list, with no wall-crossing record for this trader");
+};
+
+PLANT["TS-48"]=function(rule){
+  const tr=pickActor(rule), b=trBase(tr);
+  const annDay=pickDay(80,DAYS-2), lead=randInt(1,5);
+  const exitDay=bizBack(annDay,lead), openDay=bizBack(exitDay,randInt(20,45));
+  const books=tr.products.filter(p=>["cds","bondc","trs","eq","eqopt"].indexOf(PROD_BY_NAME[p].fam)>=0);
+  const prod=books.length?choice(books):choice(tr.products);
+  const inst=instrumentFor(prod);
+  const notional=b.medSize*rand(1.6,7), L=longDir(prod);
+  const open=makeTrade(openDay,tr,prod,{inst,notional,dir:L});
+  const exit=makeTrade(exitDay,tr,prod,{inst,notional:notional*rand(0.99,1.01),dir:oppDir(L)});
+  const avoided=rand(480,3600);
+  const news=choice([["Profit warning","Company announcement"],["Rating downgrade","S&P / Moody's action"],
+    ["Guidance withdrawn","Exchange filing"],["Regulatory penalty disclosed","Exchange filing"],
+    ["Covenant breach confirmed","Trustee notice"]]);
+  const held=BIZ_DAYS.indexOf(exitDay)-BIZ_DAYS.indexOf(openDay);
+  const nameOnly=inst.name.replace(/ 5Y CDS| \d.*$/,"").replace(/^TRS on /,"");
+  return mkAlert(rule,exitDay,tr,[open,exit],[
+    ev("Name",nameOnly),
+    ev("Position opened",fmtDate(dateForIdx(openDay))+" · "+open.dir+" "+fmtM(notional)),
+    ev("Held for",held+" business days",true),
+    ev("Position closed",fmtDate(dateForIdx(exitDay))+" · "+exit.dir+" "+fmtM(exit.notional),true),
+    ev("Announcement",news[0]+" · "+news[1]),
+    ev("Announcement date",fmtDate(dateForIdx(annDay))+" — "+lead+" business day"+(lead>1?"s":"")+" later",true),
+    ev("Loss avoided by exiting",fmtK(avoided),true),
+    ev("Reason for the exit recorded","None — no hedge, no limit, no client order",true),
+    ev("This trader's usual holding period",randInt(35,90)+" business days in this book"),
+    ev("Wall-crossing / restricted list check","Name not on the restricted list at the time"),
+  ],"A "+held+"-day "+nameOnly+" position closed "+lead+" day"+(lead>1?"s":"")+" before a "+news[0].toLowerCase()+", avoiding "+fmtK(avoided));
+};
+
+PLANT["TS-49"]=function(rule){
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="repo")[0]||"Repo";
+  const name=choice(Object.keys(RELATED_PARTIES));
+  const bps=rand(16,72);
+  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.5,7),ctpy:{name,type:"Private Client",country:"Singapore"}});
+  applyDev(t,bps);
+  t.pnl=+(-t.notional*bps*rand(0.04,0.09)).toFixed(1);
+  const gc=rand(3.9,4.6);
+  return mkAlert(rule,day,tr,[t],[
+    ev("Financing",fmtM(t.notional)+" "+prod+" · "+t.tenor),
+    ev("Counterparty",name,true),
+    ev("Related-party register",RELATED_PARTIES[name],true),
+    ev("Repo rate applied",(gc+bps/100).toFixed(3)+"%",true),
+    ev("General collateral level",gc.toFixed(3)+"%"),
+    ev("Difference",bps.toFixed(1)+" bps away from GC",true),
+    ev("Rule threshold","15.0 bps"),
+    ev("Direction of benefit","The counterparty",true),
+    ev("Value transferred over the term",fmtK(Math.abs(t.pnl)),true),
+    ev("Conflicts declaration by this trader","Does not disclose this counterparty",true),
+  ],prod+" with "+name+" struck "+bps.toFixed(0)+" bps away from GC — the name is on the related-party register");
+};
+
+PLANT["TS-50"]=function(rule){
+  const tr=pickActor(rule), b=trBase(tr);
+  const qe=choice(QUARTER_END);
+  const outDay=bizBack(qe,randInt(1,2)), backDay=bizFwd(qe,randInt(1,5));
+  const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="repo")[0]||"Repo";
+  const notional=b.medSize*rand(3,11);
+  const a=makeTrade(outDay,tr,prod,{notional,dir:"Lend"});
+  const c=makeTrade(backDay,tr,prod,{notional:notional*rand(0.99,1.01),dir:"Borrow"});
+  const from=choice(["BB- corporate paper","B+ airline paper","unrated structured notes","BB property paper"]);
+  const to=choice(["US Treasury 5Y","Bund 10Y","SGS 10Y","UK Gilt 5Y"]);
+  return mkAlert(rule,outDay,tr,[a,c],[
+    ev("Reporting date",fmtDate(dateForIdx(qe))+" — quarter end",true),
+    ev("Collateral before substitution",from,true),
+    ev("Collateral held over the reporting date",to,true),
+    ev("Substituted",fmtDate(dateForIdx(outDay))+" — "+(BIZ_DAYS.indexOf(qe)-BIZ_DAYS.indexOf(outDay))+" business days before",true),
+    ev("Reversed",fmtDate(dateForIdx(backDay))+" — "+(BIZ_DAYS.indexOf(backDay)-BIZ_DAYS.indexOf(qe))+" business days after",true),
+    ev("Notional",fmtM(notional)),
+    ev("Haircut reported over the date",rand(0.5,2).toFixed(1)+"% — against "+rand(8,18).toFixed(1)+"% on the paper actually held",true),
+    ev("Business rationale documented","None",true),
+    ev("Prior occurrences",randInt(2,4)+" of the last 8 quarters",true),
+  ],"Collateral swapped from "+from+" into "+to+" across the quarter end and swapped straight back");
+};
+
 RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<r.plants;i++) f(r); });
 
 /* Background noise: ordinary trades that happen to sit just past a threshold.
    Without them every alert would be a genuine pattern, and the officer's job —
    telling a real signal from a benign one — would not exist. */
 (function backgroundHits(){
-  const NOISY=[["TS-02",90],["TS-08",55],["TS-03",40],["TS-07",25],["TS-13",30],["TS-01",28],["TS-06",18],["TS-15",14]];
+  const NOISY=[["TS-02",90],["TS-08",55],["TS-03",40],["TS-07",25],["TS-13",30],["TS-01",28],["TS-06",18],["TS-15",14],
+               ["TS-25",34],["TS-28",30],["TS-38",30],["TS-44",26],["TS-46",24],["TS-36",22],["TS-24",22],["TS-35",18],
+               ["TS-27",16],["TS-34",14],["TS-32",12],["TS-21",12]];
   NOISY.forEach(pair=>{
     const rule=RULE_BY_ID[pair[0]];
     for(let i=0;i<pair[1];i++){
@@ -1633,7 +2662,7 @@ RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<r.plants;i++) f(r); });
              ev("Other tickets in the window",String(randInt(2,3))),ev("Instrument",t.product+" · "+t.instrument),
              ev("Client order size",fmtM(t.notional*randInt(2,3))+" — split per client instruction")];
         sum="Tickets sized just under the $25m authorisation limit";
-      }else{
+      }else if(rule.id==="TS-15"){
         const d=rand(2.0,2.6);
         t.vol=t.mktVol!=null?+(t.mktVol+d).toFixed(2):null;
         evs=[ev("Quoted volatility",(t.vol||0).toFixed(2)+" vols",true),ev("Surface",(t.mktVol||0).toFixed(2)+" vols"),
@@ -1641,6 +2670,23 @@ RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<r.plants;i++) f(r); });
              ev("Notional",fmtM(t.notional)),ev("Structure",t.instrument),
              ev("Surface staleness","Surface last refreshed "+randInt(3,9)+"h before execution")];
         sum="Option quoted "+d.toFixed(1)+" vols off a surface last refreshed hours earlier";
+      }else{
+        // The trader-baseline rules produce their own kind of benign hit: a name
+        // sitting fractionally the wrong side of their own threshold on a busy
+        // day, with an ordinary explanation sitting behind it.
+        const b2=trBase(tr), over=rand(1.02,1.31);
+        evs=[ev("Trade / product",t.id+" · "+t.product+" · "+t.instrument),
+             ev("Notional",fmtM(t.notional)),
+             ev("Measured against",rule.base),
+             ev("This trader's own baseline",fmtM(b2.medSize)+" median ticket · "+b2.tickets.toFixed(1)+" tickets a day · "+fmtNum(b2.deals)+" deals in 12 months"),
+             ev("Exceedance","×"+over.toFixed(2)+" of this trader's own threshold — marginal",true),
+             ev("Rule test",rule.logic),
+             ev("Context on the day",choice(["Month-end roll — the whole cohort ran hot",
+               "Single client order worked in pieces, instruction on file",
+               "Covering for a colleague on block leave",
+               "Quarterly index rebalance in the underlying",
+               "System failover — tickets re-entered by hand"]))];
+        sum=rule.name+" — this trader ran ×"+over.toFixed(2)+" over their own threshold, marginally past the test";
       }
       const al=mkAlert(rule,day,tr,[t],evs,sum,{sev:rule.sev==="Critical"?"High":rule.sev==="High"?"Medium":"Low",scoreAdj:-12});
       al.noise=true;   // benign by construction — these are the ones that get passed
@@ -1665,10 +2711,12 @@ const PASS_REASONS=[
   "Documented hedge for an existing position",
   "Market dislocation corroborated by TCA",
   "System or feed latency — data quality issue",
-  "Approved mandate exception held by the desk",
+  "Personal mandate exception approved for this trader",
   "Trader explanation verified with the desk head",
   "Duplicate of an existing case",
   "Benign — thin liquidity at the time of execution",
+  "Baseline distorted — trader covering a colleague on block leave",
+  "Trader's baseline reset after a book transfer this quarter",
 ];
 const SUSP_REASONS=[
   "Unexplained off-market pricing",
@@ -1678,13 +2726,15 @@ const SUSP_REASONS=[
   "Indicators of information misuse",
   "Control circumvention — authorisation defeated",
   "Repeat pattern by the same trader",
+  "Sustained departure from the trader's own baseline",
 ];
 const PASS_NOTES=[
   "Spoke to the desk head. Order was pre-agreed with the client at a fixed rate the previous session; instruction sighted.",
   "Reviewed against the hedge register — offsetting position booked the same morning under the same strategy ID.",
   "TCA for the window shows the whole street printed away from the composite. No trader-specific advantage.",
   "Confirmed with Technology: the booking gateway queued for the session. Affected 30+ deals across three desks.",
-  "Mandate exception approved by Market Risk earlier in the quarter and still valid. Filed against the case.",
+  "Personal mandate exception approved by Market Risk for this trader earlier in the quarter and still valid. Filed against the case.",
+  "Checked against the trader's own 90-day profile: the week they covered the desk single-handed accounts for the whole exceedance.",
   "Trader provided the client tape. Sequence and sizing are consistent with the recording.",
 ];
 const SUSP_NOTES=[
@@ -1754,17 +2804,27 @@ applyReviews();
    Derived indices
 ============================================================ */
 const TRADER_STATS={};
-TRADERS.forEach(t=>TRADER_STATS[t.id]={id:t.id,name:t.name,deskId:t.deskId,trades:0,notional:0,pnl:0,alerts:0,crit:0,susp:0,score:0,rules:{}});
+TRADERS.forEach(t=>TRADER_STATS[t.id]={id:t.id,name:t.name,deskId:t.deskId,cohort:t.cohort,
+  trades:0,notional:0,pnl:0,alerts:0,crit:0,susp:0,score:0,rules:{}});
 TRADES.forEach(t=>{ const s=TRADER_STATS[t.traderId]; s.trades++; s.notional+=t.notional; s.pnl+=t.pnl; });
 ALERTS.forEach(a=>{
   const s=TRADER_STATS[a.traderId]; s.alerts++;
   if(a.sev==="Critical") s.crit++;
   if(a.status==="Suspicious"||a.status==="Escalated") s.susp++;
-  s.score+=a.score*(SEV_RANK[a.sev]/2);
+  s.score+=SEV_RANK[a.sev];
   s.rules[a.ruleId]=(s.rules[a.ruleId]||0)+1;
 });
-// Risk index: alert weight per 100 trades, so a busy desk is not penalised for volume alone.
+/* Risk index: severity-weighted alerts per 100 of the trader's own deals, so a
+   busy name is not flagged for being busy and a quiet one cannot hide inside a
+   desk's turnover. The peer multiple restates the same number against the
+   cohort median — the comparison a desk head will ask for first. */
 Object.values(TRADER_STATS).forEach(s=>{ s.idx=s.trades?+(s.score/s.trades*100).toFixed(1):0; s.ruleCount=Object.keys(s.rules).length; });
+TRADERS.forEach(t=>{
+  const med=Math.max(0.1,median(t.peers.map(x=>TRADER_STATS[x.id].idx)));
+  TRADER_STATS[t.id].peer=+(TRADER_STATS[t.id].idx/med).toFixed(1);
+  TRADER_STATS[t.id].cohortMedian=med;
+  TRADER_STATS[t.id].cohortN=t.peers.length;
+});
 const RULE_STATS={};
 RULES.forEach(r=>RULE_STATS[r.id]={id:r.id,hits:0,open:0,passed:0,susp:0,notional:0,months:Array(12).fill(0),days:Array(DAYS).fill(0)});
 ALERTS.forEach(a=>{
@@ -1786,7 +2846,9 @@ ALERTS.forEach(a=>{ const mi=monthIdxOf(a.date); if(mi>=0) RULE_STATS[a.ruleId].
 ============================================================ */
 const state={
   tab:"overview", dateRangeDays:30,
-  filters:{desk:new Set(),assetClass:new Set(),severity:new Set()},
+  // The trader filter is the primary scope: detection is per person, and the
+  // group filter only widens that to everyone sharing a reporting line.
+  filters:{trader:new Set(),desk:new Set(),assetClass:new Set(),severity:new Set()},
   // The queue opens on unworked items: the daily job is the open list, and
   // history is something you drill into from the overview, not the default view.
   det:{rule:"",status:"",cat:"",trader:"",search:"",sort:{key:"day",dir:-1},page:0,per:25,openOnly:true},
@@ -1798,20 +2860,26 @@ const state={
   ovMonthSel:null,
 };
 const MSEL_OPTS={
+  trader:TRADERS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(t=>t.id),
   desk:DESKS.map(d=>d.id), assetClass:ASSET_CLASSES.slice(), severity:SEV_ORDER.slice(),
 };
-const MSEL_LABEL={desk:id=>DESK_BY_ID[id].name, assetClass:v=>v, severity:v=>v};
-const MSEL_TITLE={desk:"desks",assetClass:"asset classes",severity:"severities"};
+const MSEL_LABEL={trader:id=>TRADER_BY_ID[id].name+" · "+DESK_BY_ID[TRADER_BY_ID[id].deskId].short,
+  desk:id=>DESK_BY_ID[id].name, assetClass:v=>v, severity:v=>v};
+const MSEL_TITLE={trader:"traders",desk:"groups",assetClass:"asset classes",severity:"severities"};
 
 function alertInRange(a){ return a.day>=DAYS-state.dateRangeDays; }
 function matchRail(a){
   const f=state.filters;
+  if(f.trader.size&&!f.trader.has(a.traderId)) return false;
   if(f.desk.size&&!f.desk.has(a.deskId)) return false;
   if(f.severity.size&&!f.severity.has(a.sev)) return false;
   if(f.assetClass.size&&!a.acs.some(x=>f.assetClass.has(x))) return false;
   return true;
 }
-function railActive(){ return state.filters.desk.size||state.filters.assetClass.size||state.filters.severity.size; }
+/* Works for a TRADERS entry or a TRADER_STATS row — both carry id and deskId. */
+const traderInRail=t=>(!state.filters.trader.size||state.filters.trader.has(t.id))&&
+                      (!state.filters.desk.size||state.filters.desk.has(t.deskId));
+function railActive(){ return state.filters.trader.size||state.filters.desk.size||state.filters.assetClass.size||state.filters.severity.size; }
 // The rail scopes every view; the period scopes the alert views only, so the
 // blotter keeps its own explicit from/to dates.
 const scopedAlerts=()=>ALERTS.filter(a=>alertInRange(a)&&matchRail(a));
@@ -1821,6 +2889,7 @@ const openAlerts=()=>ALERTS.filter(a=>isOpen(a)&&matchRail(a));
 
 function tradeMatchesRail(t){
   const f=state.filters;
+  if(f.trader.size&&!f.trader.has(t.traderId)) return false;
   if(f.desk.size&&!f.desk.has(t.deskId)) return false;
   if(f.assetClass.size&&!f.assetClass.has(t.ac)) return false;
   return true;
@@ -1964,7 +3033,10 @@ function bubbleChart(pts,opts){
     g+='<text x="'+x.toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmtNum(v)+"</text>";
   }
   g+='<text x="'+(W/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Trades booked (12 months)</text>';
-  g+='<text x="10" y="'+(padT+4)+'" font-size="8.5" fill="var(--ink-3)">Alerts</text>';
+  // Rotated up the left edge: a horizontal title here collides with the top
+  // gridline value as soon as the alert count reaches three digits.
+  const midY=(padT+(H-padB))/2;
+  g+='<text x="11" y="'+midY.toFixed(1)+'" transform="rotate(-90 11 '+midY.toFixed(1)+')" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Alerts</text>';
   pts.forEach(p=>{
     const r=4+ (p.r/maxR)*13;
     g+='<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+p.color+
@@ -2102,30 +3174,38 @@ function paneOverview(){
       "Volume spikes cluster on month ends and around the quarterly reporting dates.")+
     "</div>";
 
-  // Rule × desk matrix.
+  /* Rule × trader. The columns are people, not desks: a typology firing four
+     times against one name is the finding, and it is exactly what a desk column
+     hides when it pools twelve traders into one number. */
+  const scopedAll=allScopedAlerts();
+  const traderCols=Object.values(TRADER_STATS)
+    .filter(traderInRail)
+    .map(s=>({s,n:scopedAll.filter(a=>a.traderId===s.id).length}))
+    .sort((a,b)=>b.n-a.n||b.s.idx-a.s.idx).slice(0,18).map(x=>x.s);
   const mat=[]; let matMax=0;
   RULES.forEach(r=>{
-    const row={rule:r,cells:DESKS.map(d=>{
-      const n=allScopedAlerts().filter(a=>a.ruleId===r.id&&a.deskId===d.id).length;
-      if(n>matMax) matMax=n; return {desk:d,n};
+    const hits=scopedAll.filter(a=>a.ruleId===r.id);
+    const row={rule:r,total:hits.length,cells:traderCols.map(s=>{
+      const n=hits.filter(a=>a.traderId===s.id).length;
+      if(n>matMax) matMax=n; return {tr:s,n};
     })};
-    row.total=row.cells.reduce((a,c)=>a+c.n,0);
     mat.push(row);
   });
-  const matrix=panel("Where the patterns are firing","rule × desk · full 12 months · darker = more alerts",
-    '<div class="matwrap"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
-    DESKS.map(d=>'<th class="colhd"><div>'+esc(d.short)+"</div></th>").join("")+'<th class="colhd"><div>All desks</div></th></tr></thead><tbody>'+
+  const matrix=panel("Where the patterns are firing","rule × trader · "+traderCols.length+" busiest names · full 12 months · darker = more alerts",
+    '<div class="matwrap tallmat"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
+    traderCols.map(s=>'<th class="colhd"><div>'+esc(s.name)+"</div></th>").join("")+'<th class="colhd"><div>All traders</div></th></tr></thead><tbody>'+
     mat.map(row=>'<tr><th class="rowhd" data-tip="'+esc(row.rule.name)+'" data-tipsub="'+esc(row.rule.desc)+'"><b>'+row.rule.id+"</b>"+esc(row.rule.name)+"</th>"+
       row.cells.map(c=>'<td><button class="mcell'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,matMax)+
-        '" data-matcell="'+row.rule.id+"|"+c.desk.id+'" data-tip="'+esc(row.rule.id+" · "+c.desk.name)+'" data-tipsub="'+esc(row.rule.name)+
-        '" data-tiptable="Alerts|'+c.n+"§Rule severity|"+row.rule.sev+"§Desk region|"+esc(c.desk.region)+'">'+(c.n||"·")+"</button></td>").join("")+
-      '<td><button class="mcell" style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="All desks">'+row.total+"</button></td></tr>").join("")+
+        '" data-trrule="'+c.tr.id+"|"+row.rule.id+'" data-tip="'+esc(c.tr.name)+'" data-tipsub="'+esc(row.rule.id+" · "+row.rule.name)+
+        '" data-tiptable="Alerts|'+c.n+"§Rule severity|"+row.rule.sev+"§Trader risk index|"+c.tr.idx.toFixed(1)+"§Versus cohort|×"+c.tr.peer+
+        "§Group|"+esc(DESK_BY_ID[c.tr.deskId].short)+'">'+(c.n||"·")+"</button></td>").join("")+
+      '<td><button class="mcell" style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="Every trader">'+row.total+"</button></td></tr>").join("")+
     "</tbody></table></div>"+
     '<div class="mkey"><span class="kl">Alerts per cell</span><i style="background:var(--heat-0)"></i><span>0</span>'+
     '<i style="background:'+heatColor(matMax*0.2,matMax)+'"></i><span>low</span>'+
     '<i style="background:'+heatColor(matMax*0.55,matMax)+'"></i><span>mid</span>'+
     '<i style="background:'+heatColor(matMax,matMax)+'"></i><span>'+matMax+'</span></div>',
-    "<b>Click any cell</b> to open that rule and desk in the Detections queue. Concentration down a single column is a desk problem; concentration across a row is a rule that needs tuning.");
+    "<b>Click any cell</b> to open that trader and rule in the Detections queue. A lit column is one person, not a department: read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning.");
 
   // Bottom row: rules, traders, ageing.
   const ruleItems=RULES.map(r=>{
@@ -2135,7 +3215,7 @@ function paneOverview(){
       color:SEV_COLOR[r.sev],click:'data-ruleclick="'+r.id+'"'};
   }).sort((a,b)=>b.v-a.v).slice(0,10);
 
-  const tstats=Object.values(TRADER_STATS).filter(s=>!state.filters.desk.size||state.filters.desk.has(s.deskId))
+  const tstats=Object.values(TRADER_STATS).filter(traderInRail)
     .sort((a,b)=>b.idx-a.idx).slice(0,10);
   const maxIdx=Math.max(1,...tstats.map(s=>s.idx));
 
@@ -2146,17 +3226,17 @@ function paneOverview(){
     panel("Top rules by hits","12 months · red overlay = confirmed suspicious",
       '<div class="panel-body"><div class="chart-well">'+hbars(ruleItems,{w:520,rowH:20,labW:186})+"</div></div>",
       "<b>Click a bar</b> to open that rule.")+
-    panel("Highest-risk traders","severity-weighted alerts per 100 trades",
+    panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
         return '<div class="rrow2" data-trader="'+s.id+'"><div class="rl"><b>'+esc(s.name)+"</b>"+
           '<div class="sub2">'+esc(DESK_BY_ID[s.deskId].short)+(t.arc?" · "+esc(t.arc):"")+"</div></div>"+
-          '<div class="rv">'+s.idx.toFixed(1)+"</div>"+
+          '<div class="rv">'+s.idx.toFixed(1)+'<span class="sub2" style="margin-left:5px">×'+s.peer+"</span></div>"+
           '<div class="rfull"><span class="bar-mini"><i style="width:'+(s.idx/maxIdx*100).toFixed(0)+"%;background:"+
           (s.idx>maxIdx*0.6?"var(--fail)":s.idx>maxIdx*0.3?"var(--warn)":"var(--run)")+'"></i></span>'+
-          '<span class="sub2">'+s.alerts+" alerts · "+s.susp+" upheld · "+s.ruleCount+" rules</span></div></div>";
+          '<span class="sub2">'+s.alerts+" alerts · "+s.susp+" upheld · "+s.ruleCount+" of "+RULES.length+" rules</span></div></div>";
       }).join("")+"</div></div>",
-      "Volume-adjusted, so a busy desk is not flagged for being busy. <b>Click a name</b> for the trader file.")+
+      "Divided by each trader's own deal count, so a busy name is not flagged for being busy — and a quiet one cannot hide inside a group's turnover. <b>Click a name</b> for the trader file.")+
     panel("Open queue by age","against the disposition target",
       '<div class="panel-body"><div class="chart-well">'+hbars(ageItems,{w:420,rowH:26,labW:110})+"</div></div>",
       "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
@@ -2209,7 +3289,7 @@ function paneDetections(){
 
   const table=total?'<div class="table-wrap"><table><thead><tr>'+
     sortTh("det","day","Alert / raised")+sortTh("det","rule","Rule")+sortTh("det","sev","Severity")+
-    sortTh("det","score","Score","r")+sortTh("det","desk","Desk")+sortTh("det","trader","Trader")+
+    sortTh("det","score","Score","r")+sortTh("det","trader","Trader")+sortTh("det","desk","Group")+
     "<th>Pattern observed</th>"+sortTh("det","notional","Notional","r")+sortTh("det","age","Age","r")+sortTh("det","status","Status")+
     "</tr></thead><tbody>"+page.map(a=>{
       const age=ageOf(a), breach=isOpen(a)&&SEV_RANK[a.sev]>=3&&age>3;
@@ -2218,8 +3298,9 @@ function paneDetections(){
         "<td><b>"+a.ruleId+'</b><div class="sub2">'+esc(a.rule)+"</div></td>"+
         "<td>"+sevTag(a.sev)+"</td>"+
         '<td class="r">'+scoreCell(a.score)+"</td>"+
+        "<td>"+esc(a.trader)+'<div class="sub2">'+esc(a.tradeIds.length)+" deal"+(a.tradeIds.length>1?"s":"")+
+          " · idx "+TRADER_STATS[a.traderId].idx.toFixed(1)+"</div></td>"+
         "<td>"+esc(a.deskShort)+'<div class="sub2">'+esc(a.region)+"</div></td>"+
-        "<td>"+esc(a.trader)+'<div class="sub2">'+esc(a.tradeIds.length)+" deal"+(a.tradeIds.length>1?"s":"")+"</div></td>"+
         '<td style="white-space:normal;max-width:30em">'+esc(a.summary)+"</td>"+
         '<td class="r mono">'+fmtM(a.notional)+"</td>"+
         '<td class="r mono'+(breach?" failc":"")+'">'+age+"d"+(breach?'<div class="sub2 failc">SLA breach</div>':"")+"</td>"+
@@ -2250,6 +3331,7 @@ function paneRules(){
       '<div class="rhd"><span class="rid">'+r.id+"</span><h4>"+esc(r.name)+"</h4>"+sevTag(r.sev)+"</div>"+
       "<p>"+esc(r.desc)+"</p>"+
       '<div class="logic"><b>Test:</b> '+esc(r.logic)+"</div>"+
+      '<div class="rbase"><span class="scope">Per trader</span>'+esc(r.base)+"</div>"+
       '<div class="rstats"><span>Hits <b>'+hits.length+"</b></span><span>Open <b"+(open?' class="warnc"':"")+">"+open+"</b></span>"+
       "<span>Upheld <b"+(dec.length-passed?' class="failc"':"")+">"+(dec.length-passed)+"</b></span>"+
       "<span>Explained <b>"+(dec.length?Math.round(passed/dec.length*100):0)+"%</b></span>"+
@@ -2257,11 +3339,12 @@ function paneRules(){
   }).join("");
   const filt='<div class="fstrip"><label><span>Category</span><div class="segbtns">'+
     cats.map(c=>'<button data-rulecat="'+esc(c)+'" aria-pressed="'+(state.rules.cat===c)+'">'+(c||"All")+"</button>").join("")+
-    "</div></label><div class=\"fspacer\"></div><span class=\"tiny\">"+RULES.length+" rules active · thresholds shown are the production settings</span></div>";
-  return panel("Rule library","20 typologies across pricing, conduct, valuation, controls, settlement and information misuse",
+    "</div></label><div class=\"fspacer\"></div><span class=\"tiny\">"+RULES.length+" rules active · every one evaluated per trader · thresholds shown are the production settings</span></div>";
+  return panel("Rule library",RULES.length+" typologies across pricing, conduct, valuation, controls, settlement, financing and information misuse",
     filt+'<div class="rulegrid">'+cards+"</div>",
-    "Each card states the exact test the engine applies and the historic outcome of that test. <b>Click a rule</b> to open its detections. "+
-    "<b>Explained</b> is the share of dispositioned alerts an officer passed — a rule sitting above 70% is a candidate for re-tuning, not a rule that is working.");
+    "Each card states the exact test the engine applies, <b>what that test is measured against</b>, and the historic outcome. "+
+    "Every rule resolves at trader level — against the individual's own authorisation, their own baseline, or their peer cohort — so a small position never disappears into a desk's pooled turnover. "+
+    "<b>Click a rule</b> to open its detections. <b>Explained</b> is the share of dispositioned alerts an officer passed — a rule sitting above 70% is a candidate for re-tuning, not a rule that is working.");
 }
 
 /* ============================================================
@@ -2312,7 +3395,7 @@ function paneBlotter(){
     kpi("Deals in view",fmtNum(total),"of "+fmtNum(TRADES.length)+" booked in 12 months","var(--run)")+
     kpi("Notional in view",fmtM(notional),"aggregate across products","var(--agent)")+
     kpi("Alerted deals",fmtNum(flagged),total?fmtPct(flagged/total,2)+" of the deals in view":"—","var(--fail)")+
-    kpi("Traders / desks",traders+" / "+new Set(rows.map(t=>t.deskId)).size,"active in this selection","var(--violet)")+
+    kpi("Traders / groups",traders+" / "+new Set(rows.map(t=>t.deskId)).size,"active in this selection","var(--violet)")+
     "</div>";
 
   const prodOpts=b.ac?PRODUCTS_BY_AC[b.ac]:PRODUCTS.map(p=>p.p);
@@ -2323,7 +3406,7 @@ function paneBlotter(){
       [["7","7d"],["30","30d"],["90","90d"],["365","12m"]].map(r=>'<button data-brange="'+r[0]+'">'+r[1]+"</button>").join("")+"</div></label>"+
     '<label><span>Asset class</span><select id="b-ac">'+opt("","All asset classes",b.ac)+ASSET_CLASSES.map(a=>opt(a,a,b.ac)).join("")+"</select></label>"+
     '<label><span>Product</span><select id="b-product">'+opt("","All products",b.product)+prodOpts.map(p=>opt(p,p,b.product)).join("")+"</select></label>"+
-    '<label><span>Desk</span><select id="b-desk">'+opt("","All desks",b.desk)+DESKS.map(d=>opt(d.id,d.name,b.desk)).join("")+"</select></label>"+
+    '<label><span>Trader group</span><select id="b-desk">'+opt("","All groups",b.desk)+DESKS.map(d=>opt(d.id,d.name,b.desk)).join("")+"</select></label>"+
     '<label><span>Trader</span><select id="b-trader">'+opt("","All traders",b.trader)+
       TRADERS.slice().sort((x,y)=>x.name.localeCompare(y.name)).map(t=>opt(t.id,t.name,b.trader)).join("")+"</select></label>"+
     '<label><span>Direction</span><select id="b-dir">'+opt("","Any",b.dir)+DIRECTIONS.map(x=>opt(x,x,b.dir)).join("")+"</select></label>"+
@@ -2334,7 +3417,7 @@ function paneBlotter(){
     "</div>";
 
   const table=total?'<div class="table-wrap"><table><thead><tr>'+
-    sortTh("blot","seq","Trade / date")+sortTh("blot","desk","Desk / trader")+sortTh("blot","product","Product")+
+    sortTh("blot","seq","Trade / date")+sortTh("blot","trader","Trader / group")+sortTh("blot","product","Product")+
     sortTh("blot","instrument","Instrument")+sortTh("blot","tenor","Tenor")+"<th>Dir</th>"+
     sortTh("blot","notional","Notional","r")+sortTh("blot","px","Price","r")+"<th class=\"r\">Market mid</th>"+
     sortTh("blot","dev","Dev","r")+sortTh("blot","ctpy","Counterparty")+"<th>Channel</th>"+
@@ -2344,7 +3427,7 @@ function paneBlotter(){
       const devC=dev>25?"failc":dev>12?"warnc":"muted";
       return '<tr class="clickable" data-trade="'+t.id+'">'+
         '<td class="mono">'+(t.flags.length?'<span class="flagdot"></span>':"")+t.id+'<div class="sub2">'+fmtDateShort(t.date)+" "+fmtTime(t.execMin)+"</div></td>"+
-        "<td>"+esc(t.deskShort)+'<div class="sub2">'+esc(t.trader)+"</div></td>"+
+        "<td>"+esc(t.trader)+'<div class="sub2">'+esc(t.deskShort)+"</div></td>"+
         "<td>"+esc(t.product)+'<div class="sub2">'+esc(t.ac)+"</div></td>"+
         "<td>"+esc(t.instrument)+"</td>"+
         '<td class="mono">'+esc(t.tenor)+"</td>"+
@@ -2370,11 +3453,11 @@ function paneBlotter(){
 }
 
 /* ============================================================
-   Pane — Traders & desks
+   Pane — Traders & groups
 ============================================================ */
 function paneTraders(){
   const scoped=allScopedAlerts();
-  const rows=TRADERS.filter(t=>!state.filters.desk.size||state.filters.desk.has(t.deskId)).map(t=>{
+  const rows=TRADERS.filter(traderInRail).map(t=>{
     const s=TRADER_STATS[t.id];
     const mine=scoped.filter(a=>a.traderId===t.id);
     return {t,s,alerts:mine.length,crit:mine.filter(a=>a.sev==="Critical").length,
@@ -2387,8 +3470,10 @@ function paneTraders(){
     return '<div class="tcard" style="--accent:'+c+'" data-trader="'+r.t.id+'">'+
       '<div><div class="tn">'+esc(r.t.name)+'</div><div class="td">'+esc(DESK_BY_ID[r.t.deskId].name)+" · "+esc(r.t.grade)+"</div></div>"+
       '<div class="trow"><span>Risk index</span><b style="color:'+c+'">'+r.s.idx.toFixed(1)+"</b></div>"+
+      '<div class="trow"><span>Versus cohort</span><b style="color:'+(r.s.peer>=2?c:"inherit")+'">×'+r.s.peer+"</b></div>"+
       '<div class="trow"><span>Alerts / critical</span><b>'+r.alerts+" / "+r.crit+"</b></div>"+
       '<div class="trow"><span>Upheld</span><b class="'+(r.susp?"failc":"")+'">'+r.susp+"</b></div>"+
+      '<div class="trow"><span>Ticket limit</span><b>'+fmtM(r.t.ticketLimit)+"</b></div>"+
       '<div class="trow"><span>Deals booked</span><b>'+fmtNum(r.s.trades)+"</b></div>"+
       '<span class="bar-mini" style="width:100%"><i style="width:'+(r.s.idx/maxIdx*100).toFixed(0)+"%;background:"+c+'"></i></span>'+
       (r.t.arc?'<div class="tiny" style="color:'+c+'">Pattern: '+esc(r.t.arc)+"</div>":'<div class="tiny">No recurring pattern</div>')+
@@ -2400,7 +3485,8 @@ function paneTraders(){
     color:r.s.idx>maxIdx*0.6?"var(--fail)":r.s.idx>maxIdx*0.3?"var(--warn)":"var(--run)",
     label:r.t.name, sub:DESK_BY_ID[r.t.deskId].name,
     tip:["Deals booked|"+fmtNum(r.s.trades),"Alerts|"+r.alerts,"Critical|"+r.crit,"Upheld|"+r.susp,
-         "Risk index|"+r.s.idx.toFixed(1),"Rules triggered|"+r.s.ruleCount].join("§"),
+         "Risk index|"+r.s.idx.toFixed(1),"Versus cohort|×"+r.s.peer,"Cohort|"+r.t.cohort,
+         "Rules triggered|"+r.s.ruleCount+" of "+RULES.length].join("§"),
   }));
 
   // Trader × rule matrix for the names carrying the most alerts.
@@ -2415,8 +3501,8 @@ function paneTraders(){
     panel("Alerts against volume","bubble size = alerts upheld as suspicious",
       '<div class="panel-body"><div class="chart-well tall">'+bubbleChart(pts,{w:600,h:300})+"</div></div>",
       "A name sitting high and to the left alerts more than its trading volume explains. <b>Click a bubble</b> for the trader file.")+
-    panel("Trader × rule","which typologies each name triggers · 12 months",
-      '<div class="matwrap" style="padding-top:2px"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
+    panel("Trader × rule","which of the "+RULES.length+" typologies each name triggers · 12 months",
+      '<div class="matwrap tallmat" style="padding-top:2px"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
       RULES.map(r=>'<th class="colhd"><div>'+r.id+" "+esc(r.name.slice(0,20))+"</div></th>").join("")+"</tr></thead><tbody>"+
       tmat.map(row=>'<tr><th class="rowhd">'+esc(row.r.t.name)+"</th>"+
         row.cells.map(c=>'<td><button class="mcell'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,tmMax)+
@@ -2426,26 +3512,49 @@ function paneTraders(){
       "A row lit across several unrelated rules is the signature worth pulling — one typology can be an accident, four is a method.")+
     "</div>";
 
-  const tbl=panel("Desk summary","alerts, dispositions and volume by desk",
-    '<div class="table-wrap"><table><thead><tr><th>Desk</th><th>Region</th><th>Traders</th><th class="r">Deals</th>'+
-    '<th class="r">Notional</th><th class="r">Alerts</th><th class="r">Critical</th><th class="r">Open</th><th class="r">Upheld</th>'+
-    '<th class="r">Alerts / 1k deals</th><th>Approved products</th></tr></thead><tbody>'+
-    DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id)).map(d=>{
-      const dt=TRADES.filter(t=>t.deskId===d.id);
-      const da=scoped.filter(a=>a.deskId===d.id);
-      const rate=dt.length?da.length/dt.length*1000:0;
-      return '<tr class="clickable" data-deskclick="'+d.id+'"><td><b>'+esc(d.name)+"</b></td><td>"+esc(d.region)+"</td>"+
-        '<td class="mono">'+d.traders.length+'</td><td class="r mono">'+fmtNum(dt.length)+'</td><td class="r mono">'+fmtM(dt.reduce((a,t)=>a+t.notional,0))+"</td>"+
-        '<td class="r mono">'+da.length+'</td><td class="r mono failc">'+da.filter(a=>a.sev==="Critical").length+"</td>"+
-        '<td class="r mono warnc">'+da.filter(isOpen).length+'</td><td class="r mono">'+da.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length+"</td>"+
-        '<td class="r mono">'+rate.toFixed(1)+'</td><td class="tiny" style="white-space:normal;max-width:24em">'+esc(d.mandate.join(", "))+"</td></tr>";
+  /* Trader groups. A desk is a reporting line, so the row is a roll-up of the
+     people in it — how many of them are running hot, and how the worst one
+     looks — never a pooled ratio, which is precisely the number that lets a
+     small book hide inside a large one. */
+  const HOT=18;   // risk index at which a name is worth a conversation
+  const groups=DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id)).map(d=>{
+    const members=d.traders.filter(traderInRail).map(t=>({t,s:TRADER_STATS[t.id],a:scoped.filter(x=>x.traderId===t.id)}))
+      .sort((a,b)=>b.s.idx-a.s.idx);
+    const idxs=members.map(m=>m.s.idx);
+    return {d,members,hot:members.filter(m=>m.s.idx>=HOT),
+      worst:members[0], med:median(idxs),
+      alerts:members.reduce((a,m)=>a+m.a.length,0),
+      crit:members.reduce((a,m)=>a+m.a.filter(x=>x.sev==="Critical").length,0),
+      open:members.reduce((a,m)=>a+m.a.filter(isOpen).length,0),
+      susp:members.reduce((a,m)=>a+m.a.filter(x=>x.status==="Suspicious"||x.status==="Escalated").length,0)};
+  }).filter(g=>g.members.length).sort((a,b)=>b.worst.s.idx-a.worst.s.idx);
+  const gMax=Math.max(1,...groups.map(g=>g.worst.s.idx));
+
+  const tbl=panel("Trader groups","a reporting line is a set of people — these are their individual indices rolled up, not a pooled desk figure",
+    '<div class="table-wrap"><table><thead><tr><th>Group</th><th>Region</th><th class="r">Traders</th>'+
+    '<th class="r">Above index '+HOT+'</th><th>Highest-index trader</th><th class="r">Group median</th>'+
+    '<th class="r">Alerts</th><th class="r">Critical</th><th class="r">Open</th><th class="r">Upheld</th></tr></thead><tbody>'+
+    groups.map(g=>{
+      const w=g.worst, c=w.s.idx>gMax*0.6?"var(--fail)":w.s.idx>gMax*0.3?"var(--warn)":"var(--run)";
+      return '<tr><td><b class="clickable" data-deskclick="'+g.d.id+'">'+esc(g.d.name)+"</b></td><td>"+esc(g.d.region)+"</td>"+
+        '<td class="r mono">'+g.members.length+'</td>'+
+        '<td class="r mono'+(g.hot.length?" failc":"")+'">'+g.hot.length+"</td>"+
+        '<td><span class="clickable" data-trader="'+w.t.id+'"><b>'+esc(w.t.name)+"</b> "+
+          '<span class="mono" style="color:'+c+'">'+w.s.idx.toFixed(1)+"</span> "+
+          '<span class="sub2">×'+w.s.peer+" vs cohort</span></span></td>"+
+        '<td class="r mono">'+g.med.toFixed(1)+"</td>"+
+        '<td class="r mono">'+g.alerts+'</td><td class="r mono failc">'+g.crit+"</td>"+
+        '<td class="r mono warnc">'+g.open+'</td><td class="r mono">'+g.susp+"</td></tr>";
     }).join("")+"</tbody></table></div>",
-    "Alerts per thousand deals normalises for desk size. <b>Click a desk</b> to scope the whole dashboard to it.");
+    "Groups are ordered by their <b>worst individual</b>, not by their total. Two groups with the same alert count are not the same problem: "+
+    "one may be twelve people slightly over threshold, the other a single name at eight times their cohort. "+
+    "<b>Click a group</b> to scope the dashboard to it, or a name to open the trader file.");
 
   return rowA+'<div class="mt14">'+panel("Trader risk index",
-    "severity-weighted alerts per 100 deals · "+rows.length+" traders",
+    "severity-weighted alerts per 100 of the trader's own deals · "+rows.length+" traders",
     '<div class="tgrid">'+cards+"</div>",
-    "The index weights each alert by severity and divides by the trader's own deal count, so it ranks behaviour rather than busyness.")+"</div>"+
+    "The index weights each alert by severity and divides by the trader's own deal count, so it ranks behaviour rather than busyness. "+
+    "<b>Versus cohort</b> restates it against the median of the same grade doing the same kind of work — the comparison a desk head asks for first.")+"</div>"+
     '<div class="mt14">'+tbl+"</div>";
 }
 
@@ -2617,6 +3726,8 @@ function alertDrawer(a){
     '<div class="block"><div class="lbl">What the engine observed</div>'+
       '<p class="narr"><b>'+esc(a.summary)+".</b></p>"+
       '<p class="narr" style="margin-top:8px">Test applied: <span class="mono" style="font-size:0.9em">'+esc(rule.logic)+"</span></p>"+
+      '<p class="narr" style="margin-top:8px">Measured against: <b>'+esc(rule.base)+"</b> — this rule is evaluated for "+
+        esc(tr.name)+" individually, not for "+esc(DESK_BY_ID[tr.deskId].name)+" as a whole.</p>"+
       '<p class="narr" style="margin-top:8px;color:var(--ink-3)">'+esc(rule.why)+"</p></div>"+
 
     '<div class="block"><div class="lbl">Evidence</div><div class="evgrid">'+
@@ -2643,7 +3754,19 @@ function alertDrawer(a){
         '<span class="kv">Upheld <b class="failc">'+other.filter(x=>x.status==="Suspicious"||x.status==="Escalated").length+"</b></span>"+
         '<span class="kv">Deals booked <b>'+fmtNum(TRADER_STATS[tr.id].trades)+"</b></span>"+
         '<span class="kv">Risk index <b>'+TRADER_STATS[tr.id].idx.toFixed(1)+"</b></span>"+
+        '<span class="kv">Versus cohort <b class="'+(TRADER_STATS[tr.id].peer>=2?"failc":"")+'">×'+TRADER_STATS[tr.id].peer+"</b></span>"+
         '<span class="kv">Block leave <b>'+fmtDateShort(dateForIdx(tr.leave[0]))+"–"+fmtDateShort(dateForIdx(tr.leave[1]))+"</b></span></div>"+
+      '<div class="lbl" style="margin-top:12px">This trader\'s control profile</div><div class="evgrid">'+
+        [["Ticket authorisation",fmtM(tr.ticketLimit)],
+         ["Position limit",fmtM(tr.posLimit)],
+         ["Maximum tenor",tr.tenorYrs+" years"],
+         ["Counterparty concentration cap",fmtPct(tr.ctpyCap,0)],
+         ["Approved products",tr.products.join(", ")],
+         ["Peer cohort",tr.cohort+" · "+TRADER_STATS[tr.id].cohortN+" traders, median index "+TRADER_STATS[tr.id].cohortMedian.toFixed(1)],
+         ["Own median ticket",fmtM(BASE[tr.id].medSize)+" · "+BASE[tr.id].tickets.toFixed(1)+" tickets a day"],
+         ["Own counterparty mix",BASE[tr.id].ctpyCount+" names · largest "+BASE[tr.id].topCtpy+" at "+fmtPct(BASE[tr.id].topCtpyShare,0)],
+         ["Supervisor",tr.supervisor],
+        ].map(r=>'<div class="ek">'+esc(r[0])+'</div><div class="ev">'+esc(r[1])+"</div>").join("")+"</div>"+
       '<div style="display:flex;align-items:center;gap:10px"><span class="tiny">Alerts per month</span>'+spark(trMonths,220,26,"var(--fail)")+"</div>"+
       (Object.keys(otherByRule).length?'<div style="margin-top:10px">'+Object.keys(otherByRule).sort((x,y)=>otherByRule[y]-otherByRule[x]).slice(0,8)
         .map(rid=>'<span class="tag t-muted" style="margin:0 4px 4px 0">'+rid+" ×"+otherByRule[rid]+"</span>").join("")+"</div>":"")+
@@ -2713,7 +3836,7 @@ function tradeDrawer(t){
       linked.map(a=>'<tr><td class="mono"><a href="#" data-alert="'+a.id+'">'+a.id+"</a></td><td>"+a.ruleId+" "+esc(a.rule)+"</td>"+
         "<td>"+sevTag(a.sev)+'</td><td class="mono">'+esc(a.dateStr)+"</td><td>"+statusTag(a.status)+"</td>"+
         '<td style="white-space:normal">'+esc(a.summary)+"</td></tr>").join("")+"</tbody></table></div></div>"
-      :'<div class="block"><div class="lbl">Alerts referencing this deal</div><p class="narr">None. This deal passed all 20 detection rules.</p></div>')+
+      :'<div class="block"><div class="lbl">Alerts referencing this deal</div><p class="narr">None. This deal passed all '+RULES.length+' detection rules.</p></div>')+
     '<div class="block"><div class="lbl">Same trader, same day</div><div class="dwrap"><table class="dtable"><thead><tr>'+
       "<th>Trade</th><th>Time</th><th>Product</th><th>Dir</th><th class=\"r\">Notional</th><th class=\"r\">Dev bps</th><th>Counterparty</th></tr></thead><tbody>"+
       (byTraderDay.get(t.traderId+"|"+t.dayIdx)||[]).slice(0,25).sort((a,b)=>a.execMin-b.execMin)
@@ -2862,9 +3985,7 @@ document.addEventListener("click",e=>{
   const trEl=t.closest("[data-trader]"); if(trEl){ e.preventDefault(); traderDrawer(TRADER_BY_ID[trEl.dataset.trader]); return; }
 
   const rc=t.closest("[data-ruleclick]"); if(rc){ closeDrawer(); goDetections({rule:rc.dataset.ruleclick}); return; }
-  const mc=t.closest("[data-matcell]"); if(mc){ const p=mc.dataset.matcell.split("|");
-    state.filters.desk=new Set([p[1]]); goDetections({rule:p[0]}); return; }
-  const trr=t.closest("[data-trrule]"); if(trr){ const p=trr.dataset.trrule.split("|"); goDetections({rule:p[1],trader:p[0]}); return; }
+  const trr=t.closest("[data-trrule]"); if(trr){ closeDrawer(); const p=trr.dataset.trrule.split("|"); goDetections({rule:p[1],trader:p[0]}); return; }
   const sevc=t.closest("[data-sevclick]"); if(sevc){ state.filters.severity=new Set([sevc.dataset.sevclick]); render(); return; }
   const stc=t.closest("[data-statusclick]"); if(stc){ goDetections({status:stc.dataset.statusclick}); return; }
   const mb=t.closest("[data-monthbar]"); if(mb){
