@@ -280,7 +280,15 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 /* Fifty rows is a scroll, not a page: the matrix keeps its own viewport so the
    panels below it stay reachable. */
 .matwrap.tallmat{max-height:560px;overflow-y:auto}
-.matwrap.tallmat thead th{position:sticky;top:0;z-index:2;background:var(--panel)}
+/* The header has to be an opaque BAND. With separated borders the 3px gaps
+   between header cells are transparent, so rows scrolling underneath showed
+   straight through them; and the wrapper's own top padding left a strip above the
+   band where the same thing happened. The spread shadow closes the gaps, and the
+   padding moves off the scroll container so top:0 means the top. */
+.matwrap.tallmat{padding-top:0}
+.matwrap.tallmat thead th{position:sticky;top:0;z-index:2;background:var(--panel);
+  box-shadow:0 0 0 3px var(--panel)}
+.matwrap.tallmat thead th.colhd>div{background:var(--panel)}
 /* The row label has to survive scrolling sideways across two hundred columns. */
 .matwrap.tallmat th.rowhd{position:sticky;left:0;z-index:1;background:var(--panel);
   box-shadow:1px 0 0 var(--hair);padding-right:10px}
@@ -667,7 +675,18 @@ const FS_LEVELS=[12,14,16,18,20];
 const THEMES=["light","dark","dbs"], DEFAULT_THEME="light";
 function normTheme(t){return THEMES.includes(t)?t:DEFAULT_THEME;}
 function applyTheme(t){t=normTheme(t);document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem(THEME_KEY,t);}catch(e){}return t;}
-function applyFontSize(i){document.documentElement.style.fontSize=FS_LEVELS[i]+"px";try{localStorage.setItem(FS_KEY,i);}catch(e){}}
+/* Chart text is drawn inside an SVG viewBox, so it is measured in user units and
+   a change to the root font size does not reach it — every hand-rolled chart kept
+   its 8.5px axis labels while the prose around them grew to 20px. The charts are
+   rebuilt on every render, so the label sizes are multiplied at build time by the
+   same ratio the control applies to everything else. */
+let CHART_FS=1;
+const cf=n=>+(n*CHART_FS).toFixed(2);
+function applyFontSize(i){
+  document.documentElement.style.fontSize=FS_LEVELS[i]+"px";
+  CHART_FS=FS_LEVELS[i]/16;
+  try{localStorage.setItem(FS_KEY,i);}catch(e){}
+}
 (function initChrome(){
   let t=DEFAULT_THEME;try{t=normTheme(localStorage.getItem(THEME_KEY));}catch(e){}
   applyTheme(t);
@@ -676,7 +695,17 @@ function applyFontSize(i){document.documentElement.style.fontSize=FS_LEVELS[i]+"
   let fi=2;try{const v=localStorage.getItem(FS_KEY);if(v!==null)fi=+v;}catch(e){}
   applyFontSize(fi);
   const fsel=$("#fs-sel");
-  if(fsel){fsel.value=fi;fsel.addEventListener("input",e=>applyFontSize(+e.target.value));}
+  /* Redrawn on change, not inside applyFontSize: this runs before the book is
+     built, and render() is a hoisted declaration, so calling it here would fire
+     against data that does not exist yet. */
+  /* The root size applies on every input event so the prose responds as the
+     slider moves; the charts are rebuilt once the slider settles, because a full
+     redraw per pixel of drag is a stutter nobody asked for. */
+  let fsT=null;
+  if(fsel){fsel.value=fi;fsel.addEventListener("input",e=>{
+    applyFontSize(+e.target.value);
+    clearTimeout(fsT); fsT=setTimeout(()=>render(),120);
+  });}
 })();
 
 /* ============================================================
@@ -3884,8 +3913,8 @@ function donut(segs,cTop,cBot,size,thick){
   });
   return '<svg class="donut" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+" "+size+'">'+
     '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--hair)" stroke-width="'+thick+'" opacity=".4"/>'+arcs+
-    '<text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" fill="var(--ink)" font-size="19" font-weight="750" font-family="var(--mono)">'+esc(cTop)+"</text>"+
-    '<text x="'+cx+'" y="'+(cy+16)+'" text-anchor="middle" fill="var(--ink-3)" font-size="10">'+esc(cBot)+"</text></svg>";
+    '<text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" fill="var(--ink)" font-size="'+cf(19)+'" font-weight="750" font-family="var(--mono)">'+esc(cTop)+"</text>"+
+    '<text x="'+cx+'" y="'+(cy+16)+'" text-anchor="middle" fill="var(--ink-3)" font-size="'+cf(10)+'">'+esc(cBot)+"</text></svg>";
 }
 function donutLegend(segs,tot,clickAttr){
   const t=tot||segs.reduce((a,s)=>a+s.v,0)||1;
@@ -3911,7 +3940,7 @@ function stackedBars(cats,series,opts){
   for(let i=0;i<=4;i++){
     const v=niceMax*i/4, y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
   }
   const px=(H-padB-padT)/niceMax;   // pixels per alert, for the highlight overlay
   cats.forEach((c,i)=>{
@@ -3934,9 +3963,9 @@ function stackedBars(cats,series,opts){
     // month a trader's pattern started is visible as a step in this overlay.
     if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="'+(opts.cut||"")+'month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
       '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
-    if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
-    g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">'+esc(c.label)+"</text>";
-    if(c.sub) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+23)+'" text-anchor="middle" font-size="7.5" fill="var(--ink-3)" opacity=".8">'+esc(c.sub)+"</text>";
+    if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="'+cf(8.5)+'" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
+    g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">'+esc(c.label)+"</text>";
+    if(c.sub) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+23)+'" text-anchor="middle" font-size="'+cf(7.5)+'" fill="var(--ink-3)" opacity=".8">'+esc(c.sub)+"</text>";
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
@@ -3953,14 +3982,14 @@ function dailyTrend(vals,opts){
   for(let i=0;i<=4;i++){
     const v=niceMax*i/4,y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
   }
   // Month gridlines and labels, driven off the calendar rather than the index.
   for(let i=0;i<n;i++){
     const d=dateForIdx(DAYS-n+i);
     if(d.getDate()===1){
       g+='<line x1="'+X(i).toFixed(1)+'" y1="'+padT+'" x2="'+X(i).toFixed(1)+'" y2="'+(H-padB)+'" stroke="var(--hair)" opacity=".7"/>'+
-         '<text x="'+(X(i)+3).toFixed(1)+'" y="'+(H-padB+13)+'" font-size="8.5" fill="var(--ink-3)">'+MONTHS[d.getMonth()]+"</text>";
+         '<text x="'+(X(i)+3).toFixed(1)+'" y="'+(H-padB+13)+'" font-size="'+cf(8.5)+'" fill="var(--ink-3)">'+MONTHS[d.getMonth()]+"</text>";
     }
   }
   const area="M"+X(0).toFixed(1)+","+(H-padB)+" "+vals.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ")+" L"+X(n-1).toFixed(1)+","+(H-padB)+"Z";
@@ -3992,14 +4021,14 @@ function hbars(items,opts){
       '" data-tiptable="'+esc(it.tiptable||"")+'"':"";
     const open=it.agg?'<g '+it.agg+" "+(it.hl||"")+tipAttrs+' style="cursor:pointer">':"<g"+tipAttrs+">";
     g+=open;
-    g+='<text x="0" y="'+(y+10)+'" font-size="9.5" fill="var(--ink-2)">'+esc(it.label)+"</text>";
+    g+='<text x="0" y="'+(y+10)+'" font-size="'+cf(9.5)+'" fill="var(--ink-2)">'+esc(it.label)+"</text>";
     g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+w.toFixed(1)+'" height="11" rx="2.5" fill="'+(it.color||"var(--run)")+
       '" style="cursor:pointer" '+(it.click||"")+'><title>'+esc(it.label)+": "+it.v+"</title></rect>";
     if(it.v2!=null){
       const w2=it.v2/max*barW;
       g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+Math.max(0,w2).toFixed(1)+'" height="11" rx="2.5" fill="var(--fail)" opacity=".92"><title>'+esc(it.label)+": "+it.v2+" suspicious</title></rect>";
     }
-    g+='<text x="'+(W-2)+'" y="'+(y+10)+'" text-anchor="end" font-size="9.5" font-family="var(--mono)" font-weight="700" fill="var(--ink-2)">'+esc(it.vLabel||String(it.v))+"</text>";
+    g+='<text x="'+(W-2)+'" y="'+(y+10)+'" text-anchor="end" font-size="'+cf(9.5)+'" font-family="var(--mono)" font-weight="700" fill="var(--ink-2)">'+esc(it.vLabel||String(it.v))+"</text>";
     g+="</g>";
     if(it.aggKey) g+='<rect class="hlmark-svg" data-hl-for="'+esc(it.aggKey)+'" data-hl-total="'+it.v+'" data-hl-len="'+w.toFixed(1)+
       '" x="'+labW+'" y="'+(y+1)+'" width="0" height="11" rx="2.5" fill="var(--ink)" pointer-events="none"/>';
@@ -4027,7 +4056,7 @@ function hourChart(counts,opts){
   for(let i=0;i<=4;i++){
     const v=niceMax*i/4,y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
   }
   /* The columns are aggregates in their own right: pick a trader anywhere on the
      page and this chart redraws as that trader's session, lit where they deal and
@@ -4046,10 +4075,10 @@ function hourChart(counts,opts){
       '" data-tiptable="'+esc(noun)+"|"+v+"§Share of the day|"+(v/tot*100).toFixed(1)+'%"/>';
     g+='<rect class="hlshare" data-hl-for="'+cut+'hour|'+h+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
       '" x="'+(x+bar*0.26).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.48).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
-    if(h%3===0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+pad2(h)+"</text>";
+    if(h%3===0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+pad2(h)+"</text>";
   });
-  g+='<text x="'+(padL+3.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside desk hours</text>';
-  g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside</text>';
+  g+='<text x="'+(padL+3.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="'+cf(8)+'" fill="var(--fail)" opacity=".75">outside desk hours</text>';
+  g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="'+cf(8)+'" fill="var(--fail)" opacity=".75">outside</text>';
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
 /* ISO 8601 week numbering, so "weeks 1–9" means the weeks a calendar actually
@@ -4295,21 +4324,21 @@ function marketChart(inst,trades,opts){
   for(let i=0;i<=3;i++){
     const v=lo+(hi-lo)*i/3, y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmt(v)+"</text>";
+       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+fmt(v)+"</text>";
   }
   if(intraday){
     // The published benchmark window, so a fixing typology has its window drawn.
     if(inst.fam==="fx"||inst.fam==="ndf"){
       g+='<rect x="'+X(960).toFixed(1)+'" y="'+padT+'" width="'+Math.max(2,(X(966)-X(960))).toFixed(1)+'" height="'+(H-padB-padT)+
          '" fill="var(--violet)" opacity=".16"/>'+
-         '<text x="'+X(963).toFixed(1)+'" y="'+(padT-4)+'" text-anchor="middle" font-size="7.5" fill="var(--violet)">16:00 fix</text>';
+         '<text x="'+X(963).toFixed(1)+'" y="'+(padT-4)+'" text-anchor="middle" font-size="'+cf(7.5)+'" fill="var(--violet)">16:00 fix</text>';
     }
     for(let m=SESSION_OPEN;m<=SESSION_CLOSE;m+=120)
-      g+='<text x="'+X(m).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmtTime(m)+"</text>";
+      g+='<text x="'+X(m).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+fmtTime(m)+"</text>";
   }else{
     const step=Math.max(1,Math.round(pts.length/6));
     pts.forEach((p,i)=>{ if(i%step) return;
-      g+='<text x="'+X(p.x).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">'+fmtDateShort(dateForIdx(p.x))+"</text>"; });
+      g+='<text x="'+X(p.x).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">'+fmtDateShort(dateForIdx(p.x))+"</text>"; });
   }
   g+='<polyline points="'+pts.map(p=>X(p.x).toFixed(1)+","+Y(p.v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>';
   const thr=omThreshold(inst);
@@ -4323,7 +4352,7 @@ function marketChart(inst,trades,opts){
        ' data-tip="'+esc(t.dir+" "+fmtM(t.notional)+" @ "+fmt(t.px))+'" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin))+
        '" data-tiptable="Market mid|'+fmt(t.mktPx)+"§Deviation|"+(t.devBps>0?"+":"")+t.devBps.toFixed(1)+" bps§Dealing spread|"+
        inst.spreadBps.toFixed(2)+" bps§Materiality|"+thr.toFixed(1)+' bps"/>';
-    g+='<text x="'+x.toFixed(1)+'" y="'+(y<ym?y-8:y+13).toFixed(1)+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c+'">'+
+    g+='<text x="'+x.toFixed(1)+'" y="'+(y<ym?y-8:y+13).toFixed(1)+'" text-anchor="middle" font-size="'+cf(7.5)+'" font-weight="700" fill="'+c+'">'+
        (t.dir==="Buy"||t.dir==="Pay"||t.dir==="Borrow"?"B":"S")+"</text>";
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
@@ -4409,17 +4438,17 @@ function bubbleChart(pts,opts){
   for(let i=0;i<=4;i++){
     const v=ny*i/4,y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+v.toFixed(0)+"</text>";
+       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+v.toFixed(0)+"</text>";
   }
   for(let i=1;i<=4;i++){
     const v=nx*i/4,x=X(v);
-    g+='<text x="'+x.toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmtNum(v)+"</text>";
+    g+='<text x="'+x.toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+fmtNum(v)+"</text>";
   }
-  g+='<text x="'+(W/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Trades booked (12 months)</text>';
+  g+='<text x="'+(W/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">Trades booked (12 months)</text>';
   // Rotated up the left edge: a horizontal title here collides with the top
   // gridline value as soon as the alert count reaches three digits.
   const midY=(padT+(H-padB))/2;
-  g+='<text x="11" y="'+midY.toFixed(1)+'" transform="rotate(-90 11 '+midY.toFixed(1)+')" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Alerts</text>';
+  g+='<text x="11" y="'+midY.toFixed(1)+'" transform="rotate(-90 11 '+midY.toFixed(1)+')" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">Alerts</text>';
   pts.forEach(p=>{
     const r=4+ (p.r/maxR)*13;
     const ag=hlAgg("trader",p.id,(TRADER_STATS[p.id]||{}).alerts||0);
@@ -4427,7 +4456,7 @@ function bubbleChart(pts,opts){
       '" fill-opacity=".55" stroke="'+p.color+'" stroke-width="1.2" style="cursor:pointer" data-trader="'+p.id+
       '" data-hl-trader="'+p.id+'" data-hl-desk="'+esc(p.deskId||"")+'" data-hlsrc="trader|'+p.id+'" '+ag+
       ' data-tip="'+esc(p.label)+'" data-tipsub="'+esc(p.sub)+'" data-tiptable="'+esc(p.tip)+'"/>';
-    if(p.big) g+='<text data-hl-trader="'+p.id+'" '+ag+' x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
+    if(p.big) g+='<text data-hl-trader="'+p.id+'" '+ag+' x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="'+cf(8.5)+'" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
