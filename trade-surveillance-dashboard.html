@@ -256,7 +256,19 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
    panels below it stay reachable. */
 .matwrap.tallmat{max-height:560px;overflow-y:auto}
 .matwrap.tallmat thead th{position:sticky;top:0;z-index:2;background:var(--panel)}
-.matrix{border-collapse:separate;border-spacing:3px;width:max-content;min-width:100%}
+/* The row label has to survive scrolling sideways across two hundred columns. */
+.matwrap.tallmat th.rowhd{position:sticky;left:0;z-index:1;background:var(--panel);
+  box-shadow:1px 0 0 var(--hair);padding-right:10px}
+.matwrap.tallmat thead th.rowhd{z-index:3}
+.matrix tr.mtot th.rowhd{font-weight:800;color:var(--ink-2)}
+.matrix tr.mtot td .mcell{border-top:2px solid var(--hair)}
+/* Compact halves the cell footprint, so roughly four times as much grid fits
+   on screen before anyone has to scroll. */
+.matwrap.dense .mcell{width:20px;height:15px;line-height:13px;font-size:0.5rem;border-radius:3px}
+.matwrap.dense .matrix{border-spacing:2px}
+.matwrap.dense .matrix th.colhd{height:74px;width:20px;min-width:20px}
+.matwrap.dense .matrix th.rowhd{font-size:0.5rem;max-width:13em}
+.matrix{border-collapse:separate;border-spacing:3px;width:max-content}
 .matrix th{padding:0;border:0;font-size:0.53125rem;letter-spacing:.03em;color:var(--ink-3);font-weight:700;text-transform:none}
 .matrix th.colhd{height:88px;vertical-align:bottom;width:34px;min-width:34px}
 .matrix th.colhd>div{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;text-align:left;padding-bottom:4px;overflow:hidden;max-height:84px}
@@ -306,6 +318,15 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 .rulecard .rbase{display:flex;gap:7px;align-items:baseline;font-size:0.59375rem;color:var(--ink-2);line-height:1.45}
 .rulecard .rbase .scope{flex:0 0 auto;font-size:0.53125rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
   color:var(--brand);border:1px solid color-mix(in srgb,var(--brand) 34%,transparent);border-radius:4px;padding:1px 5px}
+/* What the rule needs to run, named on the card and itemised on hover. */
+.rulecard .reqrow{display:flex;gap:7px;align-items:center;min-width:0}
+.reqchip{font-size:0.53125rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:4px;padding:2px 6px;cursor:help}
+.reqchip:hover{border-color:var(--brand);color:var(--ink)}
+.rulecard .reqchip{flex:0 0 auto;font-size:0.53125rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:4px;padding:2px 6px;cursor:help}
+.rulecard .reqchip:hover{border-color:var(--brand);color:var(--ink)}
+.rulecard .reqsrc{font-size:0.53125rem;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rulecard .rstats{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:0.65625rem;color:var(--ink-3);margin-top:auto;padding-top:4px;border-top:1px solid var(--hair)}
 .rulecard .rstats b{font-family:var(--mono);color:var(--ink);font-weight:700}
 
@@ -1620,6 +1641,142 @@ const RULES=[
   base:"The trader's own financing book across the reporting date",
   why:"The collateral reported is not the collateral held. The ratio improves on the one day it is measured."},
 ];
+/* ============================================================
+   Data dictionary
+   What each rule actually needs to run. A typology is only as good as the feed
+   behind it: half the rules on this page are impossible without a timestamp to
+   the second, and a third of them are impossible without reference data nobody
+   owns. Naming the fields — and the system each comes from — is what turns a
+   rule library into something an implementation team can cost.
+============================================================ */
+const DATA_ELEMENTS={
+  tid:      ["Trade / deal ID",                     "Trade capture"],
+  tdate:    ["Trade date",                          "Trade capture"],
+  exec:     ["Execution timestamp, to the second",  "Trade capture / venue"],
+  cap:      ["Capture timestamp",                   "Trade capture"],
+  trader:   ["Trader ID",                           "Trade capture · HR feed"],
+  book:     ["Booking book",                        "Trade capture"],
+  desk:     ["Desk / reporting line",               "HR feed"],
+  prod:     ["Product",                             "Trade capture"],
+  inst:     ["Instrument identifier (ISIN / pair)", "Trade capture · reference data"],
+  notional: ["Notional",                            "Trade capture"],
+  dir:      ["Direction",                           "Trade capture"],
+  px:       ["Traded price or rate",                "Trade capture"],
+  ivol:     ["Quoted implied volatility",           "Trade capture"],
+  tenor:    ["Tenor / maturity date",               "Trade capture"],
+  valdate:  ["Value date",                          "Trade capture"],
+  ctpy:     ["Counterparty ID (LEI)",               "Trade capture"],
+  venue:    ["Execution venue",                     "Trade capture"],
+  channel:  ["Booking channel",                     "Trade capture"],
+  status:   ["Booking status",                      "Trade capture"],
+  amend:    ["Amendment log — field, old, new, time","Trade capture audit"],
+  cancel:   ["Cancellation timestamp",              "Trade capture audit"],
+  pnl:      ["Deal P&L",                            "Product control"],
+
+  mid:      ["Market mid at execution",             "Market data — tick store"],
+  spread:   ["Prevailing bid / offer",              "Market data — tick store"],
+  range:    ["Intraday high / low",                 "Market data — tick store"],
+  surface:  ["Volatility surface by pair and tenor","Market data — official surface"],
+  curve:    ["Rate and forward-points curve",       "Market data — curve service"],
+  fixing:   ["Published benchmark fixing",          "Benchmark administrator"],
+  gc:       ["General collateral rate",             "Money-market data"],
+
+  ctpystat: ["Counterparty static record",          "Client reference data"],
+  ssi:      ["Standing settlement instructions",    "Settlement static data"],
+  relparty: ["Related-party register",              "Compliance — conflicts register"],
+  restrict: ["Restricted / watch list, dated",      "Control room"],
+  wall:     ["Wall-crossing approvals",             "Control room"],
+  hrjur:    ["High-risk jurisdiction list",         "Financial crime policy"],
+  mandate:  ["Trader product authorisation",        "Front-office mandate register"],
+  ticketlim:["Trader ticket authorisation",         "Front-office mandate register"],
+  poslim:   ["Trader position limit",               "Market risk limits"],
+  tenorlim: ["Trader tenor authorisation",          "Front-office mandate register"],
+  leave:    ["Block-leave calendar",                "HR feed"],
+  hours:    ["Desk hours / trader working pattern", "HR feed · derived baseline"],
+  cohort:   ["Peer cohort membership",              "HR feed · derived"],
+  superv:   ["Supervisor and delegation record",    "HR feed"],
+  cal:      ["Business-day and holiday calendar",   "Reference data"],
+  period:   ["Reporting-period calendar",           "Finance"],
+
+  pos:      ["Intraday position snapshots",         "Risk engine"],
+  eodpos:   ["End-of-day position",                 "Risk engine"],
+  dpnl:     ["Daily P&L by trader",                 "Product control"],
+  ipv:      ["Independent price verification marks","Product control"],
+  modeltol: ["Day-one P&L tolerance by structure",  "Model validation"],
+  collat:   ["Collateral schedule and substitutions","Collateral management"],
+
+  orders:   ["Order log — placed, amended, pulled", "Order management system"],
+  clord:    ["Client order record and timestamp",   "Order management system"],
+  alloc:    ["Allocation instructions and timestamps","Order management system"],
+  confirm:  ["Confirmation status and timestamp",   "Confirmations / matching"],
+  settle:   ["Settlement accounts and amounts",     "Settlement / nostro"],
+  news:     ["Announcement and corporate-action calendar","Market data — events"],
+
+  base:     ["Trader's own trailing baseline",      "Derived — surveillance warehouse"],
+};
+/* Fields each rule reads. Codes resolve against the dictionary above, so a field
+   is described once and the rules reference it. */
+const RULE_REQ={
+  "TS-01":["px","mid","spread","notional","dir","inst","trader","ctpy","relparty","base"],
+  "TS-02":["exec","cap","tdate","tid","trader","notional","channel","base"],
+  "TS-03":["amend","cancel","tid","trader","tdate","notional","base"],
+  "TS-04":["inst","dir","notional","exec","ctpy","trader","pnl","tid"],
+  "TS-05":["inst","dir","notional","tdate","ctpy","trader","cal"],
+  "TS-06":["notional","inst","exec","trader","ticketlim","ctpy","superv"],
+  "TS-07":["prod","trader","mandate","notional","book","inst"],
+  "TS-08":["exec","cap","trader","hours","cal","notional","prod","base"],
+  "TS-09":["px","mid","tdate","dir","trader","pnl","period","ipv","inst"],
+  "TS-10":["exec","notional","dir","inst","trader","fixing","mid","base"],
+  "TS-11":["exec","inst","dir","notional","trader","clord","ctpy","pnl","orders"],
+  "TS-12":["pos","eodpos","poslim","ticketlim","notional","exec","trader","inst"],
+  "TS-13":["dpnl","trader","base","notional","prod","mid"],
+  "TS-14":["book","inst","notional","tdate","trader","pnl","period","dir"],
+  "TS-15":["ivol","surface","notional","inst","tenor","trader","pnl","base"],
+  "TS-16":["px","mid","spread","book","ctpy","notional","trader","pnl","inst"],
+  "TS-17":["ssi","ctpystat","exec","amend","ctpy","notional","trader","tid"],
+  "TS-18":["notional","tenor","valdate","tdate","trader","period","ctpy","base"],
+  "TS-19":["trader","tdate","leave","notional","prod","channel","superv"],
+  "TS-20":["inst","dir","notional","tdate","trader","news","pnl","base","cal"],
+  "TS-21":["px","curve","mid","tenor","notional","inst","trader","ctpy","base"],
+  "TS-22":["px","mid","spread","ctpy","trader","tdate","notional","relparty","base"],
+  "TS-23":["px","fixing","inst","tenor","notional","trader","valdate"],
+  "TS-24":["px","range","mid","exec","dir","trader","inst","base"],
+  "TS-25":["cancel","cap","exec","trader","tid","notional","ctpy","base"],
+  "TS-26":["cancel","valdate","confirm","tid","trader","notional","settle"],
+  "TS-27":["amend","cap","px","notional","tenor","valdate","trader","pnl","confirm"],
+  "TS-28":["cap","exec","trader","tid","channel","ctpy","notional","base"],
+  "TS-29":["book","trader","superv","notional","prod","inst","poslim"],
+  "TS-30":["orders","cancel","exec","channel","trader","inst","dir","base"],
+  "TS-31":["exec","dir","notional","mid","inst","trader","pnl","orders"],
+  "TS-32":["exec","notional","dir","mid","trader","hours","inst","base"],
+  "TS-33":["px","mid","spread","exec","ctpy","dir","notional","trader","relparty"],
+  "TS-34":["notional","ticketlim","tdate","trader","inst","base"],
+  "TS-35":["tenor","tenorlim","trader","prod","notional","valdate"],
+  "TS-36":["prod","trader","tdate","notional","base","mandate"],
+  "TS-37":["tdate","trader","leave","notional","tid","base","superv"],
+  "TS-38":["notional","tdate","trader","base","prod","news"],
+  "TS-39":["dpnl","trader","base","cal","ipv","pos"],
+  "TS-40":["pnl","notional","prod","modeltol","surface","curve","trader","ctpy"],
+  "TS-41":["dpnl","trader","period","pnl","inst","mid","cal"],
+  "TS-42":["settle","ssi","ctpystat","notional","tid","trader","ctpy"],
+  "TS-43":["settle","hrjur","ctpystat","ctpy","notional","trader","tid"],
+  "TS-44":["confirm","tdate","trader","notional","ctpy","cal","base"],
+  "TS-45":["alloc","clord","exec","px","mid","notional","ctpy","trader","relparty"],
+  "TS-46":["ctpy","trader","tdate","notional","cohort","base","relparty"],
+  "TS-47":["inst","restrict","wall","tdate","trader","notional","channel"],
+  "TS-48":["inst","dir","notional","tdate","trader","news","pnl","base"],
+  "TS-49":["px","gc","ctpy","relparty","notional","tenor","trader"],
+  "TS-50":["collat","period","tdate","notional","trader","ctpy","cal"],
+};
+/* Grouped by the system that has to supply them — which is the shape of the
+   conversation an implementation team actually has. */
+function ruleSchema(id){
+  const codes=RULE_REQ[id]||[];
+  const bySrc={};
+  codes.forEach(c=>{ const e=DATA_ELEMENTS[c]; if(!e) return; (bySrc[e[1]]=bySrc[e[1]]||[]).push(e[0]); });
+  return {codes,bySrc,n:codes.length,systems:Object.keys(bySrc).length};
+}
+
 const RULE_BY_ID={}; RULES.forEach(r=>RULE_BY_ID[r.id]=r);
 const RULE_CATS=[]; RULES.forEach(r=>{ if(RULE_CATS.indexOf(r.cat)<0) RULE_CATS.push(r.cat); });
 
@@ -3229,6 +3386,7 @@ const state={
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
   act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
+  heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
   log:{who:"me",status:"",search:"",sort:{key:"reviewDay",dir:-1},page:0,per:25},
@@ -3579,7 +3737,9 @@ function hbars(items,opts){
   let g="",y=6;
   items.forEach(it=>{
     const w=Math.max(1,it.v/max*barW);
-    const open=it.agg?'<g '+it.agg+" "+(it.hl||"")+' style="cursor:pointer">':"<g>";
+    const tipAttrs=it.tip?' data-tip="'+esc(it.tip)+'" data-tipsub="'+esc(it.tipsub||"")+
+      '" data-tiptable="'+esc(it.tiptable||"")+'"':"";
+    const open=it.agg?'<g '+it.agg+" "+(it.hl||"")+tipAttrs+' style="cursor:pointer">':"<g"+tipAttrs+">";
     g+=open;
     g+='<text x="0" y="'+(y+10)+'" font-size="9.5" fill="var(--ink-2)">'+esc(it.label)+"</text>";
     g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+w.toFixed(1)+'" height="11" rx="2.5" fill="'+(it.color||"var(--run)")+
@@ -4253,19 +4413,26 @@ function paneOverview(){
      when anybody is watching? */
   const catRows=RULE_CATS.map(c=>{
     const hits=scopedAll.filter(a=>a.cat===c);
-    const n=hits.length;
-    return {label:c,v:n,v2:hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length,
-      color:"var(--agent)",agg:hlAgg("cat",c,n),aggKey:"cat|"+c,
+    const n=hits.length, up=hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length;
+    const dec=hits.filter(a=>!isOpen(a)).length;
+    return {label:c,v:n,v2:up,color:"var(--agent)",agg:hlAgg("cat",c,n),aggKey:"cat|"+c,
+      tip:c,tipsub:"Rule category",
+      tiptable:["Alerts raised|"+fmtNum(n),"Upheld — suspicious or escalated|"+fmtNum(up),
+        "Passed as explained|"+fmtNum(dec-up),"Still open|"+fmtNum(n-dec),
+        "Upheld rate|"+(dec?Math.round(up/dec*100):0)+"%"].join("§"),
       hl:'data-hlsrc="cat|'+esc(c)+'" data-hl-cat="'+esc(c)+'" data-hlpin="1"'};
   }).sort((a,b)=>b.v-a.v);
+  const upheldKey='<div class="trendkey"><span><i class="lk" style="background:var(--agent)"></i>Alerts raised</span>'+
+    '<span><i class="lk" style="background:var(--fail)"></i>Upheld — tagged suspicious or escalated</span>'+
+    '<span><i class="lk" style="background:var(--ink)"></i>Current highlight selection</span></div>';
 
   const hourCounts=Array(24).fill(0);
   scopedAll.forEach(a=>{ if(a.hour!=null) hourCounts[a.hour]++; });
   const hourMax=Math.max(1,...hourCounts);
 
   const rowH='<div class="grid2">'+
-    panel("Typology fingerprint","alerts by rule category · 12 months",
-      '<div class="panel-body"><div class="chart-well">'+hbars(catRows,{w:520,rowH:23,labW:150})+"</div></div>",
+    panel("Typology fingerprint","alerts by rule category · 12 months · red = upheld",
+      '<div class="panel-body"><div class="chart-well">'+hbars(catRows,{w:520,rowH:23,labW:150})+"</div></div>"+upheldKey,
       "The floor's mix is unremarkable; one person's is not. <b>Hover a trader</b> and the dark markers show how much of each category is theirs — "+
       "risk concentrated in a single category is a specialism, risk spread across four unrelated ones is a method. <b>Click a category</b> to pin it.")+
     panel("Booking-hour profile","alerting activity by execution hour · desk-local time",
@@ -4274,42 +4441,104 @@ function paneOverview(){
       "before the open, after the close, through the night — is the shape concealment makes. <b>Click an hour</b> to pin it.")+
     "</div>";
 
-  /* Rule × trader. The columns are people, not desks: a typology firing four
-     times against one name is the finding, and it is exactly what a desk column
-     hides when it pools twelve traders into one number. */
-  const traderCols=Object.values(TRADER_STATS)
-    .filter(traderInRail)
-    .map(s=>({s,n:scopedAll.filter(a=>a.traderId===s.id).length}))
-    .sort((a,b)=>b.n-a.n||b.s.idx-a.s.idx).slice(0,18).map(x=>x.s);
-  const mat=[]; let matMax=0;
-  RULES.forEach(r=>{
-    const hits=scopedAll.filter(a=>a.ruleId===r.id);
-    const row={rule:r,total:hits.length,cells:traderCols.map(s=>{
-      const n=hits.filter(a=>a.traderId===s.id).length;
-      if(n>matMax) matMax=n; return {tr:s,n};
-    })};
-    mat.push(row);
+  /* The detection heatmap has to survive production: two hundred traders and a
+     rule set that keeps growing. It does that by zooming rather than by
+     truncating — rows collapse from fifty rules to nine categories, columns
+     from every trader to twelve desks, and in trader mode you choose how many
+     of the busiest names to bring on screen. Category × desk fits any monitor;
+     rule × trader is the same picture at full resolution. */
+  const H=state.heat;
+  const byRule=H.rows==="rule";
+  const byTrader=H.cols==="trader";
+  const heatRows=byRule?RULES.map(r=>({key:r.id,label:r.id+" "+r.name,short:r.id,tip:r.name,sub:r.desc,hl:"rule|"+r.id}))
+    :RULE_CATS.map(c=>({key:c,label:c,short:c,tip:c,
+                        sub:RULES.filter(r=>r.cat===c).length+" rules in this category",hl:"cat|"+c}));
+  let heatCols;
+  if(byTrader){
+    const ranked=Object.values(TRADER_STATS).filter(traderInRail)
+      .map(st=>({st,n:scopedAll.filter(a=>a.traderId===st.id).length}))
+      .sort((a,b)=>b.n-a.n||b.st.idx-a.st.idx);
+    heatCols=(H.top?ranked.slice(0,H.top):ranked).map(x=>({key:x.st.id,label:x.st.name,
+      tip:x.st.name,sub:DESK_BY_ID[x.st.deskId].name,
+      extra:"Risk index|"+x.st.idx.toFixed(1)+"§Versus cohort|×"+x.st.peer+"§Alerts|"+x.n,
+      hl:"trader|"+x.st.id}));
+  }else{
+    heatCols=DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id))
+      .map(d=>({key:d.id,label:d.short,tip:d.name,sub:d.region+" · "+d.traders.length+" traders",
+        extra:"Traders|"+d.traders.length,hl:"desk|"+d.id}));
+  }
+  /* One pass over the scoped book, keyed straight off each alert. Walking the
+     grid per alert would be rows × columns × alerts — fine at fifty by thirty,
+     seventeen million comparisons at fifty by two hundred. This is O(alerts)
+     however far the floor and the rule set grow. */
+  const rowKeys={}, colKeys={};
+  heatRows.forEach(r=>{ rowKeys[r.key]=1; });
+  heatCols.forEach(c=>{ colKeys[c.key]=1; });
+  const cellIdx={}, rowTotal={}, colTotal={};
+  let matMax=0;
+  scopedAll.forEach(a=>{
+    const rk=byRule?a.ruleId:a.cat, ck=byTrader?a.traderId:a.deskId;
+    if(!rowKeys[rk]) return;
+    rowTotal[rk]=(rowTotal[rk]||0)+1;
+    if(!colKeys[ck]) return;
+    colTotal[ck]=(colTotal[ck]||0)+1;
+    const k=rk+"\u0001"+ck;
+    const v=(cellIdx[k]=(cellIdx[k]||0)+1);
+    if(v>matMax) matMax=v;
   });
-  const matrix=panel("Detection heatmap","rule × trader · "+traderCols.length+" busiest names · full 12 months · darker = more alerts",
-    '<div class="matwrap tallmat"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
-    traderCols.map(s=>'<th class="colhd" data-hlsrc="trader|'+s.id+'" data-hlpin="1" data-tip="'+esc(s.name)+
-      '" data-tipsub="'+esc(DESK_BY_ID[s.deskId].name)+'" data-tiptable="Risk index|'+s.idx.toFixed(1)+"§Versus cohort|×"+s.peer+
-      "§Alerts|"+s.alerts+'"><div>'+esc(s.name)+"</div></th>").join("")+'<th class="colhd"><div>All traders</div></th></tr></thead><tbody>'+
-    mat.map(row=>'<tr><th class="rowhd" data-hlsrc="rule|'+row.rule.id+'" data-hlpin="1" data-tip="'+esc(row.rule.name)+'" data-tipsub="'+esc(row.rule.desc)+'"><b>'+row.rule.id+"</b>"+esc(row.rule.name)+"</th>"+
-      row.cells.map(c=>'<td><button class="mcell hlmember'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,matMax)+
-        '" data-hl-trader="'+c.tr.id+'" data-hl-desk="'+c.tr.deskId+'" data-hl-rule="'+row.rule.id+'" data-hl-cat="'+esc(row.rule.cat)+
-        '" data-hl-sev="'+row.rule.sev+'" data-trrule="'+c.tr.id+"|"+row.rule.id+'" data-tip="'+esc(c.tr.name)+'" data-tipsub="'+esc(row.rule.id+" · "+row.rule.name)+
-        '" data-tiptable="Alerts|'+c.n+"§Rule severity|"+row.rule.sev+"§Trader risk index|"+c.tr.idx.toFixed(1)+"§Versus cohort|×"+c.tr.peer+
-        "§Group|"+esc(DESK_BY_ID[c.tr.deskId].short)+'">'+(c.n||"·")+"</button></td>").join("")+
-      '<td><button class="mcell" '+hlAgg("rule",row.rule.id,row.total)+' style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="Every trader">'+row.total+"</button></td></tr>").join("")+
+  matMax=Math.max(1,matMax);
+  const dense=H.density==="compact";
+  const heatCtl='<div class="fstrip actstrip">'+
+    '<label><span>Rows</span><div class="segbtns">'+
+      [["rule","Rule ("+RULES.length+")"],["cat","Category ("+RULE_CATS.length+")"]].map(x=>
+        '<button data-heatrows="'+x[0]+'" aria-pressed="'+(H.rows===x[0])+'">'+x[1]+"</button>").join("")+"</div></label>"+
+    '<label><span>Columns</span><div class="segbtns">'+
+      [["trader","Trader ("+TRADERS.filter(traderInRail).length+")"],["desk","Desk ("+DESKS.length+")"]].map(x=>
+        '<button data-heatcols="'+x[0]+'" aria-pressed="'+(H.cols===x[0])+'">'+x[1]+"</button>").join("")+"</div></label>"+
+    (byTrader?'<label><span>Show</span><div class="segbtns">'+
+      [[12,"Top 12"],[18,"Top 18"],[30,"Top 30"],[60,"Top 60"],[0,"All"]].map(x=>
+        '<button data-heattop="'+x[0]+'" aria-pressed="'+(H.top===x[0])+'">'+x[1]+"</button>").join("")+"</div></label>":"")+
+    '<label><span>Density</span><div class="segbtns">'+
+      [["comfortable","Comfortable"],["compact","Compact"]].map(x=>
+        '<button data-heatden="'+x[0]+'" aria-pressed="'+(H.density===x[0])+'">'+x[1]+"</button>").join("")+"</div></label>"+
+    '<div class="fspacer"></div><span class="tiny">'+heatRows.length+" × "+heatCols.length+" = "+
+      fmtNum(heatRows.length*heatCols.length)+" cells</span></div>";
+
+  const matrix=panel("Detection heatmap",
+    (byRule?"rule":"category")+" × "+(byTrader?"trader":"desk")+" · full 12 months · darker = more alerts",
+    heatCtl+
+    '<div class="matwrap tallmat'+(dense?" dense":"")+'"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
+    heatCols.map(c=>'<th class="colhd" data-hlsrc="'+esc(c.hl)+'" data-tip="'+esc(c.tip)+'" data-tipsub="'+esc(c.sub)+
+      '" data-tiptable="'+esc((c.extra?c.extra+"§":"")+"Alerts in view|"+(colTotal[c.key]||0))+'"><div>'+esc(c.label)+"</div></th>").join("")+
+    '<th class="colhd"><div>Total</div></th></tr></thead><tbody>'+
+    heatRows.map(r=>'<tr><th class="rowhd" data-hlsrc="'+esc(r.hl)+'" data-tip="'+esc(r.tip)+'" data-tipsub="'+esc(r.sub)+'">'+
+      (byRule?"<b>"+r.short+"</b>"+esc(r.label.slice(r.short.length+1)):"<b></b>"+esc(r.label))+"</th>"+
+      heatCols.map(c=>{
+        const n=cellIdx[r.key+"\u0001"+c.key]||0;
+        return '<td><button class="mcell hlmember'+(n?"":" zero")+'" style="background:'+heatColor(n,matMax)+
+          '" data-hl-'+(byTrader?"trader":"desk")+'="'+c.key+'" data-hl-'+(byRule?"rule":"cat")+'="'+esc(r.key)+
+          '" data-heatcell="'+esc(r.key+"|"+c.key)+'" data-tip="'+esc(c.tip)+'" data-tipsub="'+esc(r.tip)+
+          '" data-tiptable="Alerts|'+n+"§Share of this "+(byRule?"rule":"category")+"|"+
+            (rowTotal[r.key]?Math.round(n/rowTotal[r.key]*100):0)+"%§Share of this "+(byTrader?"trader":"desk")+"|"+
+            (colTotal[c.key]?Math.round(n/colTotal[c.key]*100):0)+'%">'+(n||"·")+"</button></td>";
+      }).join("")+
+      '<td><button class="mcell" '+hlAgg(byRule?"rule":"cat",r.key,rowTotal[r.key]||0)+
+        ' style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-hlsrc="'+esc(r.hl)+
+        '" data-tip="'+esc(r.tip)+'" data-tipsub="Every column">'+(rowTotal[r.key]||0)+"</button></td></tr>").join("")+
+    '<tr class="mtot"><th class="rowhd"><b></b>Total</th>'+
+      heatCols.map(c=>'<td><button class="mcell" '+hlAgg(byTrader?"trader":"desk",c.key,colTotal[c.key]||0)+
+        ' style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-hlsrc="'+esc(c.hl)+
+        '" data-tip="'+esc(c.tip)+'" data-tipsub="Every row">'+(colTotal[c.key]||0)+"</button></td>").join("")+
+      '<td><button class="mcell" style="background:var(--panel-2);font-weight:800">'+fmtNum(scopedAll.length)+"</button></td></tr>"+
     "</tbody></table></div>"+
     '<div class="mkey"><span class="kl">Alerts per cell</span><i style="background:var(--heat-0)"></i><span>None</span>'+
     '<i style="background:'+heatColor(matMax*0.2,matMax)+'"></i><span>Low</span>'+
     '<i style="background:'+heatColor(matMax*0.55,matMax)+'"></i><span>Medium</span>'+
     '<i style="background:'+heatColor(matMax*0.85,matMax)+'"></i><span>High</span>'+
     '<i style="background:'+heatColor(matMax,matMax)+'"></i><span>Highest ('+matMax+')</span></div>',
-    "<b>Click any cell</b> to open that trader and rule in the Detections queue. A lit column is one person, not a department: read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning. "+
-    "<b>Hover a name or a rule label</b> to light it across every panel on the page; <b>click the label</b> to pin that selection so it survives scrolling and tab changes.");
+    "Start wide and zoom in: <b>category × desk</b> is nine rows by twelve columns and fits any screen; <b>rule × trader</b> is the same picture at full resolution. "+
+    "A lit column is one person, not a department — read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning. "+
+    "<b>Click any cell or label</b> to lock that selection across the page; <b>double-click</b> to open it in the Detections queue.");
 
   // Bottom row: rules, traders, ageing.
   const ruleItems=RULES.map(r=>{
@@ -4318,6 +4547,11 @@ function paneOverview(){
       v2:hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length,
       color:SEV_COLOR[r.sev],click:'data-ruleclick="'+r.id+'"',
       agg:hlAgg("rule",r.id,hits.length),aggKey:"rule|"+r.id,
+      tip:r.id+" "+r.name,tipsub:r.cat+" · "+r.sev,
+      tiptable:["Alerts raised|"+fmtNum(hits.length),
+        "Upheld — suspicious or escalated|"+fmtNum(hits.filter(a=>a.status==="Suspicious"||a.status==="Escalated").length),
+        "Passed as explained|"+fmtNum(hits.filter(a=>a.status==="Passed").length),
+        "Still open|"+fmtNum(hits.filter(isOpen).length)].join("§"),
       hl:'data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'"'};
   }).sort((a,b)=>b.v-a.v).slice(0,10);
 
@@ -4331,9 +4565,10 @@ function paneOverview(){
   });
 
   const rowC='<div class="grid3">'+
-    panel("Top rules by hits","12 months · red overlay = confirmed suspicious",
-      '<div class="panel-body"><div class="chart-well">'+hbars(ruleItems,{w:520,rowH:20,labW:186})+"</div></div>",
-      "<b>Click a bar</b> to open that rule.")+
+    panel("Top rules by hits","12 months · red = upheld",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ruleItems,{w:520,rowH:20,labW:186})+"</div></div>"+upheldKey,
+      "The full bar is every alert the rule raised; the red length inside it is how many an officer upheld as suspicious or escalated. "+
+      "A long bar with almost no red is a rule generating work rather than findings. <b>Double-click a bar</b> to open that rule.")+
     panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
@@ -4444,6 +4679,15 @@ function paneRules(){
       "<p>"+esc(r.desc)+"</p>"+
       '<div class="logic"><b>Test:</b> '+esc(r.logic)+"</div>"+
       '<div class="rbase"><span class="scope">Per trader</span>'+esc(r.base)+"</div>"+
+      (function(){
+        const sc=ruleSchema(r.id);
+        const rows=Object.keys(sc.bySrc).map(src=>src+"|"+sc.bySrc[src].join(", ")).join("§");
+        return '<div class="reqrow"><span class="reqchip" data-tip="'+esc(r.id+" — data required")+
+          '" data-tipsub="'+esc(sc.n+" fields from "+sc.systems+" source systems. The rule cannot run without all of them.")+
+          '" data-tiptable="'+esc(rows)+'">'+sc.n+" fields · "+sc.systems+" systems</span>"+
+          '<span class="reqsrc">'+esc(Object.keys(sc.bySrc).slice(0,2).join(" · ")+
+            (sc.systems>2?" +"+(sc.systems-2):""))+"</span></div>";
+      })()+
       '<div class="rstats"><span>Hits <b>'+hits.length+"</b></span><span>Open <b"+(open?' class="warnc"':"")+">"+open+"</b></span>"+
       "<span>Upheld <b"+(dec.length-passed?' class="failc"':"")+">"+(dec.length-passed)+"</b></span>"+
       "<span>Explained <b>"+(dec.length?Math.round(passed/dec.length*100):0)+"%</b></span>"+
@@ -4454,7 +4698,9 @@ function paneRules(){
     "</div></label><div class=\"fspacer\"></div><span class=\"tiny\">"+RULES.length+" rules active · every one evaluated per trader · thresholds shown are the production settings</span></div>";
   return panel("Rule library",RULES.length+" typologies across pricing, conduct, valuation, controls, settlement, financing and information misuse",
     filt+'<div class="rulegrid">'+cards+"</div>",
-    "Each card states the exact test the engine applies, <b>what that test is measured against</b>, and the historic outcome. "+
+    "Each card states the exact test the engine applies, <b>what that test is measured against</b>, the historic outcome, and — on the "+
+    "<b>fields chip</b> — every data element the rule reads and the system it has to come from. A typology is only as good as its feed: "+
+    "half of these are impossible without an execution timestamp to the second, and a third without reference data nobody currently owns. "+
     "Every rule resolves at trader level — against the individual's own authorisation, their own baseline, or their peer cohort — so a small position never disappears into a desk's pooled turnover. "+
     "<b>Click a rule</b> to open its detections. <b>Explained</b> is the share of dispositioned alerts an officer passed — a rule sitting above 70% is a candidate for re-tuning, not a rule that is working.");
 }
@@ -4844,7 +5090,14 @@ function alertDrawer(a){
       '<p class="narr" style="margin-top:8px">Test applied: <span class="mono" style="font-size:0.9em">'+esc(rule.logic)+"</span></p>"+
       '<p class="narr" style="margin-top:8px">Measured against: <b>'+esc(rule.base)+"</b> — this rule is evaluated for "+
         esc(tr.name)+" individually, not for "+esc(DESK_BY_ID[tr.deskId].name)+" as a whole.</p>"+
-      '<p class="narr" style="margin-top:8px;color:var(--ink-3)">'+esc(rule.why)+"</p></div>"+
+      '<p class="narr" style="margin-top:8px;color:var(--ink-3)">'+esc(rule.why)+"</p>"+
+      (function(){
+        const sc=ruleSchema(rule.id);
+        return '<p class="narr" style="margin-top:8px;font-size:0.6875rem"><span class="reqchip" data-tip="'+
+          esc(rule.id+" — data required")+'" data-tipsub="'+esc(sc.n+" fields from "+sc.systems+" source systems")+
+          '" data-tiptable="'+esc(Object.keys(sc.bySrc).map(src=>src+"|"+sc.bySrc[src].join(", ")).join("§"))+
+          '">Data this test reads · '+sc.n+" fields</span></p>";
+      })()+"</div>"+
 
     marketBlock(trades)+
 
@@ -5122,6 +5375,10 @@ function handleChrome(t,e){
   const asc=t.closest("[data-actscale]"); if(asc){ state.act.scale=asc.dataset.actscale; render(); return true; }
   const aun=t.closest("[data-actunit]"); if(aun){ state.act.unit=aun.dataset.actunit; state.act.range=""; render(); return true; }
   const acl=t.closest("[data-actcols]"); if(acl){ state.act.cols=+acl.dataset.actcols; render(); return true; }
+  const hrw=t.closest("[data-heatrows]"); if(hrw){ state.heat.rows=hrw.dataset.heatrows; render(); return true; }
+  const hcl=t.closest("[data-heatcols]"); if(hcl){ state.heat.cols=hcl.dataset.heatcols; render(); return true; }
+  const htp=t.closest("[data-heattop]"); if(htp){ state.heat.top=+htp.dataset.heattop; render(); return true; }
+  const hdn=t.closest("[data-heatden]"); if(hdn){ state.heat.density=hdn.dataset.heatden; render(); return true; }
   const ayy=t.closest("[data-actyoy]"); if(ayy){ state.act.yoy=!state.act.yoy; render(); return true; }
   const acta=t.closest("[data-act]");
   if(acta){
@@ -5149,6 +5406,15 @@ function handleDrill(t,e){
     state.dateRangeDays=Math.min(365,days);
     $("#f-daterange").value=[1,7,30,90,182,365].reduce((p,c)=>Math.abs(c-state.dateRangeDays)<Math.abs(p-state.dateRangeDays)?c:p,365);
     goDetections({}); return true;
+  }
+  const hc=t.closest("[data-heatcell]");
+  if(hc){
+    const p=hc.dataset.heatcell.split("|"), H=state.heat;
+    closeDrawer();
+    if(H.cols==="desk") state.filters.desk=new Set([p[1]]);
+    goDetections(H.rows==="rule"?{rule:p[0],trader:H.cols==="trader"?p[1]:""}
+                                :{cat:p[0],trader:H.cols==="trader"?p[1]:""});
+    return true;
   }
   const dk=t.closest("[data-deskclick]"); if(dk){ state.filters.desk=new Set([dk.dataset.deskclick]); render(); return true; }
   const hr=t.closest("[data-hlsrc]");
