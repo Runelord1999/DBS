@@ -462,6 +462,13 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
   display:flex;flex-direction:column;gap:4px;min-width:0}
 .acard:hover{border-color:var(--brand)}
 .acard .an{font-size:0.6875rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The name is a control, not a label: it scopes the page to that trader. Dashed
+   underline so it reads as clickable without shouting across a grid of forty. */
+.acard .an .anlink{font:inherit;color:inherit;background:none;border:0;padding:0;max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
+  border-bottom:1px dashed color-mix(in srgb,var(--brand) 50%,transparent)}
+.acard .an .anlink:hover{color:var(--brand);border-bottom-color:var(--brand)}
+.acard .an .anlink.on{color:var(--brand);border-bottom-style:solid;border-bottom-color:var(--brand)}
 .acard .ad{font-size:0.5625rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acard .sstack{width:100%;height:62px;display:block;border-radius:3px}
 .acard .af{display:flex;justify-content:space-between;gap:6px;font-size:0.5625rem;color:var(--ink-3);white-space:nowrap}
@@ -4849,14 +4856,19 @@ function paneActivity(){
   const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor spread"]];
   const YEARS=uniq(Array.from({length:DAYS},(_,d)=>dateForIdx(d).getFullYear())).sort();
 
+  const railTrader=state.filters.trader;
   const actCards=actCols.length?actRows.map(t=>{
     const cells=act.by[t.id];
     const tot=cells.reduce((a,c)=>a+cellTot(c),0);
     const peak=Math.max(0,...cells.map(cellTot));
     const allT=isTenor?cells.reduce((a,c)=>a.concat(c.tenors||[]),[]):null;
+    const scoped=railTrader.size===1&&railTrader.has(t.id);
     return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
       '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
-      '<div class="an">'+esc(t.name)+"</div>"+
+      '<div class="an"><button type="button" class="anlink'+(scoped?" on":"")+'" data-railtrader="'+t.id+
+        '" data-tip="'+esc(t.name)+'" data-tipsub="'+
+        (scoped?"Scoping the whole page · click to clear":"Click to scope every chart on the page to this trader")+
+        '">'+esc(t.name)+"</button></div>"+
       '<div class="ad">'+esc(DESK_BY_ID[t.deskId].short)+" · "+esc(t.grade.replace("Executive Director","ED"))+"</div>"+
       (isTenor?tenorScatter(cells,{w:188,h:62,yoy:A.yoy})
               :sparkStack(cells,act.segs,{w:188,h:62,unit:unit,yoy:A.yoy,max:A.scale==="shared"?sharedMax:0}))+
@@ -4896,13 +4908,15 @@ function paneActivity(){
   const gridStyle=A.cols?' style="grid-template-columns:repeat('+A.cols+',minmax(0,1fr))"':"";
   const span=actCols.length?(A.unit==="week"?"weeks ":"days ")+actCols[0].key+"–"+actCols[actCols.length-1].key+" of "+A.year:"no periods in range";
   const activity=panel("Trading activity by trader",
-    span+" · "+actRows.length+" traders · one column per "+A.unit+(A.yoy?" · dashed = same period last year":""),
+    span+" · "+actRows.length+(actRows.length===1?" trader":" traders")+" · one column per "+A.unit+
+      (A.yoy?" · dashed = same period last year":""),
     actStrip+'<div class="agrid"'+gridStyle+">"+actCards+"</div>",
     (isTenor
       ? "Each dot is a group of deals at one maturity, sized by how many. A book concentrated on one point of the curve is a row of large dots; a book spread across it is a column of small ones — which is the difference between a trader running a mandate and a trader wandering. The line is their median tenor."
       : "Each chart is one trader's own book, period by period, stacked by asset class.")+
     " Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the one to open. "+
-    "<b>Click a card</b> to lock that trader across every panel on the page; <b>double-click</b> for the trader file.");
+    "<b>Click the name</b> to scope the whole page to that trader, the same as picking them in the rail — every chart above redraws on their book alone, and clicking the name again clears it. "+
+    "<b>Click the card</b> to lock that trader across every panel without filtering anything away; <b>double-click</b> for the trader file.");
 
 
   return kpis+rowA+'<div class="mt10">'+rowB+"</div>"+'<div class="mt10">'+rowC+"</div>"+
@@ -5679,6 +5693,19 @@ function handleChrome(t,e){
   const mclr=t.closest("[data-mselclear]"); if(mclr){ const k=mclr.dataset.mselclear; state.filters[k]=new Set(); buildMsel(k); render(); return true; }
   const tab=t.closest(".tab"); if(tab){ state.tab=tab.dataset.tab; closeMsel(); render(); return true; }
   const chip=t.closest("[data-clearchip]"); if(chip){ state.filters[chip.dataset.clearchip]=new Set(); render(); return true; }
+  /* The activity grid is a picker as much as a display. Clicking a trader's name
+     scopes the whole page to them, exactly as choosing them in the rail's trader
+     list does, and clicking it again clears the scope. A pinned highlight goes
+     with it: once the page is one person, highlighting that person lights
+     everything and says nothing. */
+  const rt=t.closest("[data-railtrader]");
+  if(rt){
+    const id=rt.dataset.railtrader, set=state.filters.trader;
+    state.filters.trader=(set.size===1&&set.has(id))?new Set():new Set([id]);
+    hlPinned=null; closeMsel(); render();
+    window.scrollTo({top:0,behavior:"smooth"});
+    return true;
+  }
   if(t.closest("[data-clearrule]")){ state.det.rule=""; render(); return true; }
   const rcat=t.closest("[data-rulecat]"); if(rcat){ state.rules.cat=rcat.dataset.rulecat; render(); return true; }
   const lw=t.closest("[data-logwho]"); if(lw){ state.log.who=lw.dataset.logwho; state.log.page=0; render(); return true; }
