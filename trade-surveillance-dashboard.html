@@ -3553,6 +3553,9 @@ function hlAggregate(spec){
   const [key,val]=spec.split("|");
   const r={trader:{},desk:{},rule:{},cat:{},sev:{},status:{},ac:{},hour:{},age:{},
            product:{},ctpy:{},channel:{},tenorb:{},sizeb:{},
+           // A heatmap cell is a pair, not a value, so it needs a key of its own.
+           // All four row × column combinations the matrix can be switched to.
+           cell:{},
            month:Array(12).fill(0),days:Array(DAYS).fill(0),n:0,nPeriod:0,notional:0,
            // Panels scoped to the review period need their own cut: sharing the
            // 12-month one would size a marker against the wrong denominator.
@@ -3584,6 +3587,11 @@ function hlAggregate(spec){
     (a.sizeBands||[]).forEach(x=>{ r.sizeb[x]=(r.sizeb[x]||0)+1; });
     if(a.hour!=null) r.hour[a.hour]=(r.hour[a.hour]||0)+1;
     if(isOpen(a)){ const b=ageBucketOf(a); r.age[b]=(r.age[b]||0)+1; }
+    const C=r.cell, S="\u0001";
+    C[a.ruleId+S+a.traderId]=(C[a.ruleId+S+a.traderId]||0)+1;
+    C[a.ruleId+S+a.deskId]  =(C[a.ruleId+S+a.deskId]  ||0)+1;
+    C[a.cat+S+a.traderId]   =(C[a.cat+S+a.traderId]   ||0)+1;
+    C[a.cat+S+a.deskId]     =(C[a.cat+S+a.deskId]     ||0)+1;
     const mi=monthIdxOf(a.date); if(mi>=0) r.month[mi]++;
     r.days[a.day]++;
   });
@@ -3778,7 +3786,7 @@ const hlList=v=>"|"+(v||[]).join("|")+"|";
 function hlAttrs(a){
   return 'data-hl-trader="'+a.traderId+'" data-hl-desk="'+a.deskId+'" data-hl-rule="'+a.ruleId+
     '" data-hl-cat="'+esc(a.cat)+'" data-hl-sev="'+a.sev+'" data-hl-status="'+esc(a.status)+
-    '" data-hl-hour="'+(a.hour==null?"":a.hour)+
+    '" data-hl-hour="'+(a.hour==null?"":a.hour)+'" data-hl-month="'+monthIdxOf(a.date)+
     '" data-hl-ac="'+esc(hlList(a.acs))+'" data-hl-product="'+esc(hlList(a.products))+
     '" data-hl-ctpy="'+esc(hlList(a.ctpys))+'" data-hl-channel="'+esc(hlList(a.channels))+
     '" data-hl-tenorb="'+esc(hlList(a.tenorBands))+'" data-hl-sizeb="'+esc(hlList(a.sizeBands))+'"';
@@ -3809,9 +3817,12 @@ function donut(segs,cTop,cBot,size,thick){
   let off=0,arcs="";
   segs.forEach(s=>{
     const len=Math.max(0,s.v)/tot*C;
-    arcs+='<circle class="hlmember" cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="'+thick+
+    /* The arc carries the aggregate itself rather than leaning on the legend row
+       beside it: an arc that only lights when the selection names its own series
+       is a slice that goes blank the moment you select anything else. */
+    arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="'+thick+
       '" stroke-dasharray="'+len.toFixed(2)+" "+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+
-      '" transform="rotate(-90 '+cx+" "+cy+')" '+(s.hl||"")+'><title>'+esc(s.label)+" "+((s.v/tot)*100).toFixed(1)+"%</title></circle>";
+      '" transform="rotate(-90 '+cx+" "+cy+')" '+(s.hl||"")+" "+(s.agg||"")+'><title>'+esc(s.label)+" "+((s.v/tot)*100).toFixed(1)+"%</title></circle>";
     off+=len;
   });
   return '<svg class="donut" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+" "+size+'">'+
@@ -4354,11 +4365,12 @@ function bubbleChart(pts,opts){
   g+='<text x="11" y="'+midY.toFixed(1)+'" transform="rotate(-90 11 '+midY.toFixed(1)+')" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">Alerts</text>';
   pts.forEach(p=>{
     const r=4+ (p.r/maxR)*13;
-    g+='<circle class="hlmember" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+p.color+
+    const ag=hlAgg("trader",p.id,(TRADER_STATS[p.id]||{}).alerts||0);
+    g+='<circle cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+p.color+
       '" fill-opacity=".55" stroke="'+p.color+'" stroke-width="1.2" style="cursor:pointer" data-trader="'+p.id+
-      '" data-hl-trader="'+p.id+'" data-hl-desk="'+esc(p.deskId||"")+'" data-hlsrc="trader|'+p.id+
-      '" data-tip="'+esc(p.label)+'" data-tipsub="'+esc(p.sub)+'" data-tiptable="'+esc(p.tip)+'"/>';
-    if(p.big) g+='<text class="hlmember" data-hl-trader="'+p.id+'" x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
+      '" data-hl-trader="'+p.id+'" data-hl-desk="'+esc(p.deskId||"")+'" data-hlsrc="trader|'+p.id+'" '+ag+
+      ' data-tip="'+esc(p.label)+'" data-tipsub="'+esc(p.sub)+'" data-tiptable="'+esc(p.tip)+'"/>';
+    if(p.big) g+='<text data-hl-trader="'+p.id+'" '+ag+' x="'+X(p.x).toFixed(1)+'" y="'+(Y(p.y)-r-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink-2)">'+esc(p.label)+"</text>";
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
@@ -4608,8 +4620,9 @@ function paneOverview(){
       (byRule?"<b>"+r.short+"</b>"+esc(r.label.slice(r.short.length+1)):"<b></b>"+esc(r.label))+"</th>"+
       heatCols.map(c=>{
         const n=cellIdx[r.key+"\u0001"+c.key]||0;
-        return '<td><button class="mcell hlmember'+(n?"":" zero")+'" style="background:'+heatColor(n,matMax)+
-          '" data-hl-'+(byTrader?"trader":"desk")+'="'+c.key+'" data-hl-'+(byRule?"rule":"cat")+'="'+esc(r.key)+
+        return '<td><button class="mcell'+(n?"":" zero")+'" style="background:'+heatColor(n,matMax)+
+          '" '+hlAgg("cell",r.key+"\u0001"+c.key,n)+
+          ' data-hl-'+(byTrader?"trader":"desk")+'="'+c.key+'" data-hl-'+(byRule?"rule":"cat")+'="'+esc(r.key)+
           '" data-heatcell="'+esc(r.key+"|"+c.key)+'" data-tip="'+esc(c.tip)+'" data-tipsub="'+esc(r.tip)+
           '" data-tiptable="Alerts|'+n+"§Share of this "+(byRule?"rule":"category")+"|"+
             (rowTotal[r.key]?Math.round(n/rowTotal[r.key]*100):0)+"%§Share of this "+(byTrader?"trader":"desk")+"|"+
@@ -4663,8 +4676,9 @@ function paneOverview(){
     panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
-        return '<div class="rrow2 hlmember" data-trader="'+s.id+'" data-hlsrc="trader|'+s.id+'" data-hl-trader="'+s.id+
-          '" data-hl-desk="'+s.deskId+'"><div class="rl"><b>'+esc(s.name)+"</b>"+
+        return '<div class="rrow2" data-trader="'+s.id+'" data-hlsrc="trader|'+s.id+'" data-hl-trader="'+s.id+
+          '" data-hl-desk="'+s.deskId+'" '+hlAgg("trader",s.id,s.alerts)+
+          '><div class="rl"><b>'+esc(s.name)+"</b>"+
           '<div class="sub2">'+esc(DESK_BY_ID[s.deskId].short)+(t.arc?" · "+esc(t.arc):"")+"</div></div>"+
           '<div class="rv">'+s.idx.toFixed(1)+'<span class="sub2" style="margin-left:5px">×'+s.peer+"</span></div>"+
           '<div class="rfull"><span class="bar-mini"><i style="width:'+(s.idx/maxIdx*100).toFixed(0)+"%;background:"+
@@ -4863,8 +4877,9 @@ function paneActivity(){
     const peak=Math.max(0,...cells.map(cellTot));
     const allT=isTenor?cells.reduce((a,c)=>a.concat(c.tenors||[]),[]):null;
     const scoped=railTrader.size===1&&railTrader.has(t.id);
-    return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
-      '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
+    return '<div class="acard" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
+      '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'" '+
+      hlAggT("trader",t.id,TRADER_STATS[t.id].trades)+">"+
       '<div class="an"><button type="button" class="anlink'+(scoped?" on":"")+'" data-railtrader="'+t.id+
         '" data-tip="'+esc(t.name)+'" data-tipsub="'+
         (scoped?"Scoping the whole page · click to clear":"Click to scope every chart on the page to this trader")+
@@ -5006,8 +5021,9 @@ function paneRules(){
     const dec=hits.filter(a=>!isOpen(a));
     const passed=dec.filter(a=>a.status==="Passed").length;
     const months=MONTH_KEYS.map((mk,i)=>hits.filter(a=>monthIdxOf(a.date)===i).length);
-    return '<div class="rulecard hlmember" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+
-      '" data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'" data-hl-cat="'+esc(r.cat)+'" data-hl-sev="'+r.sev+'">'+
+    return '<div class="rulecard" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+
+      '" data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'" data-hl-cat="'+esc(r.cat)+'" data-hl-sev="'+r.sev+
+      '" '+hlAgg("rule",r.id,hits.length)+">"+
       '<div class="rhd"><span class="rid">'+r.id+"</span><h4>"+esc(r.name)+"</h4>"+sevTag(r.sev)+"</div>"+
       "<p>"+esc(r.desc)+"</p>"+
       '<div class="logic"><b>Test:</b> '+esc(r.logic)+"</div>"+
@@ -5158,8 +5174,8 @@ function paneTraders(){
   const maxIdx=Math.max(1,...rows.map(r=>r.s.idx));
   const cards=rows.slice().sort((a,b)=>b.s.idx-a.s.idx).map(r=>{
     const c=r.s.idx>maxIdx*0.6?"var(--fail)":r.s.idx>maxIdx*0.3?"var(--warn)":r.s.idx>maxIdx*0.12?"var(--run)":"var(--pass)";
-    return '<div class="tcard hlmember" style="--accent:'+c+'" data-trader="'+r.t.id+'" data-hlsrc="trader|'+r.t.id+
-      '" data-hl-trader="'+r.t.id+'" data-hl-desk="'+r.t.deskId+'">'+
+    return '<div class="tcard" style="--accent:'+c+'" data-trader="'+r.t.id+'" data-hlsrc="trader|'+r.t.id+
+      '" data-hl-trader="'+r.t.id+'" data-hl-desk="'+r.t.deskId+'" '+hlAgg("trader",r.t.id,r.s.alerts)+">"+
       '<div><div class="tn">'+esc(r.t.name)+'</div><div class="td">'+esc(DESK_BY_ID[r.t.deskId].name)+" · "+esc(r.t.grade)+"</div></div>"+
       '<div class="trow"><span>Risk index</span><b style="color:'+c+'">'+r.s.idx.toFixed(1)+"</b></div>"+
       '<div class="trow"><span>Versus cohort</span><b style="color:'+(r.s.peer>=2?c:"inherit")+'">×'+r.s.peer+"</b></div>"+
@@ -5198,8 +5214,9 @@ function paneTraders(){
       RULES.map(r=>'<th class="colhd" data-hlsrc="rule|'+r.id+'" data-hlpin="1" data-tip="'+esc(r.name)+'" data-tipsub="'+esc(r.cat)+
         '"><div>'+r.id+" "+esc(r.name.slice(0,20))+"</div></th>").join("")+"</tr></thead><tbody>"+
       tmat.map(row=>'<tr><th class="rowhd" data-hlsrc="trader|'+row.r.t.id+'" data-hlpin="1">'+esc(row.r.t.name)+"</th>"+
-        row.cells.map(c=>'<td><button class="mcell hlmember'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,tmMax)+
-          '" data-hl-trader="'+row.r.t.id+'" data-hl-desk="'+row.r.t.deskId+'" data-hl-rule="'+c.rule.id+'" data-hl-cat="'+esc(c.rule.cat)+
+        row.cells.map(c=>'<td><button class="mcell'+(c.n?"":" zero")+'" style="background:'+heatColor(c.n,tmMax)+
+          '" '+hlAgg("cell",c.rule.id+"\u0001"+row.r.t.id,c.n)+
+          ' data-hl-trader="'+row.r.t.id+'" data-hl-desk="'+row.r.t.deskId+'" data-hl-rule="'+c.rule.id+'" data-hl-cat="'+esc(c.rule.cat)+
           '" data-hl-sev="'+c.rule.sev+'" data-trrule="'+row.r.t.id+"|"+c.rule.id+'" data-tip="'+esc(row.r.t.name)+'" data-tipsub="'+esc(c.rule.id+" · "+c.rule.name)+
           '" data-tiptable="Alerts|'+c.n+'">'+(c.n||"·")+"</button></td>").join("")+"</tr>").join("")+
       "</tbody></table></div>",
