@@ -613,6 +613,7 @@ const sd=a=>{ if(a.length<2) return 0; const m=mean(a); return Math.sqrt(a.reduc
 const pctile=(a,p)=>{ if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y); return s[Math.min(s.length-1,Math.max(0,Math.round(p*(s.length-1))))]; };
 const median=a=>pctile(a,0.5);
 const uniq=a=>a.filter((v,i,x)=>x.indexOf(v)===i);
+const plural=(n,one,many)=>n+" "+(n===1?one:(many||one+"s"));
 
 /* ============================================================
    Formatters + calendar
@@ -659,13 +660,13 @@ const DESKS=[
   {id:"D1", name:"G10 FX Spot & Forwards", region:"Singapore", short:"G10 FX", w:16,
    mandate:["FX Spot","FX Forward","FX Swap"]},
   {id:"D2", name:"Asia EM FX & NDF", region:"Singapore", short:"EM FX/NDF", w:13,
-   mandate:["FX Spot","FX Forward","FX Swap","NDF"]},
+   mandate:["NDF","FX Spot","FX Forward","FX Swap"]},
   {id:"D3", name:"FX Options & Exotics", region:"Hong Kong", short:"FX Options", w:11,
    mandate:["FX Vanilla Option","FX Barrier Option","FX Digital Option","FX Accumulator","FX Variance Swap"]},
   {id:"D4", name:"FX Futures & Algo Execution", region:"London", short:"FX Futures", w:8,
    mandate:["FX Futures","FX Spot","FX Swap"]},
   {id:"D5", name:"G10 Rates Swaps", region:"London", short:"G10 Rates", w:10,
-   mandate:["IRS","OIS","FRA","Swaption"]},
+   mandate:["IRS","OIS","Swaption","FRA"]},
   {id:"D6", name:"Asia Rates & Cross-Currency", region:"Singapore", short:"Asia Rates/CCS", w:9,
    mandate:["IRS","CCS","Cross-Ccy Basis Swap","OIS"]},
   {id:"D7", name:"Inflation & Structured Rates", region:"London", short:"Structured Rates", w:5,
@@ -677,9 +678,9 @@ const DESKS=[
   {id:"D10",name:"Bonds Repo & Financing", region:"Singapore", short:"Repo/Financing", w:8,
    mandate:["Repo","Reverse Repo","Govt Bond","Bond Forward"]},
   {id:"D11",name:"Equity Derivatives", region:"Hong Kong", short:"Equity Derivs", w:8,
-   mandate:["Equity Option","Equity Swap","Variance Swap","Equity Index Future"]},
+   mandate:["Equity Option","Equity Index Future","Equity Swap","Variance Swap"]},
   {id:"D12",name:"Structured Products", region:"Singapore", short:"Structured", w:4,
-   mandate:["FX Accumulator","Equity Swap","Cap/Floor","FX Digital Option"]},
+   mandate:["FX Accumulator","FX Digital Option","Equity Swap","Cap/Floor"]},
 ];
 const DESK_BY_ID={}; DESKS.forEach(d=>DESK_BY_ID[d.id]=d);
 
@@ -738,12 +739,16 @@ TRADERS.forEach((t,i)=>{
    around these, and distance from them is what the off-market rules measure,
    so the reference belongs in the data model, not in the detector.
 ============================================================ */
+/* pair, reference level, and a volatility multiplier — the HKD is pegged inside
+   a 7.75–7.85 band and the CNH is managed, so neither can be walked like a free
+   float without producing a level that would never print. */
 const CCY_PAIRS=[
-  ["EUR/USD",1.0842,0.00035],["USD/JPY",152.35,0.045],["GBP/USD",1.2715,0.00040],
-  ["AUD/USD",0.6612,0.00030],["USD/CHF",0.8925,0.00032],["NZD/USD",0.6035,0.00035],
-  ["USD/CAD",1.3585,0.00040],["EUR/JPY",165.20,0.055],["USD/SGD",1.3405,0.00030],
-  ["USD/HKD",7.8100,0.0012],["USD/CNH",7.2380,0.0022],
+  ["EUR/USD",1.0842,1.00],["USD/JPY",152.35,1.05],["GBP/USD",1.2715,1.05],
+  ["AUD/USD",0.6612,1.15],["USD/CHF",0.8925,0.95],["NZD/USD",0.6035,1.20],
+  ["USD/CAD",1.3585,0.85],["EUR/JPY",165.20,1.10],["USD/SGD",1.3405,0.60],
+  ["USD/HKD",7.8100,0.05],["USD/CNH",7.2380,0.40],
 ];
+const NDF_VOL={"USD/KRW":1.15,"USD/TWD":0.55,"USD/IDR":0.85,"USD/INR":0.45,"USD/PHP":0.60,"USD/CNY":0.30};
 const NDF_PAIRS=[
   ["USD/KRW",1338.5,0.85],["USD/TWD",32.352,0.020],["USD/IDR",15720,9.5],
   ["USD/INR",83.552,0.028],["USD/PHP",57.205,0.038],["USD/CNY",7.2415,0.0025],
@@ -845,6 +850,15 @@ const PRODUCTS=[
   {p:"Total Return Swap",   ac:"Credit Derivatives",        fam:"trs",   med:14, sig:1.00, tenors:["1Y","3Y","5Y"]},
 ];
 const PROD_BY_NAME={}; PRODUCTS.forEach(p=>PROD_BY_NAME[p.p]=p);
+/* The longest maturity each product is actually written to. A 25-year FX
+   forward and a 40-year equity swap are not long-dated trades, they are data
+   errors — so only the products below can carry a tenor-cap breach. */
+const MAX_YEARS={"IRS":50,"CCS":30,"Cross-Ccy Basis Swap":30,"Inflation Swap":50,
+  "Cap/Floor":30,"Govt Bond":50,"Corp Bond":30,"CDS Single Name":10,"Total Return Swap":10};
+/* Products whose price comes out of a model rather than off a screen. Only
+   these can carry a day-one P&L argument; a spot deal is marked within seconds. */
+const MODELLED=["FX Barrier Option","FX Digital Option","FX Accumulator","FX Variance Swap",
+  "Swaption","Cap/Floor","Inflation Swap","Cross-Ccy Basis Swap","Variance Swap","Equity Swap","Total Return Swap"];
 const ASSET_CLASSES=[];
 PRODUCTS.forEach(p=>{ if(ASSET_CLASSES.indexOf(p.ac)<0) ASSET_CLASSES.push(p.ac); });
 const AC_COLOR={
@@ -874,9 +888,17 @@ TRADERS.forEach(t=>{
   t.ticketLimit=niceLimit(scale*g.tk);
   t.posLimit=niceLimit(t.ticketLimit*g.pos);
   t.tenorYrs=g.tenor; t.ctpyCap=g.ctpy;
-  // An associate is signed off for part of the desk's list, never all of it.
-  t.products=t.grade==="Associate"?d.mandate.slice(0,Math.max(2,d.mandate.length-2))
-            :t.grade==="Senior"?d.mandate.slice(0,Math.max(3,d.mandate.length-1)):d.mandate.slice();
+  /* An associate is signed off for part of the desk's list, never all of it —
+     but the part has to move. Taking the first N of the mandate for everybody
+     leaves whatever sits at the end untraded across the whole floor, which is
+     how a desk named for NDFs ends up barely booking one. A sliding window over
+     the mandate covers every product while still narrowing with seniority. */
+  const per=t.grade==="Executive Director"?d.mandate.length
+           :t.grade==="Senior"?Math.max(3,Math.ceil(d.mandate.length*0.72))
+           :Math.max(2,Math.ceil(d.mandate.length*0.52));
+  const off=d.traders.indexOf(t)*2, out=[];
+  for(let k=0;k<per;k++) out.push(d.mandate[(off+k)%d.mandate.length]);
+  t.products=uniq(out);
   // Each trader faces their own handful of counterparties. A floor-wide list
   // makes concentration meaningless: nobody deals with forty names, and the
   // rule that asks "who is this trader's flow going to?" needs a real answer.
@@ -917,14 +939,6 @@ TRADERS.forEach(t=>{
 });
 const COHORT_KEYS=Object.keys(COHORTS);
 
-/* ============================================================
-   Instrument pricing
-   Each product family has its own quoting convention, and "how far off market
-   is this?" only means something inside that convention: an FX rate deviates in
-   basis points of the rate, an IRS in basis points of yield, a CDS in spread
-   basis points outright. devBps normalises all of them onto one scale so a
-   single off-market rule can span the whole book.
-============================================================ */
 /* Structure names per option product, so the instrument on the ticket is one
    the product could actually be. */
 const STRUCTURES={
@@ -936,38 +950,187 @@ const STRUCTURES={
   "Equity Option":["call","put","collar","risk reversal"],
   "Variance Swap":["variance swap","volatility swap"],
 };
-function instrumentFor(prod){
-  const f=PROD_BY_NAME[prod].fam;
-  switch(f){
-    case "fx": {
-      if(prod==="FX Futures"){ const c=choice(CCY_PAIRS); return {name:c[0]+" future",mid:c[1],sd:c[2],unit:"rate",dp:c[1]>50?3:5}; }
-      const c=choice(CCY_PAIRS); return {name:c[0],mid:c[1],sd:c[2],unit:"rate",dp:c[1]>50?3:5};
-    }
-    case "ndf": { const c=choice(NDF_PAIRS); return {name:c[0]+" NDF",mid:c[1],sd:c[2],unit:"rate",dp:c[1]>500?2:c[1]>50?3:4}; }
-    case "fxopt": {
-      const c=choice(CCY_PAIRS.concat(NDF_PAIRS));
-      // Premium is quoted in % of notional; the vol used to price it is the
-      // number that gets manipulated, so it is carried alongside. The structure
-      // name has to belong to the product — a variance swap is not a one-touch.
-      const vol=rand(5.2,12.8);
-      return {name:c[0]+" "+choice(STRUCTURES[prod]||STRUCTURES["FX Vanilla Option"]),
-              mid:rand(0.35,3.1),sd:0.045,unit:"% prem",dp:3,vol:vol,volSd:0.18};
-    }
-    case "rate": { const c=choice(RATE_CCY); return {name:c[0]+" "+prod,mid:c[1]+rand(-0.35,0.35),sd:0.012,unit:"%",dp:4}; }
-    case "bondg": { const c=choice(GOVT_ISSUERS); return {name:c[0]+" "+choice(["2Y","5Y","10Y","30Y"]),mid:rand(96.4,104.2),sd:0.055,unit:"px",dp:3}; }
-    case "bondc": { const c=choice(CORP_ISSUERS); return {name:c[0],rating:c[1],mid:rand(88.5,106.5),sd:0.13,unit:"px",dp:3}; }
-    case "repo": { const c=choice(RATE_CCY); const g=choice(GOVT_ISSUERS);
-      return {name:c[0]+" repo vs "+g[0],mid:c[1]-rand(0.02,0.16),sd:0.008,unit:"%",dp:4,collateral:g[0]}; }
-    case "eqopt": { const e=choice(EQ_UNDERLYINGS); const vol=rand(16,42);
-      return {name:e[0]+" ("+e[1]+") "+choice(STRUCTURES[prod]||STRUCTURES["Equity Option"]),
-              mid:rand(1.2,9.6),sd:0.06,unit:"prem",dp:3,vol:vol,volSd:0.55}; }
-    case "eq": { const useIdx=rng()<0.45; const e=useIdx?choice(EQ_INDICES):choice(EQ_UNDERLYINGS)[0];
-      return {name:e,mid:useIdx?rand(3200,26800):rand(4.2,182),sd:0.0009,unit:"px",dp:3}; }
-    case "cds": { const c=choice(CDS_NAMES); return {name:c[0]+" 5Y CDS",rating:c[1],mid:rand(58,470),sd:2.2,unit:"bps",dp:1}; }
-    case "cdsi": { const c=choice(CDS_INDICES); return {name:c,mid:rand(52,118),sd:0.8,unit:"bps",dp:2}; }
-    case "trs": { const c=choice(CORP_ISSUERS); return {name:"TRS on "+c[0],rating:c[1],mid:rand(85,320),sd:1.6,unit:"bps",dp:1}; }
+/* ============================================================
+   Market data — one instrument universe, one price path each
+   An instrument exists once and carries a seeded daily mid for the whole year,
+   so two deals in the same name on the same day are measured against the same
+   mark. That is what makes "22 bps off mid" a statement about the trade rather
+   than about the random number generator, and it is what lets the alert drawer
+   plot the market the trade was struck into.
+
+   Every family also declares its own dealing spread and its own materiality
+   floor, because "off market" is not one number across a book: half a basis
+   point is a wide market in EUR/USD spot and invisible in a high-yield bond.
+============================================================ */
+const FAM_MKT={
+  /* spread  — typical half-spread on the devBps scale
+     omFloor — the deviation at which a print is material; 0 means the family is
+               not price-tested, because its economics live in the volatility
+     bpW     — what one bp on the devBps scale is worth in bps of notional. A bp
+               of an FX rate is a bp of the deal; a bp of swap yield is worth
+               roughly four and a half at typical duration; a bp of overnight
+               repo rate a fifth; and a bp of an option premium quoted at about
+               1.5% of notional, a sixty-sixth. Without this the option book
+               prints P&L two orders of magnitude too large.
+     noiseBps— ordinary mark movement on a ticket, in bps of notional */
+  fx:   {spread:0.55, omFloor:22, volPct:0.0040, bpW:1.0,   noiseBps:3.4},
+  ndf:  {spread:4.20, omFloor:38, volPct:0.0055, bpW:1.0,   noiseBps:4.2},
+  fxopt:{spread:170,  omFloor:0,  volPct:0.0190, bpW:0.015, noiseBps:8.5},
+  rate: {spread:0.45, omFloor:6,  volAbs:0.028,  bpW:4.5,   noiseBps:3.6},
+  bondg:{spread:1.10, omFloor:14, volAbs:0.21,   bpW:1.0,   noiseBps:2.9},
+  bondc:{spread:20,   omFloor:60, volAbs:0.33,   bpW:1.0,   noiseBps:6.0},
+  repo: {spread:1.60, omFloor:12, volAbs:0.010,  bpW:0.2,   noiseBps:0.62},
+  eqopt:{spread:210,  omFloor:0,  volPct:0.0280, bpW:0.015, noiseBps:10.5},
+  eq:   {spread:3.20, omFloor:30, volPct:0.0110, bpW:1.0,   noiseBps:5.2},
+  cds:  {spread:3.50, omFloor:25, volAbs:4.0,    bpW:4.5,   noiseBps:5.4},
+  cdsi: {spread:0.50, omFloor:4,  volAbs:0.85,   bpW:4.5,   noiseBps:3.4},
+  trs:  {spread:4.50, omFloor:28, volAbs:2.9,    bpW:4.5,   noiseBps:5.8},
+};
+/* The value of a deviation, in $k. One bp of notional on $1m is $100, so this is
+   arithmetic an officer can redo by hand off the evidence: 200 bps off mid on
+   $60m of FX is $1.2m, and the alert says exactly that. */
+const bpValue=(fam,notionalM,bps)=>+(notionalM*0.1*Math.abs(bps)*FAM_MKT[fam].bpW).toFixed(1);
+/* Deterministic bell-shaped noise from a coordinate triple. The intraday path
+   has to be reproducible without storing a value per minute per instrument. */
+function hashUnit(a,b,c){
+  let h=Math.imul((a*2654435761)^(b*40503)^(c*2246822519),2654435761);
+  h^=h>>>15; h=Math.imul(h,2246822507); h^=h>>>13; h=Math.imul(h,3266489909); h^=h>>>16;
+  return (h>>>0)/4294967296;
+}
+const hashNoise=(a,b,c)=>hashUnit(a,b,c)+hashUnit(a+7919,b,c)+hashUnit(a,b+104729,c)-1.5;
+
+let _instIdx=0;
+/* One seeded path per instrument: a random walk pulled gently back to its
+   reference, so a year of trading drifts like a market instead of wandering
+   off to a level nobody would quote. */
+function makeInstrument(o){
+  const fam=FAM_MKT[o.fam];
+  const dv=(fam.volAbs!=null?fam.volAbs:o.ref*fam.volPct)*(o.volMult==null?1:o.volMult);
+  const inst={i:++_instIdx, key:o.key||o.name, name:o.name, fam:o.fam, unit:o.unit, dp:o.dp,
+    ref:o.ref, dv, spreadBps:fam.spread*rand(0.75,1.35), omFloor:fam.omFloor,
+    rating:o.rating||"", collateral:o.collateral||"", tenors:o.tenors||null, path:new Array(DAYS)};
+  let x=o.ref;
+  const floor=o.floor!=null?o.floor:(o.unit==="bps"||o.unit==="%"?o.ref*0.25:o.ref*0.55);
+  for(let d=0;d<DAYS;d++){
+    x+=(rng()+rng()+rng()-1.5)*2*dv-(x-o.ref)*0.013;
+    if(x<floor) x=floor+(floor-x)*0.4;
+    inst.path[d]=x;
   }
-  return {name:prod,mid:100,sd:0.1,unit:"px",dp:3};
+  if(o.volRef!=null){
+    // Implied volatility walks on its own, so an option's premium and the
+    // surface it is checked against move together rather than independently.
+    inst.volRef=o.volRef; inst.volPath=new Array(DAYS);
+    let v=o.volRef;
+    for(let d=0;d<DAYS;d++){ v+=(rng()+rng()+rng()-1.5)*2*o.volDv-(v-o.volRef)*0.02; inst.volPath[d]=Math.max(o.volRef*0.35,v); }
+  }
+  return inst;
+}
+/* The mid at a moment. The session runs from yesterday's close to today's, and
+   in between it walks: a Brownian bridge pinned at both ends, so the day has a
+   real high and a real low without the close drifting away from the daily path.
+   Independent noise per bucket would draw a sawtooth no market ever printed. */
+const SESSION_OPEN=420, SESSION_CLOSE=1140, SESSION_BUCKETS=145;
+const _bridge=new Map();
+function dayBridge(inst,d){
+  const k=inst.i+"|"+d;
+  let w=_bridge.get(k);
+  if(w) return w;
+  w=new Array(SESSION_BUCKETS); let acc=0;
+  for(let b=0;b<SESSION_BUCKETS;b++){ acc+=hashNoise(inst.i,d,b); w[b]=acc; }
+  const end=w[SESSION_BUCKETS-1];
+  for(let b=0;b<SESSION_BUCKETS;b++) w[b]=(w[b]-end*b/(SESSION_BUCKETS-1))*inst.dv*0.16;
+  _bridge.set(k,w);
+  return w;
+}
+function midAt(inst,day,min){
+  const d=Math.max(0,Math.min(DAYS-1,day));
+  const m=min==null?SESSION_CLOSE:min;
+  const prev=inst.path[Math.max(0,d-1)], close=inst.path[d];
+  const f=Math.max(0,Math.min(1,(m-SESSION_OPEN)/(SESSION_CLOSE-SESSION_OPEN)));
+  const b=Math.max(0,Math.min(SESSION_BUCKETS-1,Math.round((m-SESSION_OPEN)/5)));
+  return prev+(close-prev)*f+dayBridge(inst,d)[b];
+}
+function volAt(inst,day){
+  if(!inst.volPath) return null;
+  return inst.volPath[Math.max(0,Math.min(DAYS-1,day))];
+}
+/* The session's own high and low, sampled at the five-minute grid the intraday
+   noise is defined on. */
+function dayRange(inst,day){
+  let lo=Infinity,hi=-Infinity;
+  for(let m=SESSION_OPEN;m<=SESSION_CLOSE;m+=5){ const v=midAt(inst,day,m); if(v<lo)lo=v; if(v>hi)hi=v; }
+  return {lo,hi};
+}
+/* Materiality: eight times the instrument's own dealing spread, never below the
+   family floor. A rule that says "25 bps" for every product on the book is a
+   rule that cannot fire on a corporate bond and cannot stop firing on a CDS
+   index — the threshold has to come from the instrument. */
+const omThreshold=inst=>Math.max(inst.omFloor,inst.spreadBps*8);
+/* How far the market itself moved between two moments, in bps. Every rule that
+   claims a benchmark moved, a close was pushed or a burst walked the level has
+   to read that claim off the same path the alert chart draws — otherwise the
+   evidence and the picture disagree in front of the officer. */
+function mktMove(inst,day,fromMin,toMin){
+  const a=midAt(inst,day,fromMin), b=midAt(inst,day,toMin);
+  return devBpsOf(inst.unit,b,a);
+}
+const priceTested=inst=>inst.omFloor>0;
+
+const INSTRUMENTS=[];
+const INST_BY_KEY={};
+const INST_BY_FAM={};
+function addInstrument(o){
+  const inst=makeInstrument(o);
+  INSTRUMENTS.push(inst); INST_BY_KEY[inst.key]=inst;
+  (INST_BY_FAM[inst.fam]=INST_BY_FAM[inst.fam]||[]).push(inst);
+  return inst;
+}
+(function buildUniverse(){
+  const fxDp=r=>r>500?2:r>50?3:5;
+  CCY_PAIRS.forEach(c=>addInstrument({fam:"fx",name:c[0],ref:c[1],unit:"rate",dp:fxDp(c[1]),volMult:c[2]}));
+  CCY_PAIRS.forEach(c=>addInstrument({fam:"fx",key:c[0]+" future",name:c[0]+" future",ref:c[1],unit:"rate",dp:fxDp(c[1]),volMult:c[2]}));
+  NDF_PAIRS.forEach(c=>addInstrument({fam:"ndf",name:c[0]+" NDF",ref:c[1],unit:"rate",dp:fxDp(c[1]),volMult:NDF_VOL[c[0]]||1}));
+  // One vol surface per pair; the premium walks with it.
+  CCY_PAIRS.concat(NDF_PAIRS).forEach(c=>addInstrument({fam:"fxopt",key:c[0]+" vol",name:c[0],
+    ref:rand(0.42,2.9),unit:"% prem",dp:3,volRef:rand(5.4,12.6),volDv:0.14}));
+  RATE_CCY.forEach(c=>["IRS","OIS","FRA","Swaption","Cap/Floor","Inflation Swap","CCS","Cross-Ccy Basis Swap"].forEach(p=>
+    addInstrument({fam:"rate",key:c[0]+" "+p,name:c[0]+" "+p,ref:c[1]+rand(-0.3,0.3),unit:"%",dp:4})));
+  GOVT_ISSUERS.forEach(g=>["2Y","5Y","10Y","30Y"].forEach(t=>
+    addInstrument({fam:"bondg",key:g[0]+" "+t,name:g[0]+" "+t,ref:rand(96.6,104.1),unit:"px",dp:3,tenors:[t]})));
+  CORP_ISSUERS.forEach(c=>addInstrument({fam:"bondc",name:c[0],ref:rand(88.6,106.4),unit:"px",dp:3,rating:c[1]}));
+  RATE_CCY.forEach(c=>{ const g=choice(GOVT_ISSUERS);
+    addInstrument({fam:"repo",key:c[0]+" repo vs "+g[0],name:c[0]+" repo vs "+g[0],ref:c[1]-rand(0.03,0.15),unit:"%",dp:4,collateral:g[0]}); });
+  EQ_UNDERLYINGS.forEach(e=>addInstrument({fam:"eqopt",key:e[0]+" vol",name:e[0]+" ("+e[1]+")",
+    ref:rand(1.3,9.4),unit:"prem",dp:3,volRef:rand(17,41),volDv:0.55}));
+  EQ_UNDERLYINGS.forEach(e=>addInstrument({fam:"eq",key:e[0],name:e[0]+" ("+e[1]+")",ref:rand(4.4,178),unit:"px",dp:3}));
+  EQ_INDICES.forEach(x=>addInstrument({fam:"eq",key:x,name:x,ref:rand(3300,26600),unit:"px",dp:2}));
+  CDS_NAMES.forEach(c=>addInstrument({fam:"cds",key:c[0]+" 5Y CDS",name:c[0]+" 5Y CDS",ref:rand(62,455),unit:"bps",dp:1,rating:c[1]}));
+  CDS_INDICES.forEach(x=>addInstrument({fam:"cdsi",key:x,name:x,ref:rand(54,116),unit:"bps",dp:2}));
+  CORP_ISSUERS.forEach(c=>addInstrument({fam:"trs",key:"TRS on "+c[0],name:"TRS on "+c[0],ref:rand(88,315),unit:"bps",dp:1,rating:c[1]}));
+})();
+
+/* An instrument for a product: drawn from that product's family, with the
+   quoting label the product actually uses bolted on at trade time. */
+function instrumentFor(prod){
+  const fam=PROD_BY_NAME[prod].fam;
+  const pool=INST_BY_FAM[fam]||INSTRUMENTS;
+  if(fam==="fx") return choice(pool.filter(x=>prod==="FX Futures"?x.key.indexOf(" future")>0:x.key.indexOf(" future")<0));
+  if(fam==="rate") return choice(pool.filter(x=>x.key.indexOf(" "+prod)>0))||choice(pool);
+  return choice(pool);
+}
+/* The name that goes on the ticket. Options carry the structure; rates and repo
+   already carry their convention in the instrument key. */
+function instrumentLabel(inst,prod){
+  const s=STRUCTURES[prod];
+  return s?inst.name+" "+choice(s):inst.name;
+}
+/* The same label every time for a given instrument and product. A caller that
+   picked the instrument itself is building legs that have to match — an
+   offsetting pair whose two legs read "25d call" and "ATM straddle" is not a
+   pair, it is two different trades. */
+function stableLabel(inst,prod){
+  const s=STRUCTURES[prod];
+  return s?inst.name+" "+s[Math.floor(hashUnit(inst.i,prod.length,7)*s.length)%s.length]:inst.name;
 }
 /* One scale for every convention: rate/price families measure distance in bps of
    the level, yield/spread families in outright bps. */
@@ -975,13 +1138,45 @@ function devBpsOf(unit,px,mid){
   if(unit==="%"||unit==="bps") return (px-mid)*(unit==="%"?100:1);
   return mid?((px-mid)/Math.abs(mid))*10000:0;
 }
-function applyDev(t,bps){ // push a trade this many bps away from mid, keeping sign conventions
+/* Push a trade this many bps away from mid, keeping the sign convention — and
+   keeping the result quotable. A yield or a credit spread driven through zero
+   is not an aggressive print, it is a broken one. */
+function applyDev(t,bps){
   const u=t.unit, sgn=t.dir==="Buy"||t.dir==="Pay"||t.dir==="Borrow"?1:-1;
-  if(u==="%"||u==="bps") t.px=t.mktPx+(u==="%"?bps/100:bps)*sgn;
-  else t.px=t.mktPx*(1+bps/10000*sgn);
+  if(u==="%"||u==="bps"){
+    const step=(u==="%"?bps/100:bps)*sgn;
+    const lo=t.mktPx>0?t.mktPx*0.12:t.mktPx;
+    t.px=Math.max(lo,t.mktPx+step);
+  } else {
+    t.px=t.mktPx*(1+Math.max(-0.85,bps/10000*sgn));
+  }
   t.devBps=devBpsOf(u,t.px,t.mktPx);
   return t;
 }
+/* An off-market move sized for the instrument: a multiple of its materiality
+   threshold, never more than a sensible fraction of the level it is quoted at.
+   Eighty basis points is an aggressive print on a 400 bps credit and nonsense
+   on a 56 bps index. */
+function devFor(inst,mult){
+  // Premium-quoted names have no price floor to work from, so the move is sized
+  // off the premium's own spread instead.
+  if(inst.omFloor<=0) return inst.spreadBps*Math.max(1.2,mult*0.8);
+  const raw=omThreshold(inst)*mult;
+  // Six times the materiality floor is already a scandal; beyond that the print
+  // stops being off-market and starts being unquotable.
+  let cap=inst.omFloor*6;
+  if(inst.unit==="bps") cap=Math.min(cap,Math.abs(inst.ref)*0.55);
+  if(inst.unit==="%")   cap=Math.min(cap,Math.abs(inst.ref)*100*0.55);
+  return Math.min(raw,cap);
+}
+/* A planted deal is sized against the trader who booked it. Unless the rule is
+   itself about breaching an authorisation, nothing in the book should be a
+   ticket the trader could not have written. */
+function sizeFor(tr,lo,hi){
+  const b=BASE[tr.id];
+  return Math.min(tr.ticketLimit*0.97,Math.max(0.4,(b?b.medSize:8)*rand(lo,hi)));
+}
+
 /* A swap is paid or received and a repo is borrowed or lent — a planted pattern
    that says "Buy" on an IRS reads as a data error, not as a finding. */
 const DIR_WORDS={rate:["Pay","Receive"],repo:["Borrow","Lend"],dflt:["Buy","Sell"]};
@@ -1020,24 +1215,24 @@ function makeTrade(dayIdx,trader,prod,opts){
   const date=dateForIdx(dayIdx);
   const notional=opts.notional!=null?opts.notional:Math.max(0.4,lognorm(meta.med,meta.sig));
   const dir=opts.dir||dirFor(meta.fam);
-  // The mid drifts around the reference level, so two trades in the same
-  // instrument on the same day are not measured against an identical mark.
-  const mktPx=inst.unit==="%"||inst.unit==="bps"?inst.mid+rand(-1,1)*inst.sd*3:inst.mid*(1+rand(-1,1)*inst.sd*0.9);
-  // Ordinary execution sits within the bid/offer: a few tenths of a bp to a
-  // couple of bps away from mid, sign following the direction of the trade.
-  const spreadBps=opts.spreadBps!=null?opts.spreadBps:rand(0.1,2.4);
   const execMin=opts.execMin!=null?opts.execMin:execMinFor(desk);
+  // The market mid at the moment of execution, off the instrument's own path.
+  // Two deals in the same name in the same minute see the same mark.
+  const mktPx=midAt(inst,dayIdx,execMin);
+  // Ordinary execution sits inside that instrument's own bid/offer, sign
+  // following the direction of the trade — the desk earns the spread.
+  const spreadBps=opts.spreadBps!=null?opts.spreadBps:inst.spreadBps*rand(0.3,1.55);
   const lag=opts.captureLag!=null?opts.captureLag:weightedChoice([[rand(0,3),70],[rand(3,15),22],[rand(15,60),7],[rand(60,210),1]]);
   const ctpy=opts.ctpy||choice(trader.ctpys||COUNTERPARTIES);
   const t={
     id:tid(), dayIdx, date, dateStr:fmtDate(date), iso:isoDate(date),
     deskId:desk.id, deskName:desk.name, deskShort:desk.short, region:desk.region,
     traderId:trader.id, trader:trader.name, book:opts.book||trader.book,
-    product:prod, ac:meta.ac, fam:meta.fam, instrument:inst.name, rating:inst.rating||"",
+    product:prod, ac:meta.ac, fam:meta.fam, instKey:inst.key,
+    instrument:opts.label||(opts.inst?stableLabel(inst,prod):instrumentLabel(inst,prod)), rating:inst.rating||"",
     tenor:opts.tenor||choice(meta.tenors), notional, dir,
     unit:inst.unit, dp:inst.dp, mktPx, px:0, devBps:0,
-    vol:inst.vol!=null?+(inst.vol+rand(-0.3,0.3)).toFixed(2):null,
-    mktVol:inst.vol!=null?+inst.vol.toFixed(2):null,
+    vol:null, mktVol:null,
     ctpy:ctpy.name, ctpyType:ctpy.type, ctpyCountry:ctpy.country,
     channel:opts.channel||weightedChoice(CHANNELS), venue:opts.venue||choice(VENUES),
     execMin, captureLag:Math.round(lag),
@@ -1046,11 +1241,16 @@ function makeTrade(dayIdx,trader,prod,opts){
     valueDate:new Date(date.getTime()+(SETTLE_DAYS[prod]||90)*dayMs),
     flags:[], alerts:[],
   };
+  const sv=volAt(inst,dayIdx);
+  if(sv!=null){ t.mktVol=+sv.toFixed(2); t.vol=+(sv+rand(-0.28,0.28)).toFixed(2); }
   applyDev(t,spreadBps);
   if(opts.px!=null){ t.px=opts.px; t.devBps=devBpsOf(t.unit,t.px,t.mktPx); }
-  // P&L scales with size and with how far the fill sat from mid — a trade printed
-  // well away from market makes money for exactly one of the two sides.
-  t.pnl=opts.pnl!=null?opts.pnl:+(t.notional*rand(-2.4,2.9)+t.notional*Math.abs(t.devBps)*0.06).toFixed(1);
+  // P&L is the value captured against mid plus ordinary mark movement, both in
+  // bps of notional, so the number on the ticket reconciles to the deviation
+  // printed next to it.
+  const M=FAM_MKT[meta.fam];
+  t.pnl=opts.pnl!=null?opts.pnl
+    :+(t.notional*0.1*(Math.abs(t.devBps)*M.bpW+rand(-1,1)*M.noiseBps)).toFixed(1);
   const age=DAYS-1-dayIdx;
   t.status=opts.status||(rng()<0.014?"Amended":age>SETTLE_DAYS[prod]?"Settled":"Live");
   if(t.status==="Amended") t.amends=Math.max(1,t.amends);
@@ -1115,6 +1315,7 @@ const BASE={};
       pnlMean:mean(dayPnl), pnlSd:sd(dayPnl),
       lossDays:dayPnl.filter(v=>v<0).length/Math.max(1,dayPnl.length),
       amendRate:own.filter(x=>x.amends>0).length/Math.max(1,own.length),
+      amendsPerDeal:own.reduce((a,x)=>a+x.amends,0)/Math.max(1,own.length),
     };
   });
   // Cohort medians: what the same grade doing the same job looks like.
@@ -1126,6 +1327,7 @@ const BASE={};
              ctpyCount:median(ms.map(x=>BASE[x.id].ctpyCount)),
              topCtpyShare:median(ms.map(x=>BASE[x.id].topCtpyShare)),
              amendRate:median(ms.map(x=>BASE[x.id].amendRate)),
+             amendsPerDeal:median(ms.map(x=>BASE[x.id].amendsPerDeal)),
              lossDays:median(ms.map(x=>BASE[x.id].lossDays)),
              n:ms.length};
   });
@@ -1146,8 +1348,8 @@ const xBase=(v,b)=>(b>0?(v/b).toFixed(1):"—")+"×";
 const RULES=[
  {id:"TS-01",name:"Off-market rate execution",cat:"Pricing",sev:"High",fp:0.42,plants:60,actors:["T08","T23","T29"],
   desc:"A trade printed materially away from the prevailing market mid at the time of execution, in the trader's own favour.",
-  logic:"|traded px − market mid| > 25 bps AND notional > 3× this trader's own median ticket AND the sign favours the trader's own book",
-  base:"Market mid at execution; size scaled to the trader's own median ticket",
+  logic:"|traded px − market mid| > max(8 × the instrument's own dealing spread, the family floor) AND notional > 3× this trader's own median ticket AND the sign favours the trader's own book",
+  base:"The instrument's own spread and the trader's own median ticket",
   why:"Off-market prints move value between the bank and the counterparty. Repeated in one direction they are the standard mechanism for paying value away to a connected party, or for booking profit that has not been earned."},
  {id:"TS-02",name:"Late or backdated trade capture",cat:"Booking integrity",sev:"Medium",fp:0.68,plants:55,actors:["T08","T05"],
   desc:"Execution captured in the risk system long after the trade was struck, or booked with a prior-day trade date.",
@@ -1201,7 +1403,7 @@ const RULES=[
   why:"The client's own order pays for the profit. This is a direct breach of the duty of best execution and of the conflicts policy."},
  {id:"TS-12",name:"Intraday limit breach with end-of-day flattening",cat:"Limits & controls",sev:"High",fp:0.34,plants:30,actors:["T11","T05"],
   desc:"A position taken well beyond the trader's own limit during the session and closed before the end-of-day risk snapshot.",
-  logic:"peak intraday position > 130% of this trader's own position limit AND end-of-day position < 25% of it",
+  logic:"peak intraday position > 130% of this trader's own position limit, built from tickets that each stay inside their ticket authorisation, AND end-of-day position < 25% of the limit",
   base:"The trader's own position limit",
   why:"The snapshot the risk report is built from never sees the exposure. The bank carries risk it does not know it has."},
  {id:"TS-13",name:"P&L outlier versus own volatility",cat:"Valuation",sev:"High",fp:0.44,plants:35,actors:["T08","T11","T23"],
@@ -1216,13 +1418,13 @@ const RULES=[
   why:"Parking removes a loss from the reported book without removing it from the bank. It is concealment, not risk management."},
  {id:"TS-15",name:"Off-market volatility on FX options",cat:"Pricing",sev:"High",fp:0.31,plants:32,actors:["T08","T10"],
   desc:"An option priced with an implied volatility away from the official surface for that pair and tenor.",
-  logic:"|quoted vol − surface vol| > 2.0 vols on a notional > 2× this trader's median ticket",
-  base:"Official volatility surface; size scaled to the trader's own median ticket",
+  logic:"|quoted vol − the surface for that pair and tenor on the trade date| > 2.0 vols, on a notional > 2× this trader's median ticket",
+  base:"The published surface on the day; size scaled to the trader's own median ticket",
   why:"Volatility is the price in an options book. A vol away from the surface transfers value on day one and distorts every subsequent revaluation."},
  {id:"TS-16",name:"Internal transfer at an off-market price",cat:"Valuation",sev:"High",fp:0.29,plants:24,actors:["T29","T08"],
   desc:"An internal booking out of the trader's own book into another of the bank's books, priced away from the market.",
-  logic:"internal counterparty AND |px − mid| > 15 bps AND P&L effect > $150k",
-  base:"Market mid on the trader's own transfer",
+  logic:"internal counterparty AND |px − mid| > 60% of the instrument's external materiality threshold AND P&L effect > $150k",
+  base:"The instrument's own spread, tightened because an internal price faces no counterparty",
   why:"No external counterparty means no market discipline on the price. Value simply moves between books — and between the people paid on them."},
  {id:"TS-17",name:"Settlement instruction changed after execution",cat:"Settlement",sev:"Critical",fp:0.27,plants:26,actors:["T23","T05"],
   desc:"Standing settlement instructions amended after the trade was struck, redirecting the payment.",
@@ -1307,8 +1509,8 @@ const RULES=[
   why:"The closing level marks the book. Volume placed to set it, rather than to trade at it, is a valuation decision dressed as execution."},
  {id:"TS-33",name:"Client cross at an off-market price",cat:"Market conduct",sev:"High",fp:0.32,plants:16,actors:["T29","T23"],
   desc:"Two client orders crossed by the same trader at a level that favours one side.",
-  logic:"matched buy and sell with two client counterparties within 5 min, crossed >10 bps away from mid",
-  base:"Market mid on the trader's own matched pair",
+  logic:"matched buy and sell with two client counterparties within 5 min, crossed further from mid than 45% of the instrument's materiality threshold",
+  base:"The instrument's own spread, on the trader's own matched pair",
   why:"A cross is legitimate. A cross away from mid takes value from one client and hands it to another, with the trader choosing which."},
  {id:"TS-34",name:"Threshold gaming",cat:"Limits & controls",sev:"High",fp:0.30,plants:20,actors:["T26","T05"],
   desc:"Ticket sizes and deviations that sit persistently just inside this trader's own alerting thresholds.",
@@ -1317,7 +1519,7 @@ const RULES=[
   why:"Sitting just under a limit once is coincidence. Doing it ten times means the limit is known and is being worked to."},
  {id:"TS-35",name:"Tenor beyond the trader's cap",cat:"Limits & controls",sev:"Medium",fp:0.44,plants:16,actors:["T20","T33"],
   desc:"A trade struck with a maturity longer than this trader is individually approved to write.",
-  logic:"trade tenor > this trader's own approved maximum tenor AND no exception on file",
+  logic:"trade maturity, in years, > this trader's own approved maximum tenor AND no exception on file",
   base:"The trader's own tenor authorisation",
   why:"Long-dated risk outlives the person who wrote it. Tenor authority is granted individually precisely because experience is individual."},
  {id:"TS-36",name:"First trade in a product, at size",cat:"Limits & controls",sev:"Medium",fp:0.46,plants:18,actors:["T33","T20","T29"],
@@ -1337,13 +1539,13 @@ const RULES=[
   why:"Pooled at desk level this disappears entirely. Against the individual's own week it is the clearest signal there is that something changed."},
  {id:"TS-39",name:"Implausibly smooth P&L",cat:"Valuation",sev:"High",fp:0.26,plants:14,actors:["T08","T05"],
   desc:"A run of trading days with almost no losing sessions, against a book whose risk should produce them.",
-  logic:"loss days < 10% over 40 business days where this trader's own 12-month rate is above 30%",
+  logic:"losing days over 40 business days < a third of this trader's own 12-month loss-day rate",
   base:"The trader's own loss-day frequency",
   why:"Markets produce losing days. A book that stops producing them has usually stopped being marked, not stopped being wrong."},
  {id:"TS-40",name:"Day-one P&L beyond model tolerance",cat:"Valuation",sev:"High",fp:0.33,plants:16,actors:["T08","T10"],
   desc:"A structured trade booking day-one profit well beyond the tolerance for its model and inputs.",
-  logic:"day-one P&L > 2.5% of notional on a model-priced structure",
-  base:"Model tolerance for the structure",
+  logic:"day-one P&L > 2.5% of notional on a model-priced structure (barriers, digitals, accumulators, variance, swaptions, basis and total-return swaps)",
+  base:"The day-one tolerance for that structure",
   why:"Day-one profit is an assertion about inputs nobody else can see. Beyond tolerance it is a valuation choice, and it is recognised immediately."},
  {id:"TS-41",name:"Give-back after a valuation date",cat:"Valuation",sev:"Critical",fp:0.21,plants:16,actors:["T08","T11"],
   desc:"Losses printed in the first days of the new period that reverse a gain this trader reported at the period end.",
@@ -1431,6 +1633,15 @@ const MONTH_END_REV=MONTH_END.filter(d=>BIZ_DAYS.indexOf(d)<BIZ_DAYS.length-11);
    Alert construction
 ============================================================ */
 const ALERTS=[];
+/* An actor who could actually run this pattern: a rule about structured
+   day-one P&L needs somebody with a structured book, and a rule about repo
+   needs somebody in financing. Falling back to whoever came up first is how a
+   financing desk ends up booking a barrier option at its repo ticket limit. */
+function pickActorWith(rule,ok){
+  for(let i=0;i<40;i++){ const t=pickActor(rule); if(ok(t)) return t; }
+  const all=TRADERS.filter(ok);
+  return all.length?weightedChoice(all.map(t=>[t,0.25+t.risk])):pickActor(rule);
+}
 function pickActor(rule){
   // Storylines carry most of the weight, so the same handful of traders recur
   // across related rules — that is the pattern an officer is meant to spot.
@@ -1481,6 +1692,7 @@ function mkAlert(rule,day,trader,trades,ev,summary,opts){
   return a;
 }
 const ev=(k,v,bad)=>({k,v,bad:!!bad});
+const fmt2=(v,dp)=>v.toFixed(dp);
 const px=t=>t.px.toFixed(t.dp)+(t.unit==="%"?"%":t.unit==="bps"?" bps":t.unit==="% prem"?"%":"");
 const mkt=t=>t.mktPx.toFixed(t.dp)+(t.unit==="%"?"%":t.unit==="bps"?" bps":t.unit==="% prem"?"%":"");
 
@@ -1493,26 +1705,33 @@ const PLANT={};
 
 PLANT["TS-01"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const t=ensureTrades(tr,day,1)[0];
-  const bps=rand(28,240);
-  t.notional=Math.max(t.notional,b.medSize*rand(3.2,9));
-  applyDev(t,bps);
-  t.pnl=+(t.notional*bps*rand(0.05,0.11)).toFixed(1);
+  // Only a cash-priced instrument can be tested this way. An option's value
+  // lives in its volatility, which is what TS-15 measures instead.
+  const cash=tr.products.filter(x=>FAM_MKT[PROD_BY_NAME[x].fam].omFloor>0);
+  const prod=cash.length?choice(cash):"FX Spot";
+  const inst=instrumentFor(prod);
+  const thr=omThreshold(inst);
+  // This rule is partly about size, so the ticket is allowed past the trader's
+  // authorisation — and the evidence says so when it is.
+  const t=makeTrade(day,tr,prod,{inst,notional:Math.max(0.4,trBase(tr).medSize*rand(3.2,9))});
+  applyDev(t,devFor(inst,rand(1.15,7.5)));
+  t.pnl=bpValue(t.fam,t.notional,t.devBps);
   if(rng()<0.3){ const rp=choice(Object.keys(RELATED_PARTIES)); t.ctpy=rp; t.ctpyType="Private Client"; }
   const related=RELATED_PARTIES[t.ctpy];
   return mkAlert(rule,day,tr,[t],[
     ev("Product / instrument",t.product+" · "+t.instrument),
     ev("Traded price",px(t),true), ev("Market mid at execution",mkt(t)),
     ev("Deviation",Math.abs(t.devBps).toFixed(1)+" bps ("+(t.devBps>0?"above":"below")+" mid)",true),
-    ev("Rule threshold","25.0 bps"),
+    ev("Normal dealing spread in this name",inst.spreadBps.toFixed(2)+" bps — the print is "+(Math.abs(t.devBps)/inst.spreadBps).toFixed(0)+"× it",true),
+    ev("Materiality threshold",thr.toFixed(1)+" bps — 8× the spread, floored at "+inst.omFloor+" bps for "+t.ac),
     ev("Notional",fmtM(t.notional),true),
     ev("This trader's median ticket",fmtM(b.medSize)+" — deal is "+xBase(t.notional,b.medSize)+" their own normal size",true),
     ev("This trader's ticket authorisation",fmtM(tr.ticketLimit)+(t.notional>tr.ticketLimit?" — exceeded, "+xBase(t.notional,tr.ticketLimit):" — within authority"),t.notional>tr.ticketLimit),
     ev("Counterparty",t.ctpy+" · "+t.ctpyType),
     ev("Booking P&L effect",fmtK(t.pnl),true),
     ev("Related-party register",related?"MATCH — "+related:"No match",!!related),
-  ],"Trade printed "+Math.abs(t.devBps).toFixed(0)+" bps away from mid on "+fmtM(t.notional)+" of "+t.product+" — "+xBase(t.notional,b.medSize)+" this trader's median ticket",
-  {sev:related?"Critical":Math.abs(t.devBps)>120?"Critical":"High",scoreAdj:related?9:0});
+  ],"Trade printed "+Math.abs(t.devBps).toFixed(0)+" bps off mid in "+t.instrument+" — "+(Math.abs(t.devBps)/thr).toFixed(1)+"× the materiality threshold for that name, on "+fmtM(t.notional),
+  {sev:related?"Critical":Math.abs(t.devBps)>thr*4?"Critical":"High",scoreAdj:related?9:0});
 };
 
 PLANT["TS-02"]=function(rule){
@@ -1545,28 +1764,28 @@ PLANT["TS-03"]=function(rule){
     if(i>0&&rng()<0.5){ t.cancelled=true; t.status="Cancelled"; cancels++; }
     else t.status="Amended";
   });
-  const sessionRate=amends/ts.length, ownRate=Math.max(0.04,b.amendRate);
+  const sessionRate=amends/ts.length, ownRate=Math.max(0.05,b.amendsPerDeal);
   return mkAlert(rule,day,tr,ts,[
     ev("Deals touched",String(ts.length)),
     ev("Total amendments",String(amends),true),
     ev("Cancel & rebook events",String(cancels),cancels>0),
     ev("Amendments per deal this session",sessionRate.toFixed(1),true),
     ev("This trader's own 12-month rate",ownRate.toFixed(2)+" per deal — session runs at "+xBase(sessionRate,ownRate),true),
-    ev("Peer cohort ("+tr.cohort+")",Math.max(0.03,b.cohort.amendRate).toFixed(2)+" per deal"),
+    ev("Peer cohort ("+tr.cohort+")",Math.max(0.03,b.cohort.amendsPerDeal).toFixed(2)+" per deal"),
     ev("Rule threshold","3 amendments on one deal, or 4× the trader's own rate"),
     ev("Largest amended ticket",fmtM(Math.max.apply(null,ts.map(t=>t.notional)))),
     ev("Amended after value date",rng()<0.4?"Yes — 1 deal":"No",rng()<0.4),
-  ],amends+" amendments and "+cancels+" cancellations in one session — "+xBase(sessionRate,ownRate)+" this trader's own rate",
+  ],plural(amends,"amendment")+" and "+plural(cancels,"cancellation")+" in one session — "+xBase(sessionRate,ownRate)+" this trader's own rate",
   {sev:amends>18?"High":"Medium"});
 };
 
 PLANT["TS-04"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted();
   const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
-  const notional=rand(12,140), ctpy=rng()<0.35?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
+  const notional=sizeFor(tr,1.4,6.5), ctpy=rng()<0.35?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
   const m1=execMinFor(desk), gap=randInt(3,52);
   const L=longDir(prod);
-  const a=makeTrade(day,tr,prod,{inst,notional,dir:L,ctpy,execMin:m1,pnl:+(notional*rand(0.4,1.1)).toFixed(1)});
+  const a=makeTrade(day,tr,prod,{inst,notional,dir:L,ctpy,execMin:m1,pnl:bpValue(PROD_BY_NAME[prod].fam,notional,rand(4,11))});
   const b=makeTrade(day,tr,prod,{inst,notional:notional*rand(0.995,1.005),dir:oppDir(L),ctpy,execMin:m1+gap,pnl:0});
   b.pnl=+(-a.pnl+rand(-1.5,1.5)).toFixed(1);
   const net=+(a.pnl+b.pnl).toFixed(1);
@@ -1587,14 +1806,14 @@ PLANT["TS-04"]=function(rule){
 PLANT["TS-05"]=function(rule){
   const tr=pickActor(rule), day=pickDay(4,DAYS-8);
   const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
-  const notional=rand(40,320), hops=randInt(3,4), legs=[];
+  const notional=sizeFor(tr,2.2,7.5), hops=randInt(3,4), legs=[];
   const parties=shuffle(COUNTERPARTIES.filter(c=>c.type==="Broker"||c.type==="Bank")).slice(0,hops);
   for(let i=0;i<hops;i++){
     const d=Math.min(DAYS-1,day+i*randInt(1,2));
     legs.push(makeTrade(isBiz(dateForIdx(d))?d:day,tr,prod,{inst,notional:notional*rand(0.985,1.015),
       dir:i%2===0?shortDir(prod):longDir(prod),ctpy:parties[i%parties.length]}));
   }
-  const span=legs[legs.length-1].dayIdx-legs[0].dayIdx;
+  const span=Math.max(1,BIZ_DAYS.indexOf(legs[legs.length-1].dayIdx)-BIZ_DAYS.indexOf(legs[0].dayIdx));
   return mkAlert(rule,day,tr,legs,[
     ev("Instrument",prod+" · "+inst.name),
     ev("Chain length",hops+" legs",true),
@@ -1604,7 +1823,7 @@ PLANT["TS-05"]=function(rule){
     ev("Chain closed in",span+" business days",true),
     ev("Net position change","Nil",true),
     ev("Aggregate fees paid away",fmtK(rand(45,260))),
-  ],hops+"-leg round trip in "+inst.name+" closing within "+span+" days with no net position change");
+  ],hops+"-leg round trip in "+inst.name+" closing within "+plural(span,"business day")+" and no net position change");
 };
 
 PLANT["TS-06"]=function(rule){
@@ -1637,7 +1856,7 @@ PLANT["TS-07"]=function(rule){
   const offFloor=PRODUCTS.filter(p=>desk.mandate.indexOf(p.p)<0).map(p=>p.p);
   const deskApproved=deskOnly.length&&rng()<0.45;
   const prod=deskApproved?choice(deskOnly):choice(offFloor);
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(0.6,5.5)});
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,0.6,5.5)});
   return mkAlert(rule,day,tr,[t],[
     ev("Trader",tr.name+" · "+tr.grade+" · "+desk.name),
     ev("Product booked",prod+" ("+t.ac+")",true),
@@ -1660,7 +1879,7 @@ PLANT["TS-08"]=function(rule){
   else day=pickDayWeighted();
   const desk=DESK_BY_ID[tr.deskId], h=DESK_HOURS[desk.region], b=trBase(tr);
   const em=weekend?Math.round(rand(9,20)*60):(rng()<0.5?Math.round(rand(0,h[0]*60-95)):Math.round(rand(h[1]*60+95,1435)));
-  const t=makeTrade(day,tr,choice(tr.products),{execMin:em,notional:b.medSize*rand(0.5,7),captureLag:rand(5,90)});
+  const t=makeTrade(day,tr,choice(tr.products),{execMin:em,notional:sizeFor(tr,0.5,7),captureLag:rand(5,90)});
   const d=dateForIdx(day);
   // The trader's own working window, not the desk's — some names never book
   // before ten, and 07:20 for one of them is the finding.
@@ -1681,14 +1900,19 @@ PLANT["TS-08"]=function(rule){
 };
 
 PLANT["TS-09"]=function(rule){
-  const tr=pickActor(rule);
+  const tr=pickActor(rule), b=trBase(tr);
   const day=choice(MONTH_END_REV);
-  const ts=ensureTrades(tr,day,randInt(2,4));
+  // A mark is set on a price. An option book is marked on its surface, which is
+  // TS-15's test, so this rule stays on the cash-priced names.
+  const cash=tr.products.filter(x=>FAM_MKT[PROD_BY_NAME[x].fam].omFloor>0);
+  const prod=cash.length?choice(cash):"FX Spot";
+  const inst=instrumentFor(prod), n=randInt(2,4), ts=[];
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,1.2,5),dir:longDir(prod)}));
   let pnl=0;
-  ts.forEach(t=>{ applyDev(t,rand(22,95)); t.notional=Math.max(t.notional,rand(8,60)); t.pnl=+(t.notional*Math.abs(t.devBps)*0.075).toFixed(1); pnl+=t.pnl; });
+  ts.forEach(t=>{ applyDev(t,devFor(inst,rand(1.3,4.4))); t.pnl=bpValue(t.fam,t.notional,t.devBps); pnl+=t.pnl; });
   // The reversal is the point: the mark exists for the close, not for the book.
   const revGap=randInt(1,3), revDay=bizFwd(day,revGap);
-  const rev=makeTrade(revDay,tr,ts[0].product,{inst:{name:ts[0].instrument,mid:ts[0].mktPx,sd:0.0004,unit:ts[0].unit,dp:ts[0].dp},
+  const rev=makeTrade(revDay,tr,ts[0].product,{inst:INST_BY_KEY[ts[0].instKey],label:ts[0].instrument,
     notional:ts[0].notional,dir:oppDir(ts[0].dir),pnl:+(-pnl*rand(0.72,0.95)).toFixed(1)});
   return mkAlert(rule,day,tr,ts.concat([rev]),[
     ev("Valuation date",fmtDate(dateForIdx(day))+" — month end",true),
@@ -1703,17 +1927,19 @@ PLANT["TS-09"]=function(rule){
 };
 
 PLANT["TS-10"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
+  const tr=pickActorWith(rule,x=>x.products.some(p=>["fx","ndf"].indexOf(PROD_BY_NAME[p].fam)>=0));
+  const day=pickDayWeighted();
   const desk=DESK_BY_ID[tr.deskId];
   const prod=tr.products.indexOf("FX Spot")>=0?"FX Spot":choice(tr.products);
   const inst=instrumentFor(prod);
   const n=randInt(5,9), ts=[], ctpy=choice(INST_CTPY);
   // 16:00–16:03 London: the WM/Reuters benchmark window.
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:rand(18,95),dir:longDir(prod),execMin:960+randInt(0,3),ctpy,captureLag:rand(0,4)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.9,3.4),dir:longDir(prod),execMin:960+randInt(0,3),ctpy,captureLag:rand(0,4)}));
   const fixVol=ts.reduce((a,t)=>a+t.notional,0);
-  const dayVol=fixVol+rand(40,130);
-  const move=rand(4.5,17);
-  ts.forEach(t=>{ t.pnl=+(t.notional*move*0.06).toFixed(1); });
+  const dayVol=fixVol/rand(0.42,0.78);
+  // Read off the pair's own path across the window the chart shows.
+  const move=Math.abs(mktMove(inst,day,958,972))+rand(1.5,6);
+  ts.forEach(t=>{ t.pnl=bpValue(t.fam,t.notional,move); });
   return mkAlert(rule,day,tr,ts,[
     ev("Instrument",inst.name),
     ev("Orders in 16:00 fix window",String(n),true),
@@ -1722,7 +1948,7 @@ PLANT["TS-10"]=function(rule){
     ev("Share of daily volume in window",(fixVol/dayVol*100).toFixed(1)+"%",true),
     ev("Rule threshold","40%"),
     ev("Direction","100% "+ts[0].dir+" — one-sided",true),
-    ev("Benchmark move over window","+"+move.toFixed(1)+" bps",true),
+    ev("Benchmark move across the window","+"+move.toFixed(1)+" bps in "+inst.name,true),
     ev("P&L attributed to the fix",fmtK(ts.reduce((a,t)=>a+t.pnl,0)),true),
   ],(fixVol/dayVol*100).toFixed(0)+"% of the day's volume executed one-way inside the 16:00 benchmark window");
 };
@@ -1734,8 +1960,8 @@ PLANT["TS-11"]=function(rule){
   const gap=randInt(1,14);
   const em=execMinFor(desk);
   const L=longDir(prod);
-  const house=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1.2,4),dir:L,ctpy:choice(COUNTERPARTIES.filter(c=>c.type==="Broker")),execMin:em,channel:"API / Algo"});
-  const client=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(5.5,16),dir:L,ctpy:clientCtpy,execMin:em+gap,channel:"Voice"});
+  const house=makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,1.2,4),dir:L,ctpy:choice(COUNTERPARTIES.filter(c=>c.type==="Broker")),execMin:em,channel:"API / Algo"});
+  const client=makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,5.5,16),dir:L,ctpy:clientCtpy,execMin:em+gap,channel:"Voice"});
   applyDev(client,rand(6,19));
   house.pnl=+(house.notional*rand(1.6,5.2)).toFixed(1);
   return mkAlert(rule,day,tr,[house,client],[
@@ -1758,16 +1984,31 @@ PLANT["TS-12"]=function(rule){
   const build=[], n=randInt(3,5); let pos=0;
   const t0=execMinFor(desk);
   const L=longDir(prod);
-  const leg=limit*rand(1.32,1.85)/n;
-  for(let i=0;i<n;i++){ const t=makeTrade(day,tr,prod,{inst,notional:leg*rand(0.82,1.18),dir:L,execMin:t0+i*randInt(8,40)}); pos+=t.notional; build.push(t); }
-  const flat=makeTrade(day,tr,prod,{inst,notional:pos*rand(0.88,0.97),dir:oppDir(L),execMin:Math.min(1439,DESK_HOURS[desk.region][1]*60-randInt(5,25))});
-  const eod=pos-flat.notional;
-  return mkAlert(rule,day,tr,build.concat([flat]),[
+  // Every leg stays inside the trader's ticket authorisation — the breach is
+  // the position they add up to, which is exactly why no single deal is caught.
+  const target=limit*rand(1.32,1.85);
+  const n2=Math.max(n,Math.ceil(target/(tr.ticketLimit*0.95)));
+  const leg=target/n2;
+  for(let i=0;i<n2;i++){ const t=makeTrade(day,tr,prod,{inst,notional:Math.min(tr.ticketLimit*0.98,leg*rand(0.86,1.14)),dir:L,
+    execMin:Math.min(1439,t0+i*randInt(6,26))}); pos+=t.notional; build.push(t); }
+  /* The unwind respects the same authorisation the build did: a position this
+     size is flattened in clips, not in one ticket several times the limit the
+     alert is arguing was never breached. */
+  const flatTotal=pos*rand(0.88,0.97);
+  const flatN=Math.max(1,Math.ceil(flatTotal/(tr.ticketLimit*0.95)));
+  const closeMin=Math.min(1439,DESK_HOURS[desk.region][1]*60-randInt(5,25));
+  const flats=[];
+  for(let i=0;i<flatN;i++) flats.push(makeTrade(day,tr,prod,{inst,notional:flatTotal/flatN,dir:oppDir(L),
+    execMin:Math.max(t0+1,closeMin-(flatN-1-i)*randInt(2,7))}));
+  const flat=flats[flats.length-1];
+  const eod=pos-flatTotal;
+  return mkAlert(rule,day,tr,build.concat(flats),[
     ev("Instrument",prod+" · "+inst.name),
     ev("This trader's position limit",fmtM(limit)+" ("+tr.grade+", "+desk.short+")"),
-    ev("Peak intraday position",fmtM(pos)+" at "+fmtTime(build[n-1].execMin),true),
+    ev("Tickets used to build it",build.length+" × "+fmtM(pos/build.length)+" — every one inside the "+fmtM(tr.ticketLimit)+" ticket authorisation",true),
+    ev("Peak intraday position",fmtM(pos)+" at "+fmtTime(build[build.length-1].execMin),true),
     ev("Peak as % of their own limit",(pos/limit*100).toFixed(0)+"%",true),
-    ev("Flattening trade",flat.dir+" "+fmtM(flat.notional)+" at "+fmtTime(flat.execMin),true),
+    ev("Unwind",plural(flats.length,"ticket")+" · "+flat.dir+" "+fmtM(flatTotal)+" between "+fmtTime(flats[0].execMin)+" and "+fmtTime(flat.execMin),true),
     ev("End-of-day position",fmtM(eod)+" ("+(eod/limit*100).toFixed(0)+"% of their limit)"),
     ev("Breach visible on EOD risk report","No",true),
     ev("Limit escalation raised","None — no snapshot ever saw it",true),
@@ -1803,7 +2044,7 @@ PLANT["TS-14"]=function(rule){
   const outDay=BIZ_DAYS[Math.max(0,BIZ_DAYS.indexOf(me)-randInt(1,3))];
   const backDay=BIZ_DAYS[Math.min(BIZ_DAYS.length-1,BIZ_DAYS.indexOf(me)+randInt(2,8))];
   const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
-  const notional=rand(45,260), book=choice(INTERNAL_BOOKS);
+  const notional=sizeFor(tr,2.0,7.0), book=choice(INTERNAL_BOOKS);
   const loss=-Math.abs(rand(420,3100));
   const out=makeTrade(outDay,tr,prod,{inst,notional,dir:shortDir(prod),ctpy:{name:book,type:"Internal book",country:"—"},
     internal:true,venue:"Internal",channel:"Internal booking",pnl:0});
@@ -1823,15 +2064,18 @@ PLANT["TS-14"]=function(rule){
 };
 
 PLANT["TS-15"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const tr=pickActorWith(rule,x=>x.products.some(p=>PROD_BY_NAME[p].fam==="fxopt"));
+  const day=pickDayWeighted(), b=trBase(tr);
   const desk=DESK_BY_ID[tr.deskId];
   const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="fxopt")[0]||"FX Vanilla Option";
   const inst=instrumentFor(prod);
-  const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(2.1,8)});
+  const t=makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,2.1,8)});
   const diff=rand(2.1,6.4)*(rng()<0.5?-1:1);
-  t.mktVol=+inst.vol.toFixed(2);
+  t.mktVol=+volAt(inst,day).toFixed(2);
   t.vol=+(t.mktVol+diff).toFixed(2);
-  t.pnl=+(t.notional*Math.abs(diff)*rand(2.2,5.5)).toFixed(1);
+  // A vol away from the surface is worth vega: roughly $0.4k per $m of notional
+  // per vol on a three-to-six month option, not a price deviation.
+  t.pnl=+(t.notional*Math.abs(diff)*rand(0.32,0.55)).toFixed(1);
   return mkAlert(rule,day,tr,[t],[
     ev("Instrument",prod+" · "+t.instrument),
     ev("Quoted implied volatility",t.vol.toFixed(2)+" vols",true),
@@ -1846,20 +2090,26 @@ PLANT["TS-15"]=function(rule){
 };
 
 PLANT["TS-16"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted();
-  const desk=DESK_BY_ID[tr.deskId], prod=choice(tr.products), inst=instrumentFor(prod);
+  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const desk=DESK_BY_ID[tr.deskId];
+  const cash=tr.products.filter(p=>FAM_MKT[PROD_BY_NAME[p].fam].omFloor>0);
+  const prod=cash.length?choice(cash):"FX Spot";
+  const inst=instrumentFor(prod);
   const toBook=choice(INTERNAL_BOOKS);
-  const notional=rand(25,190), bps=rand(16,95);
+  // An internal price answers to nobody, so it is held to a tighter test than a
+  // print struck with a counterparty who can argue about it.
+  const thr=Math.max(6,omThreshold(inst)*0.6);
+  const notional=sizeFor(tr,1.6,7), bps=devFor(inst,rand(0.7,3.3));
   const t=makeTrade(day,tr,prod,{inst,notional,ctpy:{name:toBook,type:"Internal book",country:"—"},
     internal:true,venue:"Internal",channel:"Internal booking",spreadBps:bps});
-  t.pnl=+(notional*bps*rand(0.07,0.13)).toFixed(1);
+  t.pnl=bpValue(t.fam,notional,t.devBps);
   return mkAlert(rule,day,tr,[t],[
     ev("Booking type","Internal transfer — no external counterparty",true),
     ev("From book",tr.book), ev("To book",toBook),
     ev("Instrument",prod+" · "+inst.name),
     ev("Transfer price",px(t),true), ev("Market mid",mkt(t)),
     ev("Deviation",Math.abs(t.devBps).toFixed(1)+" bps",true),
-    ev("Rule threshold","15.0 bps"),
+    ev("Threshold for an internal price in this name",thr.toFixed(1)+" bps"),
     ev("Notional",fmtM(notional)),
     ev("P&L moved between books",fmtK(t.pnl),true),
     ev("Transfer price signed off by both books","No",true),
@@ -1888,7 +2138,7 @@ PLANT["TS-17"]=function(rule){
 };
 
 PLANT["TS-18"]=function(rule){
-  const tr=pickActor(rule);
+  const tr=pickActorWith(rule,x=>x.products.some(p=>PROD_BY_NAME[p].fam==="repo"));
   const qe=choice(QUARTER_END);
   const qi=BIZ_DAYS.indexOf(qe);
   const startDay=BIZ_DAYS[Math.max(0,qi-randInt(8,20))];
@@ -1902,6 +2152,7 @@ PLANT["TS-18"]=function(rule){
     ev("Reporting date",fmtDate(dateForIdx(qe))+" — quarter end",true),
     ev("Financing",fmtM(notional)+" "+a.instrument),
     ev("This trader's median financing ticket",fmtM(bs.medSize)+" — roll is "+xBase(notional,bs.medSize)+" their own normal size",true),
+    ev("This trader's ticket authorisation",fmtM(tr.ticketLimit)+(notional>tr.ticketLimit?" — exceeded on the roll, "+xBase(notional,tr.ticketLimit):" — within authority"),notional>tr.ticketLimit),
     ev("Matures",fmtDate(dateForIdx(matDay))+" — "+(qi-BIZ_DAYS.indexOf(matDay))+" business days before reporting date",true),
     ev("Re-struck",fmtDate(dateForIdx(reDay))+" — "+(BIZ_DAYS.indexOf(reDay)-qi)+" business days after",true),
     ev("Size on re-strike",fmtM(b.notional)+" (within 2% of original)",true),
@@ -1951,7 +2202,7 @@ PLANT["TS-20"]=function(rule){
     ["Regulatory investigation disclosed","Exchange filing"],
   ]);
   const n=randInt(2,4), ts=[];
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:rand(9,60),dir:prod.indexOf("CDS")>=0?longDir(prod):shortDir(prod)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.8,3.2),dir:prod.indexOf("CDS")>=0?longDir(prod):shortDir(prod)}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   const gain=rand(420,4200);
   ts.forEach(t=>{ t.pnl=+(gain*t.notional/tot).toFixed(1); });
@@ -1975,14 +2226,18 @@ PLANT["TS-20"]=function(rule){
 ------------------------------------------------------------ */
 
 PLANT["TS-21"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const fwd=tr.products.filter(p=>["FX Forward","FX Swap","NDF"].indexOf(p)>=0);
-  const prod=fwd.length?choice(fwd):choice(tr.products);
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(2.2,9)});
-  const bps=rand(19,88);
+  // Forward points are a forward, swap or NDF concept. An option has a premium,
+  // not a points leg, so it cannot carry this finding at all.
+  const FWD=["FX Forward","FX Swap","NDF"];
+  const tr=pickActorWith(rule,x=>x.products.some(p=>FWD.indexOf(p)>=0));
+  const day=pickDayWeighted(), b=trBase(tr);
+  const fwd=tr.products.filter(p=>FWD.indexOf(p)>=0);
+  const prod=fwd.length?choice(fwd):"FX Forward";
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,2.2,9)});
+  const bps=devFor(INST_BY_KEY[t.instKey],rand(1.1,4.4));
   applyDev(t,bps);
   const curve=rand(18,140);
-  t.pnl=+(t.notional*bps*rand(0.05,0.10)).toFixed(1);
+  t.pnl=bpValue(t.fam,t.notional,t.devBps);
   return mkAlert(rule,day,tr,[t],[
     ev("Instrument",prod+" · "+t.instrument+" · "+t.tenor),
     ev("Traded forward points",(curve+bps).toFixed(1)+" pts",true),
@@ -2003,9 +2258,9 @@ PLANT["TS-22"]=function(rule){
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const n=randInt(8,13), ts=[], favour=rand(6.5,21);
   for(let i=0;i<n;i++){
-    const t=makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:b.medSize*rand(0.6,2.4),ctpy,dir:i%2?longDir(prod):shortDir(prod)});
+    const t=makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:sizeFor(tr,0.6,2.4),ctpy,dir:i%2?longDir(prod):shortDir(prod)});
     applyDev(t,-favour*rand(0.75,1.25));   // the fill sits on the counterparty's side of mid
-    t.pnl=+(-t.notional*favour*0.06).toFixed(1);
+    t.pnl=-bpValue(t.fam,t.notional,t.devBps);
     ts.push(t);
   }
   const give=ts.reduce((a,t)=>a+Math.abs(t.devBps),0)/n;
@@ -2025,13 +2280,14 @@ PLANT["TS-22"]=function(rule){
 };
 
 PLANT["TS-23"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const prod=tr.products.indexOf("NDF")>=0?"NDF":choice(tr.products);
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.5,7)});
-  const bps=rand(21,95);
+  const tr=pickActorWith(rule,x=>x.products.indexOf("NDF")>=0);
+  const day=pickDayWeighted(), b=trBase(tr);
+  const prod=tr.products.indexOf("NDF")>=0?"NDF":"NDF";
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,1.5,7)});
+  const bps=devFor(INST_BY_KEY[t.instKey],rand(1.1,4.6));
   applyDev(t,bps);
-  t.pnl=+(t.notional*bps*rand(0.06,0.12)).toFixed(1);
-  const src=choice(["EMTA","ABS Benchmarks","Reuters SPOT","the local central bank reference"]);
+  t.pnl=bpValue(t.fam,t.notional,t.devBps);
+  const src=choice(["EMTA","ABS Benchmarks","Reuters SPOT","central bank reference"]);
   return mkAlert(rule,day,tr,[t],[
     ev("Instrument",prod+" · "+t.instrument+" · "+t.tenor),
     ev("Settlement rate applied",px(t),true),
@@ -2046,23 +2302,38 @@ PLANT["TS-23"]=function(rule){
 };
 
 PLANT["TS-24"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const prod=choice(tr.products), inst=instrumentFor(prod);
+  // A session extreme is a price. An option premium moves with its surface, so
+  // this rule stays on the cash-quoted names.
+  const tr=pickActorWith(rule,x=>x.products.some(p=>FAM_MKT[PROD_BY_NAME[p].fam].omFloor>0));
+  const day=pickDayWeighted(), b=trBase(tr);
+  const cash=tr.products.filter(p=>FAM_MKT[PROD_BY_NAME[p].fam].omFloor>0);
+  const prod=cash.length?choice(cash):"FX Spot";
+  const inst=instrumentFor(prod);
   const n=randInt(4,7), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[];
   const L=rng()<0.5?longDir(prod):shortDir(prod);
   const buySide=["Buy","Pay","Borrow"].indexOf(L)>=0;
+  /* Find the minutes at which the session actually reached its best level for
+     this side, and print there. The claim is then visible on the chart rather
+     than asserted next to it. */
+  const grid=[];
+  for(let m=SESSION_OPEN;m<=SESSION_CLOSE;m+=5) grid.push({m,v:midAt(inst,day,m)});
+  grid.sort((x,y)=>buySide?x.v-y.v:y.v-x.v);
+  const best=grid.slice(0,Math.max(n,6));
   for(let i=0;i<n;i++){
-    const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.7,2.6),dir:L,execMin:Math.min(1439,t0+i*randInt(12,70))});
+    const pick=best[i%best.length];
+    const t=makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.7,2.6),dir:L,execMin:pick.m+randInt(0,4)});
     applyDev(t,-rand(0.2,1.9));
     ts.push(t);
   }
-  const range=rand(9,34), expected=Math.max(1,Math.round(b.tickets*0.08));
+  const dr=dayRange(inst,day);
+  const range=Math.abs(devBpsOf(inst.unit,dr.hi,dr.lo));
+  const expected=Math.max(1,Math.round(b.tickets*0.08));
   const stamped=rng()<0.4;
   return mkAlert(rule,day,tr,ts,[
     ev("Instrument",prod+" · "+inst.name),
     ev("Trades at the session extreme",String(n),true),
     ev("Direction","All "+L+" — the extreme is the day's "+(buySide?"low":"high"),true),
-    ev("Session range for the instrument",range.toFixed(1)+" bps"),
+    ev("Session range in "+inst.name,range.toFixed(1)+" bps ("+fmt2(dr.lo,inst.dp)+" – "+fmt2(dr.hi,inst.dp)+")"),
     ev("Mean distance from the extreme",(ts.reduce((a,t)=>a+Math.abs(t.devBps),0)/n).toFixed(2)+" bps",true),
     ev("Expected at this trader's ticket count","≤"+expected+" per session"),
     ev("This trader's daily ticket average",b.tickets.toFixed(1)),
@@ -2093,7 +2364,7 @@ PLANT["TS-26"]=function(rule){
   const shortSettle=tr.products.filter(p=>SETTLE_DAYS[p]!=null&&SETTLE_DAYS[p]<=2);
   const prod=shortSettle.length?choice(shortSettle):"FX Spot";
   const day=pickDay(4,DAYS-25), settle=SETTLE_DAYS[prod]||2;
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(0.8,4)});
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,0.8,4)});
   t.cancelled=true; t.status="Cancelled"; t.amends=Math.max(1,t.amends);
   const after=randInt(2,15), alertDay=Math.min(DAYS-1,day+settle+after);
   return mkAlert(rule,alertDay,tr,[t],[
@@ -2113,14 +2384,14 @@ PLANT["TS-27"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const t=ensureTrades(tr,day,1)[0];
   t.status="Amended"; t.amends=randInt(2,4);
-  t.notional=Math.max(t.notional,b.medSize*rand(1.2,5));
+  t.notional=Math.max(t.notional,sizeFor(tr,1.2,5));
   const field=choice([["Traded price","moved "+rand(9,60).toFixed(1)+" bps in the trader's favour"],
                       ["Notional","increased by "+rand(18,140).toFixed(0)+"%"],
                       ["Tenor","extended by "+randInt(1,9)+" months"],
                       ["Value date","moved "+randInt(1,6)+" business days later"]]);
   const hrs=rand(1.2,52);
-  applyDev(t,rand(12,70));
-  t.pnl=+(t.notional*Math.abs(t.devBps)*0.07).toFixed(1);
+  applyDev(t,devFor(INST_BY_KEY[t.instKey],rand(0.8,3.2)));
+  t.pnl=bpValue(t.fam,t.notional,t.devBps);
   return mkAlert(rule,day,tr,[t],[
     ev("Trade",t.id+" · "+t.product+" · "+t.instrument),
     ev("Field amended",field[0]+" — "+field[1],true),
@@ -2138,7 +2409,7 @@ PLANT["TS-28"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const n=randInt(8,15), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[];
   const prod=choice(tr.products), inst=instrumentFor(prod);
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.5,1.8),
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.5,1.8),
     execMin:Math.min(1439,t0+randInt(0,9)),captureLag:rand(0,3)}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   const peak=Math.max(2,Math.round(b.tickets*0.45));
@@ -2162,7 +2433,7 @@ PLANT["TS-29"]=function(rule){
   const victim=peers.length?choice(peers):tr;
   const book=toPeer?victim.book:choice(INTERNAL_BOOKS);
   const n=randInt(1,3), ts=[], prod=choice(tr.products), inst=instrumentFor(prod);
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1.4,6),book}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,1.4,6),book}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   return mkAlert(rule,day,tr,ts,[
     ev("Booked by",tr.name+" · "+tr.grade),
@@ -2181,10 +2452,10 @@ PLANT["TS-30"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const fills=randInt(2,5), ts=[], t0=execMinFor(DESK_BY_ID[tr.deskId]), L=longDir(prod);
-  for(let i=0;i<fills;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.6,2),dir:L,
+  for(let i=0;i<fills;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.6,2),dir:L,
     execMin:Math.min(1439,t0+i*randInt(3,20)),channel:"API / Algo",venue:"SEF / MTF"}));
   const orders=fills*randInt(21,46), ratio=orders/fills, own=rand(3.1,5.6);
-  ts.forEach(t=>{ t.pnl=+(t.notional*rand(1.4,4.2)).toFixed(1); });
+  ts.forEach(t=>{ t.pnl=bpValue(t.fam,t.notional,rand(14,42)); });
   return mkAlert(rule,day,tr,ts,[
     ev("Instrument",prod+" · "+inst.name),
     ev("Orders placed",String(orders),true),
@@ -2203,10 +2474,11 @@ PLANT["TS-31"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const n=randInt(5,8), t0=execMinFor(DESK_BY_ID[tr.deskId]), ts=[], L=longDir(prod);
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.5,1.6),dir:L,
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.5,1.6),dir:L,
     execMin:Math.min(1439,t0+i),captureLag:rand(0,2)}));
   const built=ts.reduce((a,t)=>a+t.notional,0);
-  const move=rand(8.5,31), back=randInt(9,29);
+  const back=randInt(9,29);
+  const move=Math.abs(mktMove(inst,day,t0,Math.min(SESSION_CLOSE,t0+n)))+rand(4,14);
   const rev=makeTrade(day,tr,prod,{inst,notional:built*rand(0.92,1.06),dir:oppDir(L),execMin:Math.min(1439,t0+n+back)});
   rev.pnl=+(built*move*0.05).toFixed(1);
   return mkAlert(rule,day,tr,ts.concat([rev]),[
@@ -2227,10 +2499,11 @@ PLANT["TS-32"]=function(rule){
   const desk=DESK_BY_ID[tr.deskId], close=Math.round(DESK_HOURS[desk.region][1]*60);
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const n=randInt(4,8), ts=[], L=rng()<0.5?longDir(prod):shortDir(prod);
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.9,3),dir:L,execMin:close-randInt(0,14)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.9,3),dir:L,execMin:close-randInt(0,14)}));
   const lateVol=ts.reduce((a,t)=>a+t.notional,0);
-  const dayVol=lateVol/rand(0.36,0.72), move=rand(5,19);
-  ts.forEach(t=>{ t.pnl=+(t.notional*move*0.05).toFixed(1); });
+  const dayVol=lateVol/rand(0.36,0.72);
+  const move=Math.abs(mktMove(inst,day,close-15,close))+rand(2,7);
+  ts.forEach(t=>{ t.pnl=bpValue(t.fam,t.notional,move); });
   return mkAlert(rule,day,tr,ts,[
     ev("Instrument",prod+" · "+inst.name),
     ev("This trader's session close",fmtTime(close)+" "+desk.region),
@@ -2248,16 +2521,20 @@ PLANT["TS-32"]=function(rule){
 
 PLANT["TS-33"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const prod=choice(tr.products), inst=instrumentFor(prod);
+  const cash=tr.products.filter(p=>FAM_MKT[PROD_BY_NAME[p].fam].omFloor>0);
+  const prod=cash.length?choice(cash):"FX Spot";
+  const inst=instrumentFor(prod);
   const clients=shuffle(COUNTERPARTIES.filter(c=>["Asset Manager","Corporate","Insurer","Private Client"].indexOf(c.type)>=0)).slice(0,2);
-  const notional=b.medSize*rand(1.6,6), m=execMinFor(DESK_BY_ID[tr.deskId]), gap=randInt(1,5);
-  const bps=rand(11,58), L=longDir(prod);
+  const notional=sizeFor(tr,1.6,6), m=execMinFor(DESK_BY_ID[tr.deskId]), gap=randInt(1,5);
+  const thr=Math.max(5,omThreshold(inst)*0.45);
+  const bps=devFor(inst,rand(0.5,2.0)), L=longDir(prod);
   const a=makeTrade(day,tr,prod,{inst,notional,dir:L,ctpy:clients[0],execMin:m});
   const c=makeTrade(day,tr,prod,{inst,notional,dir:oppDir(L),ctpy:clients[1],execMin:m+gap});
   applyDev(a,bps);
   // A cross prints once: both clients get the same level, and it is off mid.
   c.mktPx=a.mktPx; c.px=a.px; c.devBps=devBpsOf(c.unit,c.px,c.mktPx);
-  a.pnl=+(-notional*bps*0.06).toFixed(1); c.pnl=+(notional*bps*0.06).toFixed(1);
+  const xfer=bpValue(a.fam,notional,a.devBps);
+  a.pnl=-xfer; c.pnl=xfer;
   const rel=RELATED_PARTIES[clients[1].name];
   return mkAlert(rule,day,tr,[a,c],[
     ev("Instrument",prod+" · "+inst.name),
@@ -2266,7 +2543,7 @@ PLANT["TS-33"]=function(rule){
     ev("Crossed at",px(a),true),
     ev("Market mid at the cross",mkt(a)),
     ev("Distance from mid",Math.abs(a.devBps).toFixed(1)+" bps",true),
-    ev("Rule threshold","10.0 bps"),
+    ev("Threshold for a cross in this name",thr.toFixed(1)+" bps"),
     ev("Client disadvantaged",clients[0].name+" — "+fmtK(Math.abs(a.pnl)),true),
     ev("Client advantaged",clients[1].name+" — "+fmtK(c.pnl),true),
     ev("Best-execution record","No evidence either client was shown the mid",true),
@@ -2296,14 +2573,20 @@ PLANT["TS-34"]=function(rule){
 };
 
 PLANT["TS-35"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const prod=choice(tr.products), inst=instrumentFor(prod);
-  const yrs=tr.tenorYrs+randInt(3,22);
-  const t=makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(0.8,4.5),tenor:yrs+"Y"});
+  const tr=pickActor(rule), b=trBase(tr);
+  // A tenor cap can only be breached on a product written long-dated in the
+  // first place, and only out as far as that product actually trades.
+  const dated=tr.products.filter(p=>MAX_YEARS[p]>tr.tenorYrs);
+  const prod=dated.length?choice(dated):"IRS";
+  const day=pickDayWeighted(), inst=instrumentFor(prod);
+  const room=[15,20,25,30,40,50].filter(y=>y>tr.tenorYrs&&y<=(MAX_YEARS[prod]||30));
+  const yrs=room.length?choice(room):Math.min(MAX_YEARS[prod]||30,tr.tenorYrs+10);
+  const t=makeTrade(day,tr,prod,{inst,notional:sizeFor(tr,0.8,4.5),tenor:yrs+"Y"});
   return mkAlert(rule,day,tr,[t],[
     ev("Trader",tr.name+" · "+tr.grade),
     ev("This trader's approved maximum tenor",tr.tenorYrs+" years"),
     ev("Tenor booked",yrs+" years",true),
+    ev("Longest this product is written",(MAX_YEARS[prod]||30)+" years"),
     ev("Excess",(yrs-tr.tenorYrs)+" years beyond their own authority",true),
     ev("Product",prod+" · "+t.instrument),
     ev("Notional",fmtM(t.notional)),
@@ -2318,7 +2601,7 @@ PLANT["TS-36"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const never=PRODUCTS.map(p=>p.p).filter(p=>b.products.indexOf(p)<0);
   const prod=never.length?choice(never):choice(PRODUCTS).p;
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(2.2,9)});
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,2.2,9)});
   const onList=tr.products.indexOf(prod)>=0;
   return mkAlert(rule,day,tr,[t],[
     ev("Product",prod+" · "+t.instrument,true),
@@ -2379,29 +2662,31 @@ PLANT["TS-38"]=function(rule){
 
 PLANT["TS-39"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const window=40, lossPct=rand(0.02,0.095);
+  const window=40;
+  const own=b.lossDays;
+  const lossPct=own*rand(0.10,0.32);   // a third of their own rate, or less
   const ts=ensureTrades(tr,day,randInt(2,4));
   ts.forEach(t=>{ t.pnl=Math.abs(t.pnl)||+rand(20,180).toFixed(1); });
-  const own=Math.max(0.31,b.lossDays);
   return mkAlert(rule,day,tr,ts,[
     ev("Window","40 business days to "+fmtDate(dateForIdx(day))),
     ev("Losing days in the window",Math.round(window*lossPct)+" of "+window+" ("+fmtPct(lossPct,1)+")",true),
     ev("This trader's own 12-month rate",fmtPct(own,1)+" losing days"),
     ev("Peer cohort ("+tr.cohort+")",fmtPct(Math.max(0.28,b.cohort.lossDays),1)),
-    ev("Rule threshold","below 10% where the trader's own rate is above 30%"),
+    ev("Rule threshold","below a third of the trader's own 12-month rate"),
     ev("Book risk over the window","Unchanged — position size and VaR in line",true),
     ev("Unrealised versus realised","Gains realised; losses left unrealised",true),
     ev("Independent price verification","2 positions carry manual marks",true),
     ev("This trader's daily P&L σ",fmtK(b.pnlSd)),
-  ],"Only "+Math.round(window*lossPct)+" losing days in 40, against this trader's own 12-month rate of "+fmtPct(own,0));
+  ],"Only "+plural(Math.round(window*lossPct),"losing day")+" in 40, against this trader's own 12-month rate of "+fmtPct(own,0));
 };
 
 PLANT["TS-40"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
-  const structured=tr.products.filter(p=>["fxopt","eqopt","rate","trs"].indexOf(PROD_BY_NAME[p].fam)>=0);
-  const prod=structured.length?choice(structured):choice(tr.products);
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.4,6)});
-  const pctNot=rand(2.6,9.4);
+  const tr=pickActorWith(rule,x=>x.products.some(p=>MODELLED.indexOf(p)>=0));
+  const day=pickDayWeighted(), b=trBase(tr);
+  const structured=tr.products.filter(p=>MODELLED.indexOf(p)>=0);
+  const prod=structured.length?choice(structured):"Swaption";
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,1.4,6)});
+  const pctNot=rand(2.65,5.2);
   t.pnl=+(t.notional*10*pctNot).toFixed(1);
   return mkAlert(rule,day,tr,[t],[
     ev("Structure",prod+" · "+t.instrument+" · "+t.tenor),
@@ -2442,7 +2727,7 @@ PLANT["TS-42"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const t=ensureTrades(tr,day,1)[0];
   t.ssiChanged=true; t.status="Amended"; t.amends=Math.max(1,t.amends);
-  t.notional=Math.max(t.notional,b.medSize*rand(1.5,6));
+  t.notional=Math.max(t.notional,sizeFor(tr,1.5,6));
   const n=randInt(2,3), shares=[]; let rem=100;
   for(let i=0;i<n-1;i++){ const s=Math.round(rand(15,rem-15)); shares.push(s); rem-=s; }
   shares.push(rem);
@@ -2464,7 +2749,7 @@ PLANT["TS-43"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const t=ensureTrades(tr,day,1)[0];
   t.ssiChanged=true;
-  t.notional=Math.max(t.notional,b.medSize*rand(1.2,5));
+  t.notional=Math.max(t.notional,sizeFor(tr,1.2,5));
   const jur=choice(HIGH_RISK_JUR);
   const bank=choice(["Northgate Clearing SA","Aurora Trust Bank","Continental Escrow NV","Pallas Financial Ltd","Meridian Offshore Ltd"]);
   return mkAlert(rule,day,tr,[t],[
@@ -2502,7 +2787,7 @@ PLANT["TS-45"]=function(rule){
   const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const clients=shuffle(COUNTERPARTIES.filter(c=>["Asset Manager","Insurer","Private Client"].indexOf(c.type)>=0)).slice(0,2);
-  const m=execMinFor(DESK_BY_ID[tr.deskId]), block=b.medSize*rand(3,9);
+  const m=execMinFor(DESK_BY_ID[tr.deskId]), block=sizeFor(tr,3,9);
   const good=makeTrade(day,tr,prod,{inst,notional:block*rand(0.30,0.45),ctpy:clients[0],execMin:m});
   const rest=makeTrade(day,tr,prod,{inst,notional:block-good.notional,ctpy:clients[1],execMin:m});
   const edge=rand(8.5,34), hrs=rand(1.5,9);
@@ -2526,7 +2811,7 @@ PLANT["TS-46"]=function(rule){
   const ctpy=rng()<0.35?{name:choice(Object.keys(RELATED_PARTIES)),type:"Private Client",country:"Singapore"}:choice(COUNTERPARTIES);
   const prod=choice(tr.products), inst=instrumentFor(prod);
   const n=randInt(9,18), ts=[];
-  for(let i=0;i<n;i++) ts.push(makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:b.medSize*rand(0.6,2.6),ctpy}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(bizBack(day,randInt(0,19)),tr,prod,{inst,notional:sizeFor(tr,0.6,2.6),ctpy}));
   const share=rand(tr.ctpyCap+0.06,0.84), total=Math.round(n/share);
   const rel=RELATED_PARTIES[ctpy.name];
   return mkAlert(rule,day,tr,ts,[
@@ -2548,17 +2833,20 @@ PLANT["TS-47"]=function(rule){
   const r=choice(RESTRICTED);
   const creditBooks=tr.products.filter(p=>["cds","bondc","trs"].indexOf(PROD_BY_NAME[p].fam)>=0);
   const prod=creditBooks.length?choice(creditBooks):choice(tr.products);
-  const inst=instrumentFor(prod);
-  inst.name=prod.indexOf("CDS")>=0?r[0]+" 5Y CDS":prod.indexOf("Bond")>=0?r[0]+" "+rand(3.5,7).toFixed(2)+"% 2031":"TRS on "+r[0];
+  // The restricted name replaces the ticket label only — the shared instrument
+  // in the universe keeps its own identity and its own price path.
+  const pool=(INST_BY_FAM[PROD_BY_NAME[prod].fam]||[]).filter(x=>x.name.indexOf(r[0])>=0);
+  const inst=pool.length?choice(pool):instrumentFor(prod);
+  const label=prod.indexOf("CDS")>=0?r[0]+" 5Y CDS":prod.indexOf("Bond")>=0?r[0]+" "+rand(3.5,7).toFixed(2)+"% 2031":"TRS on "+r[0];
   const n=randInt(1,3), ts=[];
-  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,notional:b.medSize*rand(1,5)}));
+  for(let i=0;i<n;i++) ts.push(makeTrade(day,tr,prod,{inst,label,notional:sizeFor(tr,1,5)}));
   const tot=ts.reduce((a,t)=>a+t.notional,0);
   const listed=Math.max(0,day-randInt(6,50));
   return mkAlert(rule,day,tr,ts,[
     ev("Name",r[0],true),
     ev("Restricted list status","On the list since "+fmtDate(dateForIdx(listed))+" — "+r[1],true),
     ev("Trades booked",n+" · "+fmtM(tot),true),
-    ev("Instrument",inst.name),
+    ev("Instrument",label),
     ev("Wall-crossing record for this trader","None",true),
     ev("Personal-account declaration","No holding declared in this name"),
     ev("Prior activity by this trader in the name","None in 12 months",true),
@@ -2571,16 +2859,19 @@ PLANT["TS-48"]=function(rule){
   const tr=pickActor(rule), b=trBase(tr);
   const annDay=pickDay(80,DAYS-2), lead=randInt(1,5);
   const exitDay=bizBack(annDay,lead), openDay=bizBack(exitDay,randInt(20,45));
-  const books=tr.products.filter(p=>["cds","bondc","trs","eq","eqopt"].indexOf(PROD_BY_NAME[p].fam)>=0);
-  const prod=books.length?choice(books):choice(tr.products);
-  const inst=instrumentFor(prod);
-  const notional=b.medSize*rand(1.6,7), L=longDir(prod);
+  // An announcement belongs to a company. An index future has no issuer to make
+  // one, so this rule only runs on single names.
+  const books=tr.products.filter(p=>["cds","bondc","trs"].indexOf(PROD_BY_NAME[p].fam)>=0);
+  const prod=books.length?choice(books):"Corp Bond";
+  const pool=(INST_BY_FAM[PROD_BY_NAME[prod].fam]||[]).filter(x=>EQ_INDICES.indexOf(x.name)<0);
+  const inst=pool.length?choice(pool):instrumentFor(prod);
+  const notional=sizeFor(tr,1.6,7), L=longDir(prod);
   const open=makeTrade(openDay,tr,prod,{inst,notional,dir:L});
   const exit=makeTrade(exitDay,tr,prod,{inst,notional:notional*rand(0.99,1.01),dir:oppDir(L)});
   const avoided=rand(480,3600);
-  const news=choice([["Profit warning","Company announcement"],["Rating downgrade","S&P / Moody's action"],
-    ["Guidance withdrawn","Exchange filing"],["Regulatory penalty disclosed","Exchange filing"],
-    ["Covenant breach confirmed","Trustee notice"]]);
+  const news=choice([["profit warning","Company announcement"],["rating downgrade","S&P / Moody's action"],
+    ["withdrawal of guidance","Exchange filing"],["disclosed regulatory penalty","Exchange filing"],
+    ["confirmed covenant breach","Trustee notice"]]);
   const held=BIZ_DAYS.indexOf(exitDay)-BIZ_DAYS.indexOf(openDay);
   const nameOnly=inst.name.replace(/ 5Y CDS| \d.*$/,"").replace(/^TRS on /,"");
   return mkAlert(rule,exitDay,tr,[open,exit],[
@@ -2588,23 +2879,24 @@ PLANT["TS-48"]=function(rule){
     ev("Position opened",fmtDate(dateForIdx(openDay))+" · "+open.dir+" "+fmtM(notional)),
     ev("Held for",held+" business days",true),
     ev("Position closed",fmtDate(dateForIdx(exitDay))+" · "+exit.dir+" "+fmtM(exit.notional),true),
-    ev("Announcement",news[0]+" · "+news[1]),
-    ev("Announcement date",fmtDate(dateForIdx(annDay))+" — "+lead+" business day"+(lead>1?"s":"")+" later",true),
+    ev("Announcement",news[0].charAt(0).toUpperCase()+news[0].slice(1)+" · "+news[1]),
+    ev("Announcement date",fmtDate(dateForIdx(annDay))+" — "+plural(lead,"business day")+" later",true),
     ev("Loss avoided by exiting",fmtK(avoided),true),
     ev("Reason for the exit recorded","None — no hedge, no limit, no client order",true),
     ev("This trader's usual holding period",randInt(35,90)+" business days in this book"),
     ev("Wall-crossing / restricted list check","Name not on the restricted list at the time"),
-  ],"A "+held+"-day "+nameOnly+" position closed "+lead+" day"+(lead>1?"s":"")+" before a "+news[0].toLowerCase()+", avoiding "+fmtK(avoided));
+  ],"A "+plural(held,"business day")+" "+nameOnly+" position closed "+plural(lead,"day")+" before a "+news[0]+", avoiding "+fmtK(avoided));
 };
 
 PLANT["TS-49"]=function(rule){
-  const tr=pickActor(rule), day=pickDayWeighted(), b=trBase(tr);
+  const tr=pickActorWith(rule,x=>x.products.some(p=>PROD_BY_NAME[p].fam==="repo"));
+  const day=pickDayWeighted(), b=trBase(tr);
   const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="repo")[0]||"Repo";
   const name=choice(Object.keys(RELATED_PARTIES));
-  const bps=rand(16,72);
-  const t=makeTrade(day,tr,prod,{notional:b.medSize*rand(1.5,7),ctpy:{name,type:"Private Client",country:"Singapore"}});
+  const t=makeTrade(day,tr,prod,{notional:sizeFor(tr,1.5,7),ctpy:{name,type:"Private Client",country:"Singapore"}});
+  const bps=devFor(INST_BY_KEY[t.instKey],rand(1.2,4.5));
   applyDev(t,bps);
-  t.pnl=+(-t.notional*bps*rand(0.04,0.09)).toFixed(1);
+  t.pnl=-bpValue(t.fam,t.notional,t.devBps);
   const gc=rand(3.9,4.6);
   return mkAlert(rule,day,tr,[t],[
     ev("Financing",fmtM(t.notional)+" "+prod+" · "+t.tenor),
@@ -2621,11 +2913,11 @@ PLANT["TS-49"]=function(rule){
 };
 
 PLANT["TS-50"]=function(rule){
-  const tr=pickActor(rule), b=trBase(tr);
+  const tr=pickActorWith(rule,x=>x.products.some(p=>PROD_BY_NAME[p].fam==="repo")), b=trBase(tr);
   const qe=choice(QUARTER_END);
   const outDay=bizBack(qe,randInt(1,2)), backDay=bizFwd(qe,randInt(1,5));
   const prod=tr.products.filter(p=>PROD_BY_NAME[p].fam==="repo")[0]||"Repo";
-  const notional=b.medSize*rand(3,11);
+  const notional=sizeFor(tr,3,11);
   const a=makeTrade(outDay,tr,prod,{notional,dir:"Lend"});
   const c=makeTrade(backDay,tr,prod,{notional:notional*rand(0.99,1.01),dir:"Borrow"});
   const from=choice(["BB- corporate paper","B+ airline paper","unrated structured notes","BB property paper"]);
@@ -2693,19 +2985,25 @@ RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<r.plants;i++) f(r); });
              ev("Market move in underlying",rand(0.6,1.9).toFixed(2)+"% — consistent with the P&L")];
         sum="Daily P&L "+z.toFixed(1)+"σ above the trader's own distribution";
       }else if(rule.id==="TS-01"){
-        applyDev(t,rand(25.5,44));
+        const inst=INST_BY_KEY[t.instKey];
+        if(!inst||!priceTested(inst)) continue;
+        const thr=omThreshold(inst);
+        applyDev(t,devFor(inst,rand(1.02,1.34)));
         evs=[ev("Traded price",px(t),true),ev("Market mid",mkt(t)),
-             ev("Deviation",Math.abs(t.devBps).toFixed(1)+" bps",true),ev("Rule threshold","25.0 bps"),
+             ev("Deviation",Math.abs(t.devBps).toFixed(1)+" bps",true),
+             ev("Materiality threshold for this name",thr.toFixed(1)+" bps"),
+             ev("Normal dealing spread",inst.spreadBps.toFixed(2)+" bps"),
              ev("Notional",fmtM(t.notional)),ev("Counterparty",t.ctpy+" · "+t.ctpyType),
-             ev("Liquidity at execution",choice(["Thin — post-close hours","Normal","Thin — event risk in the pair"]))];
-        sum="Trade "+Math.abs(t.devBps).toFixed(0)+" bps off mid, marginally past the 25 bps threshold";
+             ev("Liquidity at execution",choice(["Thin — post-close hours","Normal","Thin — event risk in the name"]))];
+        sum="Trade "+Math.abs(t.devBps).toFixed(0)+" bps off mid in "+t.instrument+", marginally past its "+thr.toFixed(0)+" bps threshold";
       }else if(rule.id==="TS-06"){
-        t.notional=rand(22.6,24.9);
-        evs=[ev("Ticket size",fmtM(t.notional),true),ev("Authorisation limit","$25.0m"),
-             ev("Ticket as % of limit",(t.notional/25*100).toFixed(1)+"%",true),
+        const L=tr.ticketLimit;
+        t.notional=L*rand(0.904,0.996);
+        evs=[ev("Ticket size",fmtM(t.notional),true),ev("This trader's authorisation",fmtM(L)+" ("+tr.grade+")"),
+             ev("Ticket as % of their own limit",(t.notional/L*100).toFixed(1)+"%",true),
              ev("Other tickets in the window",String(randInt(2,3))),ev("Instrument",t.product+" · "+t.instrument),
              ev("Client order size",fmtM(t.notional*randInt(2,3))+" — split per client instruction")];
-        sum="Tickets sized just under the $25m authorisation limit";
+        sum="Tickets sized just under this trader's own "+fmtM(L)+" authorisation";
       }else if(rule.id==="TS-15"){
         const d=rand(2.0,2.6);
         t.vol=t.mktVol!=null?+(t.mktVol+d).toFixed(2):null;
@@ -3303,6 +3601,142 @@ function hourChart(counts,opts){
   g+='<text x="'+(padL+3.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside desk hours</text>';
   g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside</text>';
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
+}
+/* ============================================================
+   Market context — the deals plotted against the market they were struck into
+   Every off-market, fixing-window, session-extreme and momentum typology is an
+   argument about where a print sat relative to the market at that moment. Said
+   in basis points it is a number the officer has to take on trust; drawn against
+   the instrument's own path it is a picture they can check.
+
+   One session's trades render on a minute axis, so a cluster into the 16:00 fix
+   or against the close is visible as a cluster. Trades spread over days render
+   on a daily axis, so a build-and-reverse or a mark-and-unwind reads as a shape.
+============================================================ */
+function marketChart(inst,trades,opts){
+  opts=opts||{};
+  const W=opts.w||620,H=opts.h||210,padL=52,padR=12,padT=16,padB=26;
+  const days=uniq(trades.map(t=>t.dayIdx)).sort((a,b)=>a-b);
+  const intraday=days.length===1;
+  const fmt=v=>v.toFixed(inst.dp);
+  const pts=[], marks=[];
+  if(intraday){
+    const d=days[0];
+    for(let m=SESSION_OPEN;m<=SESSION_CLOSE;m+=5) pts.push({x:m,v:midAt(inst,d,m)});
+    trades.forEach(t=>marks.push({x:Math.max(SESSION_OPEN,Math.min(SESSION_CLOSE,t.execMin)),t}));
+  }else{
+    const lo=Math.max(0,days[0]-6), hi=Math.min(DAYS-1,days[days.length-1]+6);
+    for(let d=lo;d<=hi;d++) pts.push({x:d,v:midAt(inst,d,SESSION_CLOSE)});
+    trades.forEach(t=>marks.push({x:t.dayIdx,t}));
+  }
+  const xs=pts.map(p=>p.x), x0=Math.min(...xs), x1=Math.max(...xs);
+  const all=pts.map(p=>p.v).concat(trades.map(t=>t.px));
+  let lo=Math.min(...all), hi=Math.max(...all);
+  const pad=Math.max((hi-lo)*0.18,Math.abs(lo)*0.0004);
+  lo-=pad; hi+=pad;
+  const X=v=>padL+(x1===x0?0.5:(v-x0)/(x1-x0))*(W-padL-padR);
+  const Y=v=>H-padB-((v-lo)/((hi-lo)||1))*(H-padB-padT);
+  let g="";
+  // The instrument's own dealing spread, drawn as a band. A print inside it is
+  // ordinary execution; the rules only have something to say outside it.
+  const bandTop=pts.map(p=>X(p.x).toFixed(1)+","+Y(p.v*(1+inst.spreadBps/10000)).toFixed(1)).join(" ");
+  const bandBot=pts.slice().reverse().map(p=>X(p.x).toFixed(1)+","+Y(p.v*(1-inst.spreadBps/10000)).toFixed(1)).join(" ");
+  g+='<polygon points="'+bandTop+" "+bandBot+'" fill="var(--ink-3)" opacity=".14"/>';
+  for(let i=0;i<=3;i++){
+    const v=lo+(hi-lo)*i/3, y=Y(v);
+    g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
+       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmt(v)+"</text>";
+  }
+  if(intraday){
+    // The published benchmark window, so a fixing typology has its window drawn.
+    if(inst.fam==="fx"||inst.fam==="ndf"){
+      g+='<rect x="'+X(960).toFixed(1)+'" y="'+padT+'" width="'+Math.max(2,(X(966)-X(960))).toFixed(1)+'" height="'+(H-padB-padT)+
+         '" fill="var(--violet)" opacity=".16"/>'+
+         '<text x="'+X(963).toFixed(1)+'" y="'+(padT-4)+'" text-anchor="middle" font-size="7.5" fill="var(--violet)">16:00 fix</text>';
+    }
+    for(let m=SESSION_OPEN;m<=SESSION_CLOSE;m+=120)
+      g+='<text x="'+X(m).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+fmtTime(m)+"</text>";
+  }else{
+    const step=Math.max(1,Math.round(pts.length/6));
+    pts.forEach((p,i)=>{ if(i%step) return;
+      g+='<text x="'+X(p.x).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">'+fmtDateShort(dateForIdx(p.x))+"</text>"; });
+  }
+  g+='<polyline points="'+pts.map(p=>X(p.x).toFixed(1)+","+Y(p.v).toFixed(1)).join(" ")+'" fill="none" stroke="var(--ink-3)" stroke-width="1.4"/>';
+  const thr=omThreshold(inst);
+  marks.forEach(mk=>{
+    const t=mk.t, x=X(mk.x), y=Y(t.px), ym=Y(t.mktPx);
+    const off=Math.abs(t.devBps)>thr;
+    const c=off?"var(--fail)":Math.abs(t.devBps)>inst.spreadBps*2?"var(--warn)":"var(--pass)";
+    g+='<line x1="'+x.toFixed(1)+'" y1="'+ym.toFixed(1)+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+
+       '" stroke="'+c+'" stroke-width="1" stroke-dasharray="2 2" opacity=".8"/>';
+    g+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="4.6" fill="'+c+'" fill-opacity=".85" stroke="var(--panel)" stroke-width="1.2"'+
+       ' data-tip="'+esc(t.dir+" "+fmtM(t.notional)+" @ "+fmt(t.px))+'" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin))+
+       '" data-tiptable="Market mid|'+fmt(t.mktPx)+"§Deviation|"+(t.devBps>0?"+":"")+t.devBps.toFixed(1)+" bps§Dealing spread|"+
+       inst.spreadBps.toFixed(2)+" bps§Materiality|"+thr.toFixed(1)+' bps"/>';
+    g+='<text x="'+x.toFixed(1)+'" y="'+(y<ym?y-8:y+13).toFixed(1)+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="'+c+'">'+
+       (t.dir==="Buy"||t.dir==="Pay"||t.dir==="Borrow"?"B":"S")+"</text>";
+  });
+  return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
+}
+/* The instrument an alert is really about: the one carrying most of its deals. */
+function alertInstrument(trades){
+  const c={};
+  trades.forEach(t=>{ if(t.instKey) c[t.instKey]=(c[t.instKey]||0)+1; });
+  const k=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+  return k?INST_BY_KEY[k]:null;
+}
+function marketBlock(trades,label){
+  const inst=alertInstrument(trades);
+  if(!inst) return "";
+  const own=trades.filter(t=>t.instKey===inst.key);
+  const days=uniq(own.map(t=>t.dayIdx));
+  const intraday=days.length===1;
+  const thr=omThreshold(inst);
+  const worst=own.reduce((a,t)=>Math.abs(t.devBps)>Math.abs(a.devBps)?t:a,own[0]);
+  /* What the picture is actually showing. Not every typology is a pricing
+     argument: a fixing or a burst is about where the deals sit in time, and
+     saying "inside the ordinary range" under that chart reads as a retraction. */
+  let read;
+  if(Math.abs(worst.devBps)>thr){
+    read="The furthest print sits <b>"+Math.abs(worst.devBps).toFixed(1)+" bps</b> from the mid — "+
+      (Math.abs(worst.devBps)/inst.spreadBps).toFixed(0)+"× the spread anyone else was dealing at, and past the point where the difference stops being execution.";
+  } else if(intraday&&own.length>1){
+    const span=Math.max.apply(null,own.map(t=>t.execMin))-Math.min.apply(null,own.map(t=>t.execMin));
+    const dirs=uniq(own.map(t=>t.dir));
+    const dr=dayRange(inst,days[0]);
+    const width=dr.hi-dr.lo;
+    // Where in the session's range the prints landed. Buying at the low all day
+    // is a shape even when every individual fill is inside the spread.
+    const posn=width>0?mean(own.map(t=>(t.mktPx-dr.lo)/width)):0.5;
+    const buySide=["Buy","Pay","Borrow"].indexOf(own[0].dir)>=0;
+    if(dirs.length===1&&(buySide?posn<0.28:posn>0.72)){
+      read="Every fill is inside the spread, so no single print is off market. The shape is where they sit in the day: <b>"+
+        plural(own.length,"deal")+" all "+own[0].dir.toLowerCase()+"ing in the "+
+        (buySide?"bottom":"top")+" "+Math.round((buySide?posn:1-posn)*100)+"% of the session's range</b>, across "+
+        (span<=1?"one minute":plural(span,"minute"))+".";
+    } else {
+      read="Pricing is unremarkable — the furthest print is "+Math.abs(worst.devBps).toFixed(1)+
+        " bps from mid, inside ordinary execution. The shape is in the timing: <b>"+plural(own.length,"deal")+
+        (dirs.length===1?" all "+own[0].dir.toLowerCase()+"ing":"")+" inside "+(span<=1?"the same minute":plural(span,"minute"))+"</b>.";
+    }
+  } else if(own.length>1){
+    const dirs=uniq(own.map(t=>t.dir));
+    read="Pricing is unremarkable. What the chart carries is the sequence: <b>"+own.length+" deals across "+
+      days.length+" session"+(days.length>1?"s":"")+"</b>"+(dirs.length>1?", turning direction inside the window":", all one way")+".";
+  } else {
+    read="The print sits <b>"+Math.abs(worst.devBps).toFixed(1)+" bps</b> from the mid, inside the range ordinary execution covers — on this rule the finding is not the price.";
+  }
+  return '<div class="block"><div class="lbl">'+esc(label||"The market these deals were struck into")+"</div>"+
+    '<p class="narr" style="margin-bottom:8px"><b>'+esc(inst.name)+"</b> · "+
+      (intraday?"the session of "+esc(fmtDate(dateForIdx(days[0]))):"daily mid, "+esc(fmtDateShort(dateForIdx(Math.min.apply(null,days))))+" – "+esc(fmtDateShort(dateForIdx(Math.max.apply(null,days)))))+
+      " · dealing spread <b>"+inst.spreadBps.toFixed(2)+" bps</b>, material beyond <b>"+thr.toFixed(1)+" bps</b></p>"+
+    '<div class="chart-well" style="height:214px">'+marketChart(inst,own,{w:620,h:210})+"</div>"+
+    '<div class="trendkey"><span><i class="lk" style="background:var(--ink-3)"></i>Market mid</span>'+
+    '<span><i class="lk" style="background:color-mix(in srgb,var(--ink-3) 40%,transparent)"></i>Dealing spread</span>'+
+    '<span><i class="lk" style="background:var(--pass)"></i>Inside the spread</span>'+
+    '<span><i class="lk" style="background:var(--warn)"></i>Outside it</span>'+
+    '<span><i class="lk" style="background:var(--fail)"></i>Past materiality</span></div>'+
+    '<p class="narr" style="margin-top:8px;color:var(--ink-3)">'+read+"</p></div>";
 }
 function spark(vals,w,h,color){
   w=w||84;h=h||22;
@@ -4081,6 +4515,8 @@ function alertDrawer(a){
         esc(tr.name)+" individually, not for "+esc(DESK_BY_ID[tr.deskId].name)+" as a whole.</p>"+
       '<p class="narr" style="margin-top:8px;color:var(--ink-3)">'+esc(rule.why)+"</p></div>"+
 
+    marketBlock(trades)+
+
     '<div class="block"><div class="lbl">Evidence</div><div class="evgrid">'+
       a.evidence.map(e=>'<div class="ek">'+esc(e.k)+'</div><div class="ev'+(e.bad?" bad":"")+'">'+esc(e.v)+"</div>").join("")+
       "</div></div>"+
@@ -4182,6 +4618,7 @@ function tradeDrawer(t){
     (related?'<div class="block"><div class="lbl">Related-party register</div><p class="narr">'+esc(t.ctpy)+" — "+esc(related)+"</p></div>":"")+
     '<div class="block"><div class="lbl">Ticket</div><div class="evgrid">'+
       rows.map(r=>'<div class="ek">'+esc(r[0])+'</div><div class="ev">'+esc(r[1])+"</div>").join("")+"</div></div>"+
+    marketBlock([t],"This deal against the market")+
     (linked.length?'<div class="block"><div class="lbl">Alerts referencing this deal</div><div class="dwrap"><table class="dtable"><thead><tr>'+
       "<th>Alert</th><th>Rule</th><th>Severity</th><th>Raised</th><th>Status</th><th>Pattern</th></tr></thead><tbody>"+
       linked.map(a=>'<tr><td class="mono"><a href="#" data-alert="'+a.id+'">'+a.id+"</a></td><td>"+a.ruleId+" "+esc(a.rule)+"</td>"+
