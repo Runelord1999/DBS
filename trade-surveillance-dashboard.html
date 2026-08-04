@@ -409,6 +409,24 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 
 /* Trader scorecards */
 .tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:10px;padding:14px 16px}
+
+/* ---- Trading activity: small multiples, one book per cell ---- */
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:9px;padding:12px 16px 16px}
+.acard{background:var(--panel);border:1px solid var(--hair);border-radius:8px;padding:8px 9px 7px;cursor:pointer;
+  display:flex;flex-direction:column;gap:4px;min-width:0}
+.acard:hover{border-color:var(--brand)}
+.acard .an{font-size:0.6875rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acard .ad{font-size:0.5625rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acard .sstack{width:100%;height:62px;display:block;border-radius:3px}
+.acard .af{display:flex;justify-content:space-between;gap:6px;font-size:0.5625rem;color:var(--ink-3);white-space:nowrap}
+.acard .af b{font-family:var(--mono);color:var(--ink-2);font-weight:700}
+.ssHit{cursor:pointer}
+.wkin{width:5.5em;background:var(--panel);border:1px solid var(--hair);color:var(--ink);
+  padding:5px 7px;border-radius:6px;font-size:0.71875rem;font-family:var(--mono)}
+.wkin:focus{outline:none;border-color:var(--brand)}
+.alegend{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:flex-end;max-width:44em}
+.alg{display:inline-flex;align-items:center;gap:5px;font-size:0.59375rem;color:var(--ink-2);white-space:nowrap}
+.alg i{width:9px;height:9px;border-radius:2px;flex:0 0 auto}
 .tcard{background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:7px;position:relative;overflow:hidden}
 .tcard:hover{border-color:var(--brand)}
 .tcard::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--ink-3))}
@@ -450,8 +468,8 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 
     <div class="field"><span class="eyebrow">Trader</span>
       <button type="button" class="msel-btn" data-msel="trader" aria-expanded="false"><span>All traders</span></button></div>
-    <div class="field"><span class="eyebrow">Trader group</span>
-      <button type="button" class="msel-btn" data-msel="desk" aria-expanded="false"><span>All groups</span></button></div>
+    <div class="field"><span class="eyebrow">Desk</span>
+      <button type="button" class="msel-btn" data-msel="desk" aria-expanded="false"><span>All desks</span></button></div>
     <div class="field"><span class="eyebrow">Asset class</span>
       <button type="button" class="msel-btn" data-msel="assetClass" aria-expanded="false"><span>All asset classes</span></button></div>
     <div class="field"><span class="eyebrow">Severity</span>
@@ -3206,6 +3224,7 @@ const state={
   blot:{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",from:"",to:"",
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
+  act:{weeks:26,metric:"count",scale:"own"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
   log:{who:"me",status:"",search:"",sort:{key:"reviewDay",dir:-1},page:0,per:25},
@@ -3217,7 +3236,7 @@ const MSEL_OPTS={
 };
 const MSEL_LABEL={trader:id=>TRADER_BY_ID[id].name+" · "+DESK_BY_ID[TRADER_BY_ID[id].deskId].short,
   desk:id=>DESK_BY_ID[id].name, assetClass:v=>v, severity:v=>v};
-const MSEL_TITLE={trader:"traders",desk:"groups",assetClass:"asset classes",severity:"severities"};
+const MSEL_TITLE={trader:"traders",desk:"desks",assetClass:"asset classes",severity:"severities"};
 
 function alertInRange(a){ return a.day>=DAYS-state.dateRangeDays; }
 function matchRail(a){
@@ -3328,22 +3347,30 @@ const hlSub=(agg,spec)=>{
   if(dim.slice(0,2)==="P:"){ dim=dim.slice(2); src=agg.period; }
   return ((src||{})[dim]||{})[key]||0;
 };
-function hlPaintAggregates(agg){
+/* Is this aggregate the selection itself? A bar the cursor is on is already
+   lit and already 100% of itself, so drawing a share marker over it would
+   simply repaint it in the marker colour — which reads as the chart changing
+   colour under the mouse rather than as a measurement. */
+const hlIsSelf=(spec,sel)=>!!sel&&(spec===sel||(spec.slice(0,2)==="P:"&&spec.slice(2)===sel));
+function hlPaintAggregates(agg,sel){
   $$("[data-hl-agg]").forEach(el=>{
     const spec=el.getAttribute("data-hl-agg");
     const sub=hlSub(agg,spec);
     el.classList.toggle("hl-has",!!agg&&sub>0);
     const total=+el.getAttribute("data-hl-total")||0;
     const mark=el.querySelector&&el.querySelector(".hlmark");
-    if(mark) mark.style.width=((total>0?Math.min(1,sub/total):0)*(+el.getAttribute("data-hl-rate")||100)).toFixed(1)+"%";
+    if(mark) mark.style.width=(hlIsSelf(spec,sel)?0
+      :(total>0?Math.min(1,sub/total):0)*(+el.getAttribute("data-hl-rate")||100)).toFixed(1)+"%";
   });
   $$("rect.hlmark-svg").forEach(r=>{
-    const sub=hlSub(agg,r.getAttribute("data-hl-for"));
+    const spec=r.getAttribute("data-hl-for");
+    const sub=hlSub(agg,spec);
     const total=+r.getAttribute("data-hl-total")||0, len=+r.getAttribute("data-hl-len")||0;
-    r.setAttribute("width",((total>0?Math.min(1,sub/total):0)*len).toFixed(1));
+    r.setAttribute("width",(hlIsSelf(spec,sel)?0:(total>0?Math.min(1,sub/total):0)*len).toFixed(1));
   });
   $$("rect.hlshare").forEach(r=>{
-    const sub=hlSub(agg,r.getAttribute("data-hl-for"));
+    const spec=r.getAttribute("data-hl-for");
+    const sub=hlIsSelf(spec,sel)?0:hlSub(agg,spec);
     const px=+r.getAttribute("data-hl-px")||0, base=+r.getAttribute("data-hl-base")||0;
     const h=Math.max(0,sub*px);
     r.setAttribute("height",h.toFixed(1));
@@ -3381,7 +3408,7 @@ function hlApply(spec){
     ".hl-active rect"+sel+",.hl-active circle"+sel+"{stroke:var(--ink);stroke-width:1.6}";
   document.body.classList.add("hl-active");
   const agg=hlAggregate(spec);
-  hlPaintAggregates(agg);
+  hlPaintAggregates(agg,spec);
   hlLabel(spec,agg);
 }
 function hlLabel(spec,agg){
@@ -3602,6 +3629,78 @@ function hourChart(counts,opts){
   g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside</text>';
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
+/* Every tenor convention on the book reduced to years, so a swap, a bill, a
+   swaption and an FRA can sit in the same bucket. A swaption's risk is its
+   underlying, not the option leg, and an FRA's is the far date. */
+function tenorYears(t){
+  if(!t) return 0.25;
+  if(/^O\/N|^T\+/i.test(t)) return 0.004;
+  const into=t.match(/into\s+(\d+)\s*Y/i);      if(into) return +into[1];
+  const fra=t.match(/^(\d+)x(\d+)$/);            if(fra)  return +fra[2]/12;
+  const w=t.match(/^(\d+)\s*W$/i);               if(w)    return +w[1]/52;
+  const m=t.match(/^(\d+)\s*M$/);                if(m)    return +m[1]/12;
+  const y=t.match(/^(\d+)\s*Y$/i);               if(y)    return +y[1];
+  if(/month|quarter/i.test(t)) return 0.25;
+  return 0.25;
+}
+const TENOR_BANDS=[
+  {label:"≤ 1 month",   max:1/12,     color:"var(--pass)"},
+  {label:"1–12 months", max:1,        color:"var(--agent)"},
+  {label:"1–5 years",   max:5,        color:"var(--warn)"},
+  {label:"5 years +",   max:Infinity, color:"var(--fail)"},
+];
+function tenorBandOf(t){
+  const y=tenorYears(t);
+  for(let i=0;i<TENOR_BANDS.length;i++) if(y<=TENOR_BANDS[i].max) return TENOR_BANDS[i].label;
+  return TENOR_BANDS[TENOR_BANDS.length-1].label;
+}
+
+/* A stacked column chart with no axes and no labels, sized for a grid cell.
+   Squeezed on purpose: at this size a book's shape — a steady hum, a burst, a
+   gap, a step change in what is being traded — is legible before any number is. */
+function sparkStack(cols,segs,opts){
+  opts=opts||{};
+  const W=opts.w||188, H=opts.h||64, gap=cols.length>40?0.4:1;
+  const tot=c=>segs.reduce((a,sg)=>a+(c.v[sg.label]||0),0);
+  const max=Math.max(1e-9,...cols.map(tot),opts.max||0);
+  const bw=Math.max(0.8,(W-(cols.length-1)*gap)/cols.length);
+  let g='<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="var(--panel-2)" rx="3"/>';
+  cols.forEach((c,i)=>{
+    const x=i*(bw+gap), t=tot(c);
+    let acc=0;
+    segs.forEach(sg=>{
+      const v=c.v[sg.label]||0; if(v<=0) return;
+      const h=(v/max)*(H-2), y=H-1-((acc+v)/max)*(H-2);
+      g+='<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+Math.max(0.6,h).toFixed(2)+'" fill="'+sg.color+'"/>';
+      acc+=v;
+    });
+    if(t>0) g+='<rect class="ssHit" x="'+x.toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
+      ' data-tip="'+esc(c.label)+'" data-tipsub="'+esc(opts.unit==="m"?fmtM(t):fmtNum(t)+" deals")+
+      '" data-tiptable="'+esc(segs.filter(sg=>(c.v[sg.label]||0)>0).map(sg=>sg.label+"|"+(opts.unit==="m"?fmtM(c.v[sg.label]):fmtNum(c.v[sg.label]))).join("§"))+'"/>';
+  });
+  return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="none" class="sstack" role="img">'+g+"</svg>";
+}
+/* Weekly activity per trader, bucketed once over the book. */
+function traderActivity(weeksN,metric){
+  const endDay=DAYS-1, startDay=Math.max(0,endDay-weeksN*7+1);
+  const tenor=metric==="tenor";
+  const segs=tenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color}))
+                  :ASSET_CLASSES.map(a=>({label:a,color:AC_COLOR[a]}));
+  const by={};
+  TRADERS.forEach(t=>{ by[t.id]=Array.from({length:weeksN},(_,i)=>{
+    const s0=startDay+i*7, s1=Math.min(endDay,s0+6);
+    return {v:{},label:"Week of "+fmtDateShort(dateForIdx(s0))+" – "+fmtDateShort(dateForIdx(s1))};
+  }); });
+  TRADES.forEach(t=>{
+    if(t.dayIdx<startDay||!tradeMatchesRail(t)) return;
+    const arr=by[t.traderId]; if(!arr) return;
+    const w=Math.min(weeksN-1,Math.floor((t.dayIdx-startDay)/7));
+    const k=tenor?tenorBandOf(t.tenor):t.ac;
+    arr[w].v[k]=(arr[w].v[k]||0)+(metric==="notional"?t.notional:1);
+  });
+  return {segs,by,startDay,endDay};
+}
+
 /* ============================================================
    Market context — the deals plotted against the market they were struck into
    Every off-market, fixing-window, session-extreme and momentum typology is an
@@ -3887,6 +3986,52 @@ function paneOverview(){
   sevSegs.forEach(sg=>{ sg.hl='data-hlsrc="sev|'+esc(sg.label)+'" data-hl-sev="'+esc(sg.label)+'"'; sg.agg=hlAggP("sev",sg.label,sg.v); });
   stSegs.forEach(sg=>{ sg.hl='data-hlsrc="status|'+esc(sg.label)+'" data-hl-status="'+esc(sg.label)+'"'; sg.agg=hlAggP("status",sg.label,sg.v); });
 
+  /* Trading activity, one small chart per trader. Alert panels answer "who is
+     firing"; this answers the question underneath it — what does this person's
+     book actually look like week to week, and does it look like their
+     neighbours'. Squeezed on purpose: a burst, a gap, or a step change into
+     longer tenors is a shape you see before you read a number. */
+  const A=state.act;
+  const act=traderActivity(A.weeks,A.metric);
+  const unit=A.metric==="notional"?"m":"n";
+  const actRows=TRADERS.filter(traderInRail).slice().sort((a,b)=>
+    a.deskId.localeCompare(b.deskId,undefined,{numeric:true})||TRADER_STATS[b.id].idx-TRADER_STATS[a.id].idx);
+  const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(...act.by[t.id].map(c=>
+    act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0)))));
+  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor mix"]];
+  const actCards=actRows.map(t=>{
+    const cols=act.by[t.id];
+    const tot=cols.reduce((a,c)=>a+act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0),0);
+    const peak=Math.max(0,...cols.map(c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0)));
+    const s2=TRADER_STATS[t.id];
+    return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
+      '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
+      '<div class="an">'+esc(t.name)+"</div>"+
+      '<div class="ad">'+esc(DESK_BY_ID[t.deskId].short)+" · "+esc(t.grade.replace("Executive Director","ED"))+"</div>"+
+      sparkStack(cols,act.segs,{w:188,h:62,unit:unit,max:A.scale==="shared"?sharedMax:0})+
+      '<div class="af"><span>'+(A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
+      "<b>peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak))+"</b></div>"+
+      "</div>";
+  }).join("");
+  const actLegend=act.segs.map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("");
+  const actStrip='<div class="fstrip">'+
+    '<label><span>Weeks</span><input type="number" id="a-weeks" class="wkin" min="4" max="52" step="1" value="'+A.weeks+'"></label>'+
+    '<label><span>Measure</span><div class="segbtns">'+
+      METRICS.map(m=>'<button data-actmetric="'+m[0]+'" aria-pressed="'+(A.metric===m[0])+'">'+m[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Scale</span><div class="segbtns">'+
+      [["own","Each to its own peak"],["shared","Shared across traders"]].map(x=>
+        '<button data-actscale="'+x[0]+'" aria-pressed="'+(A.scale===x[0])+'">'+x[1]+"</button>").join("")+
+    "</div></label>"+
+    '<div class="fspacer"></div><div class="alegend">'+actLegend+"</div></div>";
+
+  const activity=panel("Trading activity by trader",
+    A.weeks+" weeks to "+fmtDate(TODAY)+" · "+actRows.length+" traders · one column per week",
+    actStrip+'<div class="agrid">'+actCards+"</div>",
+    "Each chart is one trader's own book, week by week, stacked by "+(A.metric==="tenor"?"how long the risk runs":"asset class")+". "+
+    "Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the thing to open. "+
+    "<b>Hover a card</b> to light that trader across every other panel; <b>click</b> for the trader file.");
+
   const rowA='<div class="grid2b">'+
     panel("Alert volume by month","stacked by severity · rolling 12 months · dark overlay = current selection",
       '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266,hlMonth:true})+"</div></div>",
@@ -3960,7 +4105,7 @@ function paneOverview(){
     })};
     mat.push(row);
   });
-  const matrix=panel("Where the patterns are firing","rule × trader · "+traderCols.length+" busiest names · full 12 months · darker = more alerts",
+  const matrix=panel("Detection heatmap","rule × trader · "+traderCols.length+" busiest names · full 12 months · darker = more alerts",
     '<div class="matwrap tallmat"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
     traderCols.map(s=>'<th class="colhd" data-hlsrc="trader|'+s.id+'" data-hlpin="1" data-tip="'+esc(s.name)+
       '" data-tipsub="'+esc(DESK_BY_ID[s.deskId].name)+'" data-tiptable="Risk index|'+s.idx.toFixed(1)+"§Versus cohort|×"+s.peer+
@@ -3973,10 +4118,11 @@ function paneOverview(){
         "§Group|"+esc(DESK_BY_ID[c.tr.deskId].short)+'">'+(c.n||"·")+"</button></td>").join("")+
       '<td><button class="mcell" '+hlAgg("rule",row.rule.id,row.total)+' style="background:color-mix(in srgb,var(--ink-3) 14%,var(--panel));font-weight:800" data-ruleclick="'+row.rule.id+'" data-tip="'+esc(row.rule.name)+'" data-tipsub="Every trader">'+row.total+"</button></td></tr>").join("")+
     "</tbody></table></div>"+
-    '<div class="mkey"><span class="kl">Alerts per cell</span><i style="background:var(--heat-0)"></i><span>0</span>'+
-    '<i style="background:'+heatColor(matMax*0.2,matMax)+'"></i><span>low</span>'+
-    '<i style="background:'+heatColor(matMax*0.55,matMax)+'"></i><span>mid</span>'+
-    '<i style="background:'+heatColor(matMax,matMax)+'"></i><span>'+matMax+'</span></div>',
+    '<div class="mkey"><span class="kl">Alerts per cell</span><i style="background:var(--heat-0)"></i><span>None</span>'+
+    '<i style="background:'+heatColor(matMax*0.2,matMax)+'"></i><span>Low</span>'+
+    '<i style="background:'+heatColor(matMax*0.55,matMax)+'"></i><span>Medium</span>'+
+    '<i style="background:'+heatColor(matMax*0.85,matMax)+'"></i><span>High</span>'+
+    '<i style="background:'+heatColor(matMax,matMax)+'"></i><span>Highest ('+matMax+')</span></div>',
     "<b>Click any cell</b> to open that trader and rule in the Detections queue. A lit column is one person, not a department: read down it for how many different typologies that name triggers, and across a row for a rule that needs re-tuning. "+
     "<b>Hover a name or a rule label</b> to light it across every panel on the page; <b>click the label</b> to pin that selection so it survives scrolling and tab changes.");
 
@@ -4020,7 +4166,7 @@ function paneOverview(){
       "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
     "</div>";
 
-  return kpis+rowA+'<div class="mt14">'+rowB+"</div>"+'<div class="mt14">'+rowH+"</div>"+
+  return kpis+activity+'<div class="mt14">'+rowA+"</div>"+'<div class="mt14">'+rowB+"</div>"+'<div class="mt14">'+rowH+"</div>"+
     '<div class="mt14">'+matrix+"</div>"+'<div class="mt14">'+rowC+"</div>";
 }
 
@@ -4187,7 +4333,7 @@ function paneBlotter(){
       [["7","7d"],["30","30d"],["90","90d"],["365","12m"]].map(r=>'<button data-brange="'+r[0]+'">'+r[1]+"</button>").join("")+"</div></label>"+
     '<label><span>Asset class</span><select id="b-ac">'+opt("","All asset classes",b.ac)+ASSET_CLASSES.map(a=>opt(a,a,b.ac)).join("")+"</select></label>"+
     '<label><span>Product</span><select id="b-product">'+opt("","All products",b.product)+prodOpts.map(p=>opt(p,p,b.product)).join("")+"</select></label>"+
-    '<label><span>Trader group</span><select id="b-desk">'+opt("","All groups",b.desk)+DESKS.map(d=>opt(d.id,d.name,b.desk)).join("")+"</select></label>"+
+    '<label><span>Desk</span><select id="b-desk">'+opt("","All desks",b.desk)+DESKS.map(d=>opt(d.id,d.name,b.desk)).join("")+"</select></label>"+
     '<label><span>Trader</span><select id="b-trader">'+opt("","All traders",b.trader)+
       TRADERS.slice().sort((x,y)=>x.name.localeCompare(y.name)).map(t=>opt(t.id,t.name,b.trader)).join("")+"</select></label>"+
     '<label><span>Direction</span><select id="b-dir">'+opt("","Any",b.dir)+DIRECTIONS.map(x=>opt(x,x,b.dir)).join("")+"</select></label>"+
@@ -4315,8 +4461,8 @@ function paneTraders(){
   }).filter(g=>g.members.length).sort((a,b)=>b.worst.s.idx-a.worst.s.idx);
   const gMax=Math.max(1,...groups.map(g=>g.worst.s.idx));
 
-  const tbl=panel("Trader groups","a reporting line is a set of people — these are their individual indices rolled up, not a pooled desk figure",
-    '<div class="table-wrap"><table><thead><tr><th>Group</th><th>Region</th><th class="r">Traders</th>'+
+  const tbl=panel("Desks","a desk is a set of people — these are their individual indices rolled up, not a pooled desk figure",
+    '<div class="table-wrap"><table><thead><tr><th>Desk</th><th>Region</th><th class="r">Traders</th>'+
     '<th class="r">Above index '+HOT+'</th><th>Highest-index trader</th><th class="r">Group median</th>'+
     '<th class="r">Alerts</th><th class="r">Critical</th><th class="r">Open</th><th class="r">Upheld</th></tr></thead><tbody>'+
     groups.map(g=>{
@@ -4796,6 +4942,10 @@ document.addEventListener("click",e=>{
   const pg=t.closest("[data-page]"); if(pg){ const p=pg.dataset.page.split("|"); state[p[0]].page=+p[1]; render();
     window.scrollTo({top:document.body.scrollHeight*0.35,behavior:"instant"}); return; }
   if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return; }
+  const am=t.closest("[data-actmetric]");
+  if(am){ state.act.metric=am.dataset.actmetric; render(); return; }
+  const asc=t.closest("[data-actscale]");
+  if(asc){ state.act.scale=asc.dataset.actscale; render(); return; }
   const pin=t.closest("[data-hlpin]");
   if(pin&&state.highlight){ e.preventDefault(); hlPin(pin.getAttribute("data-hlsrc")); return; }
   if(t.closest("#b-clear")){ Object.assign(state.blot,{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",
@@ -4826,6 +4976,8 @@ document.addEventListener("change",e=>{
     "b-ac":["blot","ac"],"b-product":["blot","product"],"b-desk":["blot","desk"],"b-trader":["blot","trader"],
     "b-dir":["blot","dir"],"b-from":["blot","from"],"b-to":["blot","to"],"l-status":["log","status"]};
   if(map[t.id]){ const m=map[t.id]; state[m[0]][m[1]]=t.value; if(m[1]==="ac") state.blot.product=""; state[m[0]].page=0; render(); return; }
+  if(t.id==="a-weeks"){ const n=parseInt(t.value,10);
+    state.act.weeks=isNaN(n)?26:Math.max(4,Math.min(52,n)); render(); return; }
   if(t.id==="d-open"){ state.det.openOnly=t.checked; state.det.page=0; render(); return; }
   if(t.id==="b-flagged"){ state.blot.flagged=t.checked; state.blot.page=0; render(); return; }
   if(t.id==="dec-reason"){ drawerDraft.reason=t.value; refreshDecide(); return; }
@@ -4843,7 +4995,8 @@ function liveInput(id,setter){
 document.addEventListener("input",e=>{
   const id=e.target.id;
   if(id==="dec-note"){ drawerDraft.note=e.target.value; return; }
-  const live={"d-search":v=>{state.det.search=v;state.det.page=0;},
+  const live={"a-weeks":v=>{const n=parseInt(v,10); if(!isNaN(n)) state.act.weeks=Math.max(4,Math.min(52,n));},
+              "d-search":v=>{state.det.search=v;state.det.page=0;},
               "b-search":v=>{state.blot.search=v;state.blot.page=0;},
               "b-ctpy":v=>{state.blot.ctpy=v;state.blot.page=0;},
               "l-search":v=>{state.log.search=v;state.log.page=0;}};
