@@ -198,7 +198,7 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 .hl-active rect.hlmark-svg,.hl-active rect.hlshare{opacity:.72}
 [data-hlsrc]{cursor:pointer}
-[data-hlpin]{cursor:crosshair}
+[data-hlsrc]{cursor:crosshair}
 /* Toggle in the rail + the pinned-selection badge. */
 .hltoggle{display:flex;align-items:center;gap:7px;font-size:0.65625rem;color:var(--ink-2);cursor:pointer;
   border:1px solid var(--hair);border-radius:7px;padding:7px 9px;background:var(--panel)}
@@ -424,7 +424,11 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 .wkin{width:5.5em;background:var(--panel);border:1px solid var(--hair);color:var(--ink);
   padding:5px 7px;border-radius:6px;font-size:0.71875rem;font-family:var(--mono)}
 .wkin:focus{outline:none;border-color:var(--brand)}
+.actstrip{flex-wrap:wrap;row-gap:9px}
+.actstrip .segbtns button{padding:5px 8px}
+.anodata{padding:26px 16px;color:var(--ink-3);font-size:0.75rem}
 .alegend{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:flex-end;max-width:44em}
+.alg i.dash{width:14px;height:0;border-top:1.6px dashed var(--ink);border-radius:0}
 .alg{display:inline-flex;align-items:center;gap:5px;font-size:0.59375rem;color:var(--ink-2);white-space:nowrap}
 .alg i{width:9px;height:9px;border-radius:2px;flex:0 0 auto}
 .tcard{background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:7px;position:relative;overflow:hidden}
@@ -3224,7 +3228,7 @@ const state={
   blot:{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",from:"",to:"",
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
-  act:{weeks:26,metric:"count",scale:"own"},
+  act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
   log:{who:"me",status:"",search:"",sort:{key:"reviewDay",dir:-1},page:0,per:25},
@@ -3654,15 +3658,72 @@ function tenorBandOf(t){
   for(let i=0;i<TENOR_BANDS.length;i++) if(y<=TENOR_BANDS[i].max) return TENOR_BANDS[i].label;
   return TENOR_BANDS[TENOR_BANDS.length-1].label;
 }
+const BAND_MID={"≤ 1 month":0.04,"1–12 months":0.5,"1–5 years":3,"5 years +":12};
+
+/* ISO 8601 week numbering, so "weeks 1–9" means the weeks a calendar actually
+   labels 1 to 9 rather than a count backwards from today. */
+function isoWeek(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7)+3);
+  const ft=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  ft.setUTCDate(ft.getUTCDate()-((ft.getUTCDay()+6)%7)+3);
+  return 1+Math.round((t-ft)/(7*dayMs));
+}
+function isoWeekYear(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+6)%7)+3);
+  return t.getUTCFullYear();
+}
+const dayOfYear=d=>Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(d.getFullYear(),0,0))/dayMs);
+/* "1-9", "1 – 9", "5", or blank for the whole year. */
+function parseRange(v){
+  const m=String(v==null?"":v).replace(/[–—]/g,"-").match(/^\s*(\d+)\s*(?:-\s*(\d+))?\s*$/);
+  if(!m) return [null,null];
+  const a=+m[1], b=m[2]?+m[2]:+m[1];
+  return [Math.min(a,b),Math.max(a,b)];
+}
+
+/* A prior year of trading, aggregated only — counts, notional and tenor mix per
+   trader per day. The alert book covers one year, so a year-on-year comparison
+   has nothing to sit against without it. Built from the same desk weights,
+   seasonality and product mix as the live book, a shade quieter, so last year
+   looks like the same floor rather than like a different one. */
+const PRIOR_ACT={};
+(function buildPriorYear(){
+  TRADERS.forEach(t=>{ PRIOR_ACT[t.id]={}; });
+  for(let d=0;d<DAYS;d++){
+    const date=new Date(dateForIdx(d).getTime()-365*dayMs);
+    if(!isBiz(date)) continue;
+    const iso=isoDate(date);
+    const dom=date.getDate(), eom=new Date(date.getFullYear(),date.getMonth()+1,0).getDate();
+    const eomBoost=dom>=eom-1?1.35:dom>=eom-3?1.15:1;
+    const seasonal=0.86+0.28*Math.sin((d+31)/58);
+    DESKS.forEach(desk=>{
+      const n=Math.max(1,Math.round(desk.w*seasonal*eomBoost*rand(0.72,1.28)*0.93));
+      for(let i=0;i<n;i++){
+        const tr=weightedChoice(desk.traders.map(x=>[x,x.grade==="Associate"?1.35:x.grade==="Senior"?1.15:0.85]));
+        const prod=choice(tr.products), meta=PROD_BY_NAME[prod];
+        const notional=Math.min(tr.ticketLimit*0.94,Math.max(0.4,lognorm(meta.med,meta.sig)));
+        const band=tenorBandOf(choice(meta.tenors));
+        const rec=PRIOR_ACT[tr.id][iso]||(PRIOR_ACT[tr.id][iso]={n:0,notional:0,tenor:{}});
+        rec.n++; rec.notional+=notional; rec.tenor[band]=(rec.tenor[band]||0)+1;
+      }
+    });
+  }
+})();
 
 /* A stacked column chart with no axes and no labels, sized for a grid cell.
    Squeezed on purpose: at this size a book's shape — a steady hum, a burst, a
-   gap, a step change in what is being traded — is legible before any number is. */
+   gap, a step change in what is being traded — is legible before any number is.
+   With year-on-year on, the same period twelve months earlier is drawn over it
+   as a line, so this year's shape is read against last year's rather than
+   against nothing. */
 function sparkStack(cols,segs,opts){
   opts=opts||{};
-  const W=opts.w||188, H=opts.h||64, gap=cols.length>40?0.4:1;
+  const W=opts.w||188, H=opts.h||64, gap=cols.length>40?0.4:cols.length>26?0.7:1;
   const tot=c=>segs.reduce((a,sg)=>a+(c.v[sg.label]||0),0);
-  const max=Math.max(1e-9,...cols.map(tot),opts.max||0);
+  const yoy=!!opts.yoy;
+  const max=Math.max(1e-9,...cols.map(tot),yoy?Math.max(...cols.map(c=>c.prior||0)):0,opts.max||0);
   const bw=Math.max(0.8,(W-(cols.length-1)*gap)/cols.length);
   let g='<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="var(--panel-2)" rx="3"/>';
   cols.forEach((c,i)=>{
@@ -3674,31 +3735,129 @@ function sparkStack(cols,segs,opts){
       g+='<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+Math.max(0.6,h).toFixed(2)+'" fill="'+sg.color+'"/>';
       acc+=v;
     });
-    if(t>0) g+='<rect class="ssHit" x="'+x.toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
+    if(t>0||c.prior>0) g+='<rect class="ssHit" x="'+x.toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
       ' data-tip="'+esc(c.label)+'" data-tipsub="'+esc(opts.unit==="m"?fmtM(t):fmtNum(t)+" deals")+
-      '" data-tiptable="'+esc(segs.filter(sg=>(c.v[sg.label]||0)>0).map(sg=>sg.label+"|"+(opts.unit==="m"?fmtM(c.v[sg.label]):fmtNum(c.v[sg.label]))).join("§"))+'"/>';
+      '" data-tiptable="'+esc(segs.filter(sg=>(c.v[sg.label]||0)>0).map(sg=>sg.label+"|"+(opts.unit==="m"?fmtM(c.v[sg.label]):fmtNum(c.v[sg.label]))).join("§")+
+        (yoy?"§Same period last year|"+(opts.unit==="m"?fmtM(c.prior||0):fmtNum(Math.round(c.prior||0))):""))+'"/>';
+  });
+  if(yoy){
+    const pts=cols.map((c,i)=>((i*(bw+gap))+bw/2).toFixed(2)+","+(H-1-((c.prior||0)/max)*(H-2)).toFixed(2)).join(" ");
+    g+='<polyline points="'+pts+'" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="3 2" opacity=".75"/>';
+  }
+  return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="none" class="sstack" role="img">'+g+"</svg>";
+}
+
+/* Tenor as a scatter rather than a stack. A stack tells you the mix; it does not
+   tell you whether a trader writes one maturity or twenty. Here each dot is a
+   bucket of deals at a tenor, sized by how many — so a book concentrated on one
+   point of the curve is a single row of large dots, and a book spread across it
+   is a column of small ones. The y axis is logarithmic because the book runs
+   from overnight to fifty years. */
+const TSC_MIN=0.003, TSC_MAX=52;
+const tscY=y=>Math.log(Math.max(TSC_MIN,Math.min(TSC_MAX,y))/TSC_MIN)/Math.log(TSC_MAX/TSC_MIN);
+function tenorScatter(cols,opts){
+  opts=opts||{};
+  const W=opts.w||188, H=opts.h||64, BINS=13;
+  const yoy=!!opts.yoy;
+  let g='<rect x="0" y="0" width="'+W+'" height="'+H+'" fill="var(--panel-2)" rx="3"/>';
+  [[1/12,"1M"],[1,"1Y"],[5,"5Y"],[30,"30Y"]].forEach(t=>{
+    const y=H-1-tscY(t[0])*(H-2);
+    g+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+W+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="1 3"/>';
+  });
+  const bw=W/Math.max(1,cols.length);
+  let maxN=1;
+  const binned=cols.map(c=>{
+    const bins=new Array(BINS).fill(0);
+    (c.tenors||[]).forEach(y=>{ const b=Math.min(BINS-1,Math.floor(tscY(y)*BINS)); bins[b]++; if(bins[b]>maxN) maxN=bins[b]; });
+    return bins;
+  });
+  const rMax=Math.max(1.1,Math.min(bw*0.62,(H-2)/BINS*0.72));
+  binned.forEach((bins,i)=>{
+    const cx=i*bw+bw/2;
+    bins.forEach((n,b)=>{
+      if(!n) return;
+      const yv=TSC_MIN*Math.pow(TSC_MAX/TSC_MIN,(b+0.5)/BINS);
+      const cy=H-1-tscY(yv)*(H-2);
+      const r=Math.max(0.8,Math.sqrt(n/maxN)*rMax);
+      const band=TENOR_BANDS.find(x=>yv<=x.max)||TENOR_BANDS[TENOR_BANDS.length-1];
+      g+='<circle cx="'+cx.toFixed(2)+'" cy="'+cy.toFixed(2)+'" r="'+r.toFixed(2)+'" fill="'+band.color+'" fill-opacity=".78"/>';
+    });
+  });
+  // The trader's own median tenor, and last year's for comparison.
+  const med=cols.map((c,i)=>{
+    const ts=(c.tenors||[]).slice().sort((a,b)=>a-b);
+    return ts.length?{x:i*bw+bw/2,y:H-1-tscY(median(ts))*(H-2)}:null;
+  }).filter(Boolean);
+  if(med.length>1) g+='<polyline points="'+med.map(m=>m.x.toFixed(2)+","+m.y.toFixed(2)).join(" ")+
+    '" fill="none" stroke="var(--ink-2)" stroke-width="1.1" opacity=".7"/>';
+  if(yoy){
+    const p=cols.map((c,i)=>c.priorTenor?{x:i*bw+bw/2,y:H-1-tscY(c.priorTenor)*(H-2)}:null).filter(Boolean);
+    if(p.length>1) g+='<polyline points="'+p.map(m=>m.x.toFixed(2)+","+m.y.toFixed(2)).join(" ")+
+      '" fill="none" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="3 2" opacity=".7"/>';
+  }
+  cols.forEach((c,i)=>{
+    const ts=c.tenors||[];
+    if(!ts.length&&!c.priorTenor) return;
+    const s2=ts.slice().sort((a,b)=>a-b);
+    g+='<rect class="ssHit" x="'+(i*bw).toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
+      ' data-tip="'+esc(c.label)+'" data-tipsub="'+fmtNum(ts.length)+' deals"'+
+      ' data-tiptable="'+esc(["Shortest|"+fmtYrs(s2[0]),"Median|"+fmtYrs(median(s2)),"Longest|"+fmtYrs(s2[s2.length-1]),
+        "Distinct tenors|"+uniq(s2.map(x=>x.toFixed(2))).length].concat(c.priorTenor?["Median last year|"+fmtYrs(c.priorTenor)]:[]).join("§"))+'"/>';
   });
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="none" class="sstack" role="img">'+g+"</svg>";
 }
-/* Weekly activity per trader, bucketed once over the book. */
-function traderActivity(weeksN,metric){
-  const endDay=DAYS-1, startDay=Math.max(0,endDay-weeksN*7+1);
+const fmtYrs=y=>y==null?"—":y<1/24?"O/N":y<1?Math.round(y*12)+"M":y<10?(+y.toFixed(1))+"Y":Math.round(y)+"Y";
+
+/* The columns of every chart: a calendar year, cut into ISO weeks or into days,
+   optionally narrowed to a numbered range. */
+function actColumns(){
+  const A=state.act, wk=A.unit==="week";
+  const [lo,hi]=parseRange(A.range);
+  const byKey={}, cols=[];
+  for(let d=0;d<DAYS;d++){
+    const date=dateForIdx(d);
+    if((wk?isoWeekYear(date):date.getFullYear())!==A.year) continue;
+    const num=wk?isoWeek(date):dayOfYear(date);
+    if(lo!=null&&(num<lo||num>hi)) continue;
+    if(!byKey[num]){
+      byKey[num]={key:num,days:[],dates:[],label:(wk?"Week ":"Day ")+num+" of "+A.year};
+      cols.push(byKey[num]);
+    }
+    byKey[num].days.push(d);
+    byKey[num].dates.push(isoDate(new Date(date.getTime()-365*dayMs)));
+  }
+  cols.sort((a,b)=>a.key-b.key);
+  cols.forEach(c=>{ c.label+=" · "+fmtDateShort(dateForIdx(c.days[0]))+
+    (c.days.length>1?" – "+fmtDateShort(dateForIdx(c.days[c.days.length-1])):""); });
+  return cols;
+}
+/* Weekly (or daily) activity per trader, bucketed once over the book. */
+function traderActivity(cols,metric){
   const tenor=metric==="tenor";
-  const segs=tenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color}))
-                  :ASSET_CLASSES.map(a=>({label:a,color:AC_COLOR[a]}));
+  const segs=tenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):ASSET_CLASSES.map(a=>({label:a,color:AC_COLOR[a]}));
   const by={};
-  TRADERS.forEach(t=>{ by[t.id]=Array.from({length:weeksN},(_,i)=>{
-    const s0=startDay+i*7, s1=Math.min(endDay,s0+6);
-    return {v:{},label:"Week of "+fmtDateShort(dateForIdx(s0))+" – "+fmtDateShort(dateForIdx(s1))};
-  }); });
-  TRADES.forEach(t=>{
-    if(t.dayIdx<startDay||!tradeMatchesRail(t)) return;
-    const arr=by[t.traderId]; if(!arr) return;
-    const w=Math.min(weeksN-1,Math.floor((t.dayIdx-startDay)/7));
-    const k=tenor?tenorBandOf(t.tenor):t.ac;
-    arr[w].v[k]=(arr[w].v[k]||0)+(metric==="notional"?t.notional:1);
+  TRADERS.forEach(t=>{
+    by[t.id]=cols.map(c=>{
+      const cell={v:{},label:c.label,tenors:tenor?[]:null,prior:0,priorTenor:null};
+      c.days.forEach(d=>{
+        (byTraderDay.get(t.id+"|"+d)||[]).forEach(x=>{
+          if(!tradeMatchesRail(x)) return;
+          if(tenor) cell.tenors.push(tenorYears(x.tenor));
+          const k=tenor?tenorBandOf(x.tenor):x.ac;
+          cell.v[k]=(cell.v[k]||0)+(metric==="notional"?x.notional:1);
+        });
+      });
+      let pw=0,pn=0;
+      c.dates.forEach(iso=>{
+        const r=(PRIOR_ACT[t.id]||{})[iso]; if(!r) return;
+        cell.prior+=metric==="notional"?r.notional:r.n;
+        Object.keys(r.tenor).forEach(b=>{ pw+=r.tenor[b]*(BAND_MID[b]||1); pn+=r.tenor[b]; });
+      });
+      if(pn) cell.priorTenor=pw/pn;
+      return cell;
+    });
   });
-  return {segs,by,startDay,endDay};
+  return {segs,by};
 }
 
 /* ============================================================
@@ -3988,49 +4147,75 @@ function paneOverview(){
 
   /* Trading activity, one small chart per trader. Alert panels answer "who is
      firing"; this answers the question underneath it — what does this person's
-     book actually look like week to week, and does it look like their
-     neighbours'. Squeezed on purpose: a burst, a gap, or a step change into
-     longer tenors is a shape you see before you read a number. */
+     book actually look like, period by period, and does it look like their
+     neighbours'. Squeezed on purpose: a burst, a gap, or a drift into longer
+     tenors is a shape you see before you read a number. */
   const A=state.act;
-  const act=traderActivity(A.weeks,A.metric);
+  const actCols=actColumns();
+  const act=traderActivity(actCols,A.metric);
   const unit=A.metric==="notional"?"m":"n";
+  const isTenor=A.metric==="tenor";
   const actRows=TRADERS.filter(traderInRail).slice().sort((a,b)=>
     a.deskId.localeCompare(b.deskId,undefined,{numeric:true})||TRADER_STATS[b.id].idx-TRADER_STATS[a.id].idx);
-  const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(...act.by[t.id].map(c=>
-    act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0)))));
-  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor mix"]];
-  const actCards=actRows.map(t=>{
-    const cols=act.by[t.id];
-    const tot=cols.reduce((a,c)=>a+act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0),0);
-    const peak=Math.max(0,...cols.map(c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0)));
-    const s2=TRADER_STATS[t.id];
+  const cellTot=c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0);
+  const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(0,...act.by[t.id].map(cellTot))));
+  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor spread"]];
+  const YEARS=uniq(Array.from({length:DAYS},(_,d)=>dateForIdx(d).getFullYear())).sort();
+
+  const actCards=actCols.length?actRows.map(t=>{
+    const cells=act.by[t.id];
+    const tot=cells.reduce((a,c)=>a+cellTot(c),0);
+    const peak=Math.max(0,...cells.map(cellTot));
+    const allT=isTenor?cells.reduce((a,c)=>a.concat(c.tenors||[]),[]):null;
     return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
       '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
       '<div class="an">'+esc(t.name)+"</div>"+
       '<div class="ad">'+esc(DESK_BY_ID[t.deskId].short)+" · "+esc(t.grade.replace("Executive Director","ED"))+"</div>"+
-      sparkStack(cols,act.segs,{w:188,h:62,unit:unit,max:A.scale==="shared"?sharedMax:0})+
-      '<div class="af"><span>'+(A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
-      "<b>peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak))+"</b></div>"+
+      (isTenor?tenorScatter(cells,{w:188,h:62,yoy:A.yoy})
+              :sparkStack(cells,act.segs,{w:188,h:62,unit:unit,yoy:A.yoy,max:A.scale==="shared"?sharedMax:0}))+
+      '<div class="af"><span>'+(isTenor?fmtNum(allT.length)+" deals"
+          :A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
+      "<b>"+(isTenor?(allT.length?fmtYrs(median(allT))+" med · "+uniq(allT.map(x=>x.toFixed(2))).length+" tenors":"—")
+          :"peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak)))+"</b></div>"+
       "</div>";
-  }).join("");
-  const actLegend=act.segs.map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("");
-  const actStrip='<div class="fstrip">'+
-    '<label><span>Weeks</span><input type="number" id="a-weeks" class="wkin" min="4" max="52" step="1" value="'+A.weeks+'"></label>'+
+  }).join(""):'<div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div>';
+
+  const actLegend=(isTenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):act.segs)
+    .map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("")+
+    (A.yoy?'<span class="alg"><i class="dash"></i>Same period last year</span>':"");
+
+  const actStrip='<div class="fstrip actstrip">'+
+    '<label><span>Year</span><select id="a-year">'+YEARS.map(y=>opt(String(y),String(y),String(A.year))).join("")+"</select></label>"+
+    '<label><span>Cut by</span><div class="segbtns">'+
+      [["week","Week"],["day","Day"]].map(u=>'<button data-actunit="'+u[0]+'" aria-pressed="'+(A.unit===u[0])+'">'+u[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>'+(A.unit==="week"?"Weeks of the year":"Days of the year")+'</span>'+
+      '<input type="text" id="a-range" class="wkin" placeholder="'+(A.unit==="week"?"1-9":"1-60")+'" value="'+esc(A.range)+'"></label>'+
     '<label><span>Measure</span><div class="segbtns">'+
       METRICS.map(m=>'<button data-actmetric="'+m[0]+'" aria-pressed="'+(A.metric===m[0])+'">'+m[1]+"</button>").join("")+
     "</div></label>"+
-    '<label><span>Scale</span><div class="segbtns">'+
-      [["own","Each to its own peak"],["shared","Shared across traders"]].map(x=>
-        '<button data-actscale="'+x[0]+'" aria-pressed="'+(A.scale===x[0])+'">'+x[1]+"</button>").join("")+
+    '<label><span>Columns</span><div class="segbtns">'+
+      [[0,"Auto"],[3,"3"],[4,"4"],[6,"6"],[8,"8"],[11,"11"]].map(c=>
+        '<button data-actcols="'+c[0]+'" aria-pressed="'+(A.cols===c[0])+'">'+c[1]+"</button>").join("")+
     "</div></label>"+
+    (isTenor?"":'<label><span>Scale</span><div class="segbtns">'+
+      [["own","Own peak"],["shared","Shared"]].map(x=>
+        '<button data-actscale="'+x[0]+'" aria-pressed="'+(A.scale===x[0])+'">'+x[1]+"</button>").join("")+
+    "</div></label>")+
+    '<label><span>Compare</span><div class="segbtns">'+
+      '<button data-actyoy="1" aria-pressed="'+(!!A.yoy)+'">Year on year</button></div></label>'+
     '<div class="fspacer"></div><div class="alegend">'+actLegend+"</div></div>";
 
+  const gridStyle=A.cols?' style="grid-template-columns:repeat('+A.cols+',minmax(0,1fr))"':"";
+  const span=actCols.length?(A.unit==="week"?"weeks ":"days ")+actCols[0].key+"–"+actCols[actCols.length-1].key+" of "+A.year:"no periods in range";
   const activity=panel("Trading activity by trader",
-    A.weeks+" weeks to "+fmtDate(TODAY)+" · "+actRows.length+" traders · one column per week",
-    actStrip+'<div class="agrid">'+actCards+"</div>",
-    "Each chart is one trader's own book, week by week, stacked by "+(A.metric==="tenor"?"how long the risk runs":"asset class")+". "+
-    "Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the thing to open. "+
-    "<b>Hover a card</b> to light that trader across every other panel; <b>click</b> for the trader file.");
+    span+" · "+actRows.length+" traders · one column per "+A.unit+(A.yoy?" · dashed = same period last year":""),
+    actStrip+'<div class="agrid"'+gridStyle+">"+actCards+"</div>",
+    (isTenor
+      ? "Each dot is a group of deals at one maturity, sized by how many. A book concentrated on one point of the curve is a row of large dots; a book spread across it is a column of small ones — which is the difference between a trader running a mandate and a trader wandering. The line is their median tenor."
+      : "Each chart is one trader's own book, period by period, stacked by asset class.")+
+    " Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the one to open. "+
+    "<b>Click a card</b> to lock that trader across every panel on the page; <b>double-click</b> for the trader file.");
 
   const rowA='<div class="grid2b">'+
     panel("Alert volume by month","stacked by severity · rolling 12 months · dark overlay = current selection",
@@ -4907,61 +5092,100 @@ $("#reset-reviews").addEventListener("click",()=>{
   location.reload();
 });
 
-document.addEventListener("click",e=>{
-  const t=e.target;
+/* ============================================================
+   Interaction model
+   One rule everywhere: a single click on anything the highlight can key on
+   LOCKS that selection; clicking it again, or Esc, releases it. A double click
+   drills — opens the alert, the ticket, the trader file, or the queue filtered
+   to what was clicked. Chrome (tabs, filters, sorting, paging, the decision
+   form) always acts on the first click, because a control is not a data point.
+============================================================ */
+function handleChrome(t,e){
   const mbtn=t.closest(".msel-btn");
-  if(mbtn){ const k=mbtn.dataset.msel; if(openMsel===k) closeMsel(); else buildMsel(k); return; }
-  const mall=t.closest("[data-mselall]"); if(mall){ const k=mall.dataset.mselall; state.filters[k]=new Set(MSEL_OPTS[k]); buildMsel(k); render(); return; }
-  const mclr=t.closest("[data-mselclear]"); if(mclr){ const k=mclr.dataset.mselclear; state.filters[k]=new Set(); buildMsel(k); render(); return; }
-  const tab=t.closest(".tab"); if(tab){ state.tab=tab.dataset.tab; closeMsel(); render(); return; }
-  const chip=t.closest("[data-clearchip]"); if(chip){ state.filters[chip.dataset.clearchip]=new Set(); render(); return; }
-  if(t.closest("[data-clearrule]")){ state.det.rule=""; render(); return; }
-
-  const alertEl=t.closest("[data-alert]"); if(alertEl){ e.preventDefault(); alertDrawer(ALERT_BY_ID[alertEl.dataset.alert]); return; }
-  const tradeEl=t.closest("[data-trade]"); if(tradeEl){ e.preventDefault(); tradeDrawer(TRADES_BY_ID[tradeEl.dataset.trade]); return; }
-  const trEl=t.closest("[data-trader]"); if(trEl){ e.preventDefault(); traderDrawer(TRADER_BY_ID[trEl.dataset.trader]); return; }
-
-  const rc=t.closest("[data-ruleclick]"); if(rc){ closeDrawer(); goDetections({rule:rc.dataset.ruleclick}); return; }
-  const trr=t.closest("[data-trrule]"); if(trr){ closeDrawer(); const p=trr.dataset.trrule.split("|"); goDetections({rule:p[1],trader:p[0]}); return; }
-  const sevc=t.closest("[data-sevclick]"); if(sevc){ state.filters.severity=new Set([sevc.dataset.sevclick]); render(); return; }
-  const stc=t.closest("[data-statusclick]"); if(stc){ goDetections({status:stc.dataset.statusclick}); return; }
+  if(mbtn){ const k=mbtn.dataset.msel; if(openMsel===k) closeMsel(); else buildMsel(k); return true; }
+  const mall=t.closest("[data-mselall]"); if(mall){ const k=mall.dataset.mselall; state.filters[k]=new Set(MSEL_OPTS[k]); buildMsel(k); render(); return true; }
+  const mclr=t.closest("[data-mselclear]"); if(mclr){ const k=mclr.dataset.mselclear; state.filters[k]=new Set(); buildMsel(k); render(); return true; }
+  const tab=t.closest(".tab"); if(tab){ state.tab=tab.dataset.tab; closeMsel(); render(); return true; }
+  const chip=t.closest("[data-clearchip]"); if(chip){ state.filters[chip.dataset.clearchip]=new Set(); render(); return true; }
+  if(t.closest("[data-clearrule]")){ state.det.rule=""; render(); return true; }
+  const rcat=t.closest("[data-rulecat]"); if(rcat){ state.rules.cat=rcat.dataset.rulecat; render(); return true; }
+  const lw=t.closest("[data-logwho]"); if(lw){ state.log.who=lw.dataset.logwho; state.log.page=0; render(); return true; }
+  const br=t.closest("[data-brange]"); if(br){ const n=+br.dataset.brange;
+    state.blot.from=isoDate(dateAt(n-1)); state.blot.to=isoDate(TODAY); state.blot.page=0; render(); return true; }
+  const srt=t.closest("[data-sortt]"); if(srt){ toggleSort(srt.dataset.sortt,srt.dataset.sortk); render(); return true; }
+  const pg=t.closest("[data-page]"); if(pg){ const p=pg.dataset.page.split("|"); state[p[0]].page=+p[1]; render();
+    window.scrollTo({top:document.body.scrollHeight*0.35,behavior:"instant"}); return true; }
+  if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return true; }
+  if(t.closest("#b-clear")){ Object.assign(state.blot,{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",
+    from:isoDate(dateAt(29)),to:isoDate(TODAY),page:0}); render(); return true; }
+  const am=t.closest("[data-actmetric]"); if(am){ state.act.metric=am.dataset.actmetric; render(); return true; }
+  const asc=t.closest("[data-actscale]"); if(asc){ state.act.scale=asc.dataset.actscale; render(); return true; }
+  const aun=t.closest("[data-actunit]"); if(aun){ state.act.unit=aun.dataset.actunit; state.act.range=""; render(); return true; }
+  const acl=t.closest("[data-actcols]"); if(acl){ state.act.cols=+acl.dataset.actcols; render(); return true; }
+  const ayy=t.closest("[data-actyoy]"); if(ayy){ state.act.yoy=!state.act.yoy; render(); return true; }
+  const acta=t.closest("[data-act]");
+  if(acta){
+    if(acta.dataset.act==="__reset"){ undoDecision(); return true; }
+    drawerDraft.action=drawerDraft.action===acta.dataset.act?"":acta.dataset.act;
+    drawerDraft.reason="";
+    refreshDecide(); return true;
+  }
+  if(t.closest("#dec-save")){ recordDecision(); return true; }
+  if(t.closest("#d-close")||t.id==="scrim"){ closeDrawer(); return true; }
+  return false;
+}
+/* Drilling through to the underlying data. */
+function handleDrill(t,e){
+  const alertEl=t.closest("[data-alert]"); if(alertEl){ e.preventDefault(); alertDrawer(ALERT_BY_ID[alertEl.dataset.alert]); return true; }
+  const tradeEl=t.closest("[data-trade]"); if(tradeEl){ e.preventDefault(); tradeDrawer(TRADES_BY_ID[tradeEl.dataset.trade]); return true; }
+  const trEl=t.closest("[data-trader]"); if(trEl){ e.preventDefault(); traderDrawer(TRADER_BY_ID[trEl.dataset.trader]); return true; }
+  const trr=t.closest("[data-trrule]"); if(trr){ closeDrawer(); const p=trr.dataset.trrule.split("|"); goDetections({rule:p[1],trader:p[0]}); return true; }
+  const rc=t.closest("[data-ruleclick]"); if(rc){ closeDrawer(); goDetections({rule:rc.dataset.ruleclick}); return true; }
+  const sevc=t.closest("[data-sevclick]"); if(sevc){ state.filters.severity=new Set([sevc.dataset.sevclick]); render(); return true; }
+  const stc=t.closest("[data-statusclick]"); if(stc){ goDetections({status:stc.dataset.statusclick}); return true; }
   const mb=t.closest("[data-monthbar]"); if(mb){
     const mk=MONTH_KEYS[+mb.dataset.monthbar];
     const days=Math.max(1,Math.round((TODAY-new Date(mk.y,mk.m,1))/dayMs)+1);
-    state.dateRangeDays=Math.min(365,days); $("#f-daterange").value=[1,7,30,90,182,365].reduce((p,c)=>Math.abs(c-state.dateRangeDays)<Math.abs(p-state.dateRangeDays)?c:p,365);
-    goDetections({}); return;
+    state.dateRangeDays=Math.min(365,days);
+    $("#f-daterange").value=[1,7,30,90,182,365].reduce((p,c)=>Math.abs(c-state.dateRangeDays)<Math.abs(p-state.dateRangeDays)?c:p,365);
+    goDetections({}); return true;
   }
-  const dk=t.closest("[data-deskclick]"); if(dk){ state.filters.desk=new Set([dk.dataset.deskclick]); render(); return; }
-  const rcat=t.closest("[data-rulecat]"); if(rcat){ state.rules.cat=rcat.dataset.rulecat; render(); return; }
-  const lw=t.closest("[data-logwho]"); if(lw){ state.log.who=lw.dataset.logwho; state.log.page=0; render(); return; }
-  const br=t.closest("[data-brange]"); if(br){
-    const n=+br.dataset.brange;
-    state.blot.from=isoDate(dateAt(n-1)); state.blot.to=isoDate(TODAY); state.blot.page=0; render(); return;
+  const dk=t.closest("[data-deskclick]"); if(dk){ state.filters.desk=new Set([dk.dataset.deskclick]); render(); return true; }
+  const hr=t.closest("[data-hlsrc]");
+  if(hr){
+    // A source with no drill target of its own opens the queue scoped to it.
+    const sp=hr.getAttribute("data-hlsrc"), i=sp.indexOf("|"), k=sp.slice(0,i), v=sp.slice(i+1);
+    if(k==="trader"){ closeDrawer(); goDetections({trader:v}); return true; }
+    if(k==="rule"){ closeDrawer(); goDetections({rule:v}); return true; }
+    if(k==="cat"){ closeDrawer(); goDetections({cat:v}); return true; }
+    if(k==="sev"){ state.filters.severity=new Set([v]); render(); return true; }
+    if(k==="status"){ goDetections({status:v}); return true; }
+    if(k==="desk"){ state.filters.desk=new Set([v]); render(); return true; }
   }
-  const srt=t.closest("[data-sortt]"); if(srt){ toggleSort(srt.dataset.sortt,srt.dataset.sortk); render(); return; }
-  const pg=t.closest("[data-page]"); if(pg){ const p=pg.dataset.page.split("|"); state[p[0]].page=+p[1]; render();
-    window.scrollTo({top:document.body.scrollHeight*0.35,behavior:"instant"}); return; }
-  if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return; }
-  const am=t.closest("[data-actmetric]");
-  if(am){ state.act.metric=am.dataset.actmetric; render(); return; }
-  const asc=t.closest("[data-actscale]");
-  if(asc){ state.act.scale=asc.dataset.actscale; render(); return; }
-  const pin=t.closest("[data-hlpin]");
-  if(pin&&state.highlight){ e.preventDefault(); hlPin(pin.getAttribute("data-hlsrc")); return; }
-  if(t.closest("#b-clear")){ Object.assign(state.blot,{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",
-    from:isoDate(dateAt(29)),to:isoDate(TODAY),page:0}); render(); return; }
-
-  const act=t.closest("[data-act]");
-  if(act){
-    if(act.dataset.act==="__reset"){ undoDecision(); return; }
-    drawerDraft.action=drawerDraft.action===act.dataset.act?"":act.dataset.act;
-    drawerDraft.reason="";
-    refreshDecide(); return;
+  return false;
+}
+/* A single click on a highlight source is held briefly, so a double click can
+   cancel it and drill instead of toggling the lock twice on the way through. */
+let _clickTimer=null;
+document.addEventListener("click",e=>{
+  const t=e.target;
+  if(handleChrome(t,e)) return;
+  const src=t.closest("[data-hlsrc]");
+  if(src&&state.highlight){
+    e.preventDefault();
+    clearTimeout(_clickTimer);
+    const spec=src.getAttribute("data-hlsrc");
+    _clickTimer=setTimeout(()=>{ hlPin(spec); },200);
+    return;
   }
-  if(t.closest("#dec-save")){ recordDecision(); return; }
-
-  if(t.closest("#d-close")||t.id==="scrim"){ closeDrawer(); return; }
+  if(handleDrill(t,e)) return;
   if(openMsel&&!t.closest(".msel-panel")&&!t.closest(".msel-btn")) closeMsel();
+});
+document.addEventListener("dblclick",e=>{
+  clearTimeout(_clickTimer);
+  const t=e.target;
+  if(handleChrome(t,e)) return;
+  handleDrill(t,e);
 });
 
 document.addEventListener("change",e=>{
@@ -4976,8 +5200,8 @@ document.addEventListener("change",e=>{
     "b-ac":["blot","ac"],"b-product":["blot","product"],"b-desk":["blot","desk"],"b-trader":["blot","trader"],
     "b-dir":["blot","dir"],"b-from":["blot","from"],"b-to":["blot","to"],"l-status":["log","status"]};
   if(map[t.id]){ const m=map[t.id]; state[m[0]][m[1]]=t.value; if(m[1]==="ac") state.blot.product=""; state[m[0]].page=0; render(); return; }
-  if(t.id==="a-weeks"){ const n=parseInt(t.value,10);
-    state.act.weeks=isNaN(n)?26:Math.max(4,Math.min(52,n)); render(); return; }
+  if(t.id==="a-range"){ state.act.range=t.value; render(); return; }
+  if(t.id==="a-year"){ state.act.year=+t.value; render(); return; }
   if(t.id==="d-open"){ state.det.openOnly=t.checked; state.det.page=0; render(); return; }
   if(t.id==="b-flagged"){ state.blot.flagged=t.checked; state.blot.page=0; render(); return; }
   if(t.id==="dec-reason"){ drawerDraft.reason=t.value; refreshDecide(); return; }
@@ -4995,7 +5219,7 @@ function liveInput(id,setter){
 document.addEventListener("input",e=>{
   const id=e.target.id;
   if(id==="dec-note"){ drawerDraft.note=e.target.value; return; }
-  const live={"a-weeks":v=>{const n=parseInt(v,10); if(!isNaN(n)) state.act.weeks=Math.max(4,Math.min(52,n));},
+  const live={"a-range":v=>{ state.act.range=v; },
               "d-search":v=>{state.det.search=v;state.det.page=0;},
               "b-search":v=>{state.blot.search=v;state.blot.page=0;},
               "b-ctpy":v=>{state.blot.ctpy=v;state.blot.page=0;},
