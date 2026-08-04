@@ -924,6 +924,41 @@ const PROD_BY_NAME={}; PRODUCTS.forEach(p=>PROD_BY_NAME[p.p]=p);
    errors — so only the products below can carry a tenor-cap breach. */
 const MAX_YEARS={"IRS":50,"CCS":30,"Cross-Ccy Basis Swap":30,"Inflation Swap":50,
   "Cap/Floor":30,"Govt Bond":50,"Corp Bond":30,"CDS Single Name":10,"Total Return Swap":10};
+/* Every tenor convention on the book reduced to years, so a swap, a bill, a
+   swaption and an FRA can sit in the same bucket. A swaption's risk is its
+   underlying, not the option leg, and an FRA's is the far date. */
+function tenorYears(t){
+  if(!t) return 0.25;
+  if(/^O\/N|^T\+/i.test(t)) return 0.004;
+  const into=t.match(/into\s+(\d+)\s*Y/i);      if(into) return +into[1];
+  const fra=t.match(/^(\d+)x(\d+)$/);            if(fra)  return +fra[2]/12;
+  const w=t.match(/^(\d+)\s*W$/i);               if(w)    return +w[1]/52;
+  const m=t.match(/^(\d+)\s*M$/);                if(m)    return +m[1]/12;
+  const y=t.match(/^(\d+)\s*Y$/i);               if(y)    return +y[1];
+  if(/month|quarter/i.test(t)) return 0.25;
+  return 0.25;
+}
+const TENOR_BANDS=[
+  {label:"≤ 1 month",   max:1/12,     color:"var(--pass)"},
+  {label:"1–12 months", max:1,        color:"var(--agent)"},
+  {label:"1–5 years",   max:5,        color:"var(--warn)"},
+  {label:"5 years +",   max:Infinity, color:"var(--fail)"},
+];
+function tenorBandOf(t){
+  const y=tenorYears(t);
+  for(let i=0;i<TENOR_BANDS.length;i++) if(y<=TENOR_BANDS[i].max) return TENOR_BANDS[i].label;
+  return TENOR_BANDS[TENOR_BANDS.length-1].label;
+}
+const BAND_MID={"≤ 1 month":0.04,"1–12 months":0.5,"1–5 years":3,"5 years +":12};
+/* Ticket-size bands. Defined once so the distribution chart and the highlight
+   dimension cannot disagree about where a $25m deal belongs. */
+const SIZE_BANDS=[[0,1,"< $1m"],[1,5,"$1–5m"],[5,10,"$5–10m"],[10,25,"$10–25m"],[25,50,"$25–50m"],
+  [50,100,"$50–100m"],[100,250,"$100–250m"],[250,500,"$250–500m"],[500,Infinity,"$500m +"]];
+function sizeBandOf(n){
+  for(let i=0;i<SIZE_BANDS.length;i++) if(n>=SIZE_BANDS[i][0]&&n<SIZE_BANDS[i][1]) return SIZE_BANDS[i][2];
+  return SIZE_BANDS[SIZE_BANDS.length-1][2];
+}
+
 /* Products whose price comes out of a model rather than off a screen. Only
    these can carry a day-one P&L argument; a spot deal is marked within seconds. */
 const MODELLED=["FX Barrier Option","FX Digital Option","FX Accumulator","FX Variance Swap",
@@ -3355,8 +3390,17 @@ applyReviews();
    clusters outside the hours anyone is watching — so it earns its own axis. */
 ALERTS.forEach(a=>{
   let m=null;
-  a.tradeIds.forEach(id=>{ const t=TRADES_BY_ID[id]; if(t&&(m===null||t.execMin<m)) m=t.execMin; });
+  const ct=[], ch=[], tb=[], sb=[];
+  a.tradeIds.forEach(id=>{
+    const t=TRADES_BY_ID[id]; if(!t) return;
+    if(m===null||t.execMin<m) m=t.execMin;
+    if(ct.indexOf(t.ctpy)<0) ct.push(t.ctpy);
+    if(ch.indexOf(t.channel)<0) ch.push(t.channel);
+    const b1=tenorBandOf(t.tenor); if(tb.indexOf(b1)<0) tb.push(b1);
+    const b2=sizeBandOf(t.notional); if(sb.indexOf(b2)<0) sb.push(b2);
+  });
   a.hour=m===null?null:Math.min(23,Math.floor(m/60));
+  a.ctpys=ct; a.channels=ch; a.tenorBands=tb; a.sizeBands=sb;
 });
 
 const TRADER_STATS={};
@@ -3462,9 +3506,14 @@ function tradeMatchesRail(t){
    whether twenty elements or two thousand are on screen.
 ============================================================ */
 const HL_KEYS={trader:"data-hl-trader",desk:"data-hl-desk",rule:"data-hl-rule",cat:"data-hl-cat",
-  sev:"data-hl-sev",status:"data-hl-status",ac:"data-hl-ac",hour:"data-hl-hour",month:"data-hl-month"};
-const HL_NOUN={trader:"Trader",desk:"Trader group",rule:"Rule",cat:"Category",
-  sev:"Severity",status:"Disposition",ac:"Asset class",hour:"Booking hour",month:"Month"};
+  sev:"data-hl-sev",status:"data-hl-status",ac:"data-hl-ac",hour:"data-hl-hour",month:"data-hl-month",
+  product:"data-hl-product",ctpy:"data-hl-ctpy",channel:"data-hl-channel",
+  tenorb:"data-hl-tenorb",sizeb:"data-hl-sizeb"};
+/* Dimensions an alert can hold more than one value of. */
+const HL_MULTI={ac:1,product:1,ctpy:1,channel:1,tenorb:1,sizeb:1};
+const HL_NOUN={trader:"Trader",desk:"Desk",rule:"Rule",cat:"Category",
+  sev:"Severity",status:"Disposition",ac:"Asset class",hour:"Booking hour",month:"Month",
+  product:"Product",ctpy:"Counterparty",channel:"Booking channel",tenorb:"Tenor band",sizeb:"Ticket size"};
 const AGE_BUCKETS=[["0–2 days",0,2,"var(--pass)"],["3–5 days",3,5,"var(--agent)"],["6–10 days",6,10,"var(--warn)"],
   ["11–20 days",11,20,"var(--fail)"],["20+ days",21,9999,"var(--violet)"]];
 const ageBucketOf=a=>{ const g=ageOf(a); for(const b of AGE_BUCKETS) if(g>=b[1]&&g<=b[2]) return b[0]; return AGE_BUCKETS[0][0]; };
@@ -3476,7 +3525,12 @@ function hlMatches(a,key,val){
     case "cat":    return a.cat===val;
     case "sev":    return a.sev===val;
     case "status": return a.status===val;
-    case "ac":     return a.acs.indexOf(val)>=0;
+    case "ac":      return a.acs.indexOf(val)>=0;
+    case "product": return a.products.indexOf(val)>=0;
+    case "ctpy":    return (a.ctpys||[]).indexOf(val)>=0;
+    case "channel": return (a.channels||[]).indexOf(val)>=0;
+    case "tenorb":  return (a.tenorBands||[]).indexOf(val)>=0;
+    case "sizeb":   return (a.sizeBands||[]).indexOf(val)>=0;
     case "hour":   return a.hour===+val;
     case "month":  return monthIdxOf(a.date)===+val;
   }
@@ -3491,6 +3545,7 @@ function hlAggregate(spec){
   if(HL_AGG.has(spec)) return HL_AGG.get(spec);
   const [key,val]=spec.split("|");
   const r={trader:{},desk:{},rule:{},cat:{},sev:{},status:{},ac:{},hour:{},age:{},
+           product:{},ctpy:{},channel:{},tenorb:{},sizeb:{},
            month:Array(12).fill(0),days:Array(DAYS).fill(0),n:0,nPeriod:0,notional:0,
            // Panels scoped to the review period need their own cut: sharing the
            // 12-month one would size a marker against the wrong denominator.
@@ -3515,6 +3570,11 @@ function hlAggregate(spec){
     r.sev[a.sev]=(r.sev[a.sev]||0)+1;
     r.status[a.status]=(r.status[a.status]||0)+1;
     a.acs.forEach(x=>{ r.ac[x]=(r.ac[x]||0)+1; });
+    a.products.forEach(x=>{ r.product[x]=(r.product[x]||0)+1; });
+    (a.ctpys||[]).forEach(x=>{ r.ctpy[x]=(r.ctpy[x]||0)+1; });
+    (a.channels||[]).forEach(x=>{ r.channel[x]=(r.channel[x]||0)+1; });
+    (a.tenorBands||[]).forEach(x=>{ r.tenorb[x]=(r.tenorb[x]||0)+1; });
+    (a.sizeBands||[]).forEach(x=>{ r.sizeb[x]=(r.sizeb[x]||0)+1; });
     if(a.hour!=null) r.hour[a.hour]=(r.hour[a.hour]||0)+1;
     if(isOpen(a)){ const b=ageBucketOf(a); r.age[b]=(r.age[b]||0)+1; }
     const mi=monthIdxOf(a.date); if(mi>=0) r.month[mi]++;
@@ -3583,10 +3643,13 @@ function hlApply(spec){
   if(!spec||!attr||!state.highlight){
     st.textContent=""; document.body.classList.remove("hl-active"); hlPaintAggregates(null); hlLabel(null); return;
   }
-  // Asset class is multi-valued on an alert, so it matches on a word within the
-  // attribute; every other dimension is exact.
-  const op=key==="ac"?"~=":"=";
-  const sel="["+attr+op+JSON.stringify(val)+"]";
+  /* Several dimensions are multi-valued on an alert — a deal set can span two
+     asset classes, three counterparties, two tenor bands. Those are written as
+     pipe-delimited lists and matched on a delimited substring, because the
+     word-match selector splits on spaces and almost every value here contains
+     one: "FX Cash", "Meridian Global Bank", "1–12 months". */
+  const multi=HL_MULTI[key];
+  const sel="["+attr+(multi?'*='+JSON.stringify("|"+val+"|"):"="+JSON.stringify(val))+"]";
   st.textContent=
     ".hl-active "+sel+"{opacity:1 !important;filter:none !important}"+
     ".hl-active .mcell"+sel+",.hl-active .tcard"+sel+",.hl-active .rulecard"+sel+
@@ -3632,13 +3695,20 @@ document.addEventListener("mouseout",e=>{
 });
 /* Attribute bundle every alert-bearing element carries, so one selector lights
    them all whichever dimension is hovered. */
+const hlList=v=>"|"+(v||[]).join("|")+"|";
 function hlAttrs(a){
   return 'data-hl-trader="'+a.traderId+'" data-hl-desk="'+a.deskId+'" data-hl-rule="'+a.ruleId+
     '" data-hl-cat="'+esc(a.cat)+'" data-hl-sev="'+a.sev+'" data-hl-status="'+esc(a.status)+
-    '" data-hl-ac="'+esc(a.acs.join(" "))+'" data-hl-hour="'+(a.hour==null?"":a.hour)+'"';
+    '" data-hl-hour="'+(a.hour==null?"":a.hour)+
+    '" data-hl-ac="'+esc(hlList(a.acs))+'" data-hl-product="'+esc(hlList(a.products))+
+    '" data-hl-ctpy="'+esc(hlList(a.ctpys))+'" data-hl-channel="'+esc(hlList(a.channels))+
+    '" data-hl-tenorb="'+esc(hlList(a.tenorBands))+'" data-hl-sizeb="'+esc(hlList(a.sizeBands))+'"';
 }
 /* Aggregate bar: dims when the selection is absent from it, carries a marker
    sized to the selection's share when present. */
+/* The member attribute for one value of one dimension, written in whichever
+   form that dimension's selector expects. */
+const hlDim=(dim,val)=>"data-hl-"+dim+'="'+esc(HL_MULTI[dim]?"|"+val+"|":val)+'"';
 function hlAgg(dim,key,total,ratePct){
   return 'data-hl-agg="'+esc(dim+"|"+key)+'" data-hl-total="'+total+'" data-hl-rate="'+(ratePct==null?100:ratePct)+'"';
 }
@@ -3699,10 +3769,13 @@ function stackedBars(cats,series,opts){
     c.parts.forEach(p=>{
       if(p.v<=0) return;
       const y=Y(acc+p.v),h=Y(acc)-Y(acc+p.v);
+      const dim=opts.dim||"sev";
       g+='<rect class="hlctx" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,h).toFixed(1)+
-        '" fill="'+p.color+'" rx="1.5" style="cursor:pointer" data-monthbar="'+i+'" data-hl-sev="'+esc(p.label)+
-        (opts.hlMonth?'" data-hlsrc="month|'+i:"")+'" data-tip="'+esc(c.label)+'" data-tipsub="'+tot+
-        ' alerts" data-tiptable="'+esc(tip)+'"/>';
+        '" fill="'+p.color+'" rx="1.5" style="cursor:pointer" data-monthbar="'+i+
+        '" data-hl-'+dim+'="'+esc(HL_MULTI[dim]?"|"+p.label+"|":p.label)+
+        '" data-hlsrc="'+esc(dim+"|"+p.label)+
+        (opts.hlMonth?'" data-hl-month="'+i:"")+'" data-tip="'+esc(c.label)+'" data-tipsub="'+tot+
+        " "+esc(opts.unitLabel||"alerts")+'" data-tiptable="'+esc(tip)+'"/>';
       acc+=p.v;
     });
     // The selection's own count for this month, drawn from the baseline up: the
@@ -3819,33 +3892,6 @@ function hourChart(counts,opts){
   g+='<text x="'+(padL+21.5*bw).toFixed(1)+'" y="'+(padT+9)+'" text-anchor="middle" font-size="8" fill="var(--fail)" opacity=".75">outside</text>';
   return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img">'+g+"</svg>";
 }
-/* Every tenor convention on the book reduced to years, so a swap, a bill, a
-   swaption and an FRA can sit in the same bucket. A swaption's risk is its
-   underlying, not the option leg, and an FRA's is the far date. */
-function tenorYears(t){
-  if(!t) return 0.25;
-  if(/^O\/N|^T\+/i.test(t)) return 0.004;
-  const into=t.match(/into\s+(\d+)\s*Y/i);      if(into) return +into[1];
-  const fra=t.match(/^(\d+)x(\d+)$/);            if(fra)  return +fra[2]/12;
-  const w=t.match(/^(\d+)\s*W$/i);               if(w)    return +w[1]/52;
-  const m=t.match(/^(\d+)\s*M$/);                if(m)    return +m[1]/12;
-  const y=t.match(/^(\d+)\s*Y$/i);               if(y)    return +y[1];
-  if(/month|quarter/i.test(t)) return 0.25;
-  return 0.25;
-}
-const TENOR_BANDS=[
-  {label:"≤ 1 month",   max:1/12,     color:"var(--pass)"},
-  {label:"1–12 months", max:1,        color:"var(--agent)"},
-  {label:"1–5 years",   max:5,        color:"var(--warn)"},
-  {label:"5 years +",   max:Infinity, color:"var(--fail)"},
-];
-function tenorBandOf(t){
-  const y=tenorYears(t);
-  for(let i=0;i<TENOR_BANDS.length;i++) if(y<=TENOR_BANDS[i].max) return TENOR_BANDS[i].label;
-  return TENOR_BANDS[TENOR_BANDS.length-1].label;
-}
-const BAND_MID={"≤ 1 month":0.04,"1–12 months":0.5,"1–5 years":3,"5 years +":12};
-
 /* ISO 8601 week numbering, so "weeks 1–9" means the weeks a calendar actually
    labels 1 to 9 rather than a count backwards from today. */
 function isoWeek(d){
@@ -4328,8 +4374,8 @@ function paneOverview(){
   scopedAll.forEach(a=>daily[a.day]++);
 
   const sevTot=scoped.length||1, stTot=scoped.length||1;
-  sevSegs.forEach(sg=>{ sg.hl='data-hlsrc="sev|'+esc(sg.label)+'" data-hl-sev="'+esc(sg.label)+'"'; sg.agg=hlAggP("sev",sg.label,sg.v); });
-  stSegs.forEach(sg=>{ sg.hl='data-hlsrc="status|'+esc(sg.label)+'" data-hl-status="'+esc(sg.label)+'"'; sg.agg=hlAggP("status",sg.label,sg.v); });
+  sevSegs.forEach(sg=>{ sg.hl='data-hlsrc="sev|'+esc(sg.label)+'" '+hlDim("sev",sg.label); sg.agg=hlAggP("sev",sg.label,sg.v); });
+  stSegs.forEach(sg=>{ sg.hl='data-hlsrc="status|'+esc(sg.label)+'" '+hlDim("status",sg.label); sg.agg=hlAggP("status",sg.label,sg.v); });
 
   const ageItems=AGE_BUCKETS.map(b=>{
     const n=open.filter(a=>ageOf(a)>=b[1]&&ageOf(a)<=b[2]).length;
@@ -4572,75 +4618,98 @@ function paneActivity(){
   });
   const acSegs=ASSET_CLASSES.map(ac=>{
     const n=rows.filter(t=>t.ac===ac).length;
-    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" data-hl-ac="'+esc(ac)+'"',agg:hlAgg("ac",ac,n)};
+    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" '+hlDim("ac",ac),agg:hlAgg("ac",ac,n)};
   }).filter(x=>x.v>0);
-  const chSegs=CHANNELS.map(c=>({label:c[0],v:rows.filter(t=>t.channel===c[0]).length,
-    color:{"Voice":"var(--run)","eComm single-dealer":"var(--agent)","Multi-dealer platform":"var(--cyan)",
-           "API / Algo":"var(--violet)","Internal booking":"var(--ink-3)"}[c[0]]||"var(--ink-3)"})).filter(x=>x.v>0);
+  const chSegs=CHANNELS.map(c=>{
+    const n=rows.filter(t=>t.channel===c[0]).length;
+    return {label:c[0],v:n,
+      color:{"Voice":"var(--run)","eComm single-dealer":"var(--agent)","Multi-dealer platform":"var(--cyan)",
+             "API / Algo":"var(--violet)","Internal booking":"var(--ink-3)"}[c[0]]||"var(--ink-3)",
+      hl:'data-hlsrc="channel|'+esc(c[0])+'" '+hlDim("channel",c[0]),
+      agg:hlAgg("channel",c[0],ALERTS.filter(a=>matchRail(a)&&(a.channels||[]).indexOf(c[0])>=0).length)};
+  }).filter(x=>x.v>0);
 
   // The trading day itself, not the alerting subset.
   const hrs=Array(24).fill(0);
   rows.forEach(t=>{ hrs[Math.min(23,Math.floor(t.execMin/60))]++; });
 
-  const prodItems=PRODUCTS.map(pr=>{
+  /* Product and counterparty, each measured twice — once by how often the desk
+     deals and once by how much it moves. The two rankings disagree constantly,
+     and the disagreement is the point: a name that is large by notional and
+     small by count is a block relationship, and the reverse is a flow one. */
+  const alertsBy=(dim,val)=>ALERTS.filter(a=>matchRail(a)&&hlMatches(a,dim,val)).length;
+  const prodStats=PRODUCTS.map(pr=>{
     const ts=rows.filter(t=>t.product===pr.p);
-    return {label:pr.p,v:ts.length,color:AC_COLOR[pr.ac],vLabel:fmtNum(ts.length),
-      tip:pr.p,tipsub:pr.ac,
-      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
+    if(!ts.length) return null;
+    const nl=ts.reduce((a,t)=>a+t.notional,0);
+    const al=alertsBy("product",pr.p);
+    return {p:pr.p,ac:pr.ac,n:ts.length,nl,al,
+      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(nl),
         "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
-        "Alerted deals|"+fmtNum(ts.filter(t=>t.flags.length).length)].join("§"),
-      agg:hlAgg("ac",pr.ac,rows.filter(t=>t.ac===pr.ac).length)};
-  }).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,12);
+        "Traders|"+uniq(ts.map(t=>t.traderId)).length,"Alerts|"+fmtNum(al)].join("§"),
+      hl:'data-hlsrc="product|'+esc(pr.p)+'" '+hlDim("product",pr.p),
+      agg:hlAgg("product",pr.p,al)};
+  }).filter(Boolean);
+  const prodCount=prodStats.slice().sort((a,b)=>b.n-a.n).slice(0,12).map(x=>({
+    label:x.p,v:x.n,vLabel:fmtNum(x.n),color:AC_COLOR[x.ac],
+    tip:x.p,tipsub:x.ac+" · by transaction count",tiptable:x.tiptable,hl:x.hl,agg:x.agg,aggKey:"product|"+x.p}));
+  const prodVol=prodStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12).map(x=>({
+    label:x.p,v:x.nl,vLabel:fmtM(x.nl),color:AC_COLOR[x.ac],
+    tip:x.p,tipsub:x.ac+" · by notional",tiptable:x.tiptable,hl:x.hl,agg:x.agg,aggKey:"product|"+x.p}));
 
-  const ctpyItems=uniq(rows.map(t=>t.ctpy)).map(c=>{
+  const ctpyStats=uniq(rows.map(t=>t.ctpy)).map(c=>{
     const ts=rows.filter(t=>t.ctpy===c);
     const nl=ts.reduce((a,t)=>a+t.notional,0);
-    return {label:c.length>26?c.slice(0,25)+"…":c,v:nl,vLabel:fmtM(nl),
-      color:RELATED_PARTIES[c]?"var(--fail)":"var(--agent)",
-      tip:c,tipsub:(ts[0]||{}).ctpyType+(RELATED_PARTIES[c]?" · related-party register":""),
-      tiptable:["Notional|"+fmtM(nl),"Deals|"+fmtNum(ts.length),
+    const al=alertsBy("ctpy",c);
+    const rel=!!RELATED_PARTIES[c];
+    return {c,n:ts.length,nl,al,rel,type:(ts[0]||{}).ctpyType||"",
+      short:c.length>24?c.slice(0,23)+"…":c,
+      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(nl),
         "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
-        "Traders facing this name|"+uniq(ts.map(t=>t.traderId)).length].join("§")};
-  }).sort((a,b)=>b.v-a.v).slice(0,12);
+        "Traders facing this name|"+uniq(ts.map(t=>t.traderId)).length,
+        "Alerts|"+fmtNum(al)].join("§"),
+      hl:'data-hlsrc="ctpy|'+esc(c)+'" '+hlDim("ctpy",c),
+      agg:hlAgg("ctpy",c,al)};
+  });
+  const ctpyRow=x=>({label:x.short,color:x.rel?"var(--fail)":"var(--agent)",
+    tip:x.c,tipsub:x.type+(x.rel?" · related-party register":""),tiptable:x.tiptable,
+    hl:x.hl,agg:x.agg,aggKey:"ctpy|"+x.c});
+  const ctpyCount=ctpyStats.slice().sort((a,b)=>b.n-a.n).slice(0,12)
+    .map(x=>Object.assign(ctpyRow(x),{v:x.n,vLabel:fmtNum(x.n)}));
+  const ctpyVol=ctpyStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12)
+    .map(x=>Object.assign(ctpyRow(x),{v:x.nl,vLabel:fmtM(x.nl)}));
 
   const tenorItems=TENOR_BANDS.map(b=>{
     const ts=rows.filter(t=>tenorBandOf(t.tenor)===b.label);
+    const al=alertsBy("tenorb",b.label);
     return {label:b.label,v:ts.length,color:b.color,vLabel:fmtNum(ts.length),
       tip:b.label,tipsub:"Tenor band",
       tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
-        "Share of the book|"+(rows.length?Math.round(ts.length/rows.length*100):0)+"%"].join("§")};
+        "Share of the book|"+(rows.length?Math.round(ts.length/rows.length*100):0)+"%","Alerts|"+fmtNum(al)].join("§"),
+      hl:'data-hlsrc="tenorb|'+esc(b.label)+'" '+hlDim("tenorb",b.label),
+      agg:hlAgg("tenorb",b.label,al),aggKey:"tenorb|"+b.label};
   });
 
-  // Ticket sizes on a log scale — a book's size distribution is never linear.
-  const SZ=[[0,1],[1,5],[5,10],[10,25],[25,50],[50,100],[100,250],[250,500],[500,Infinity]];
-  const sizeItems=SZ.map(b=>{
+  const sizeItems=SIZE_BANDS.map(b=>{
     const ts=rows.filter(t=>t.notional>=b[0]&&t.notional<b[1]);
-    return {label:(b[1]===Infinity?"$500m +":"$"+b[0]+"–"+b[1]+"m"),v:ts.length,color:"var(--run)",vLabel:fmtNum(ts.length),
-      tip:b[1]===Infinity?"$500m and above":"$"+b[0]+"m to $"+b[1]+"m",tipsub:"Ticket size band",
+    const al=alertsBy("sizeb",b[2]);
+    return {label:b[2],v:ts.length,color:"var(--run)",vLabel:fmtNum(ts.length),
+      tip:b[2],tipsub:"Ticket size band",
       tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
-        "Alerted|"+fmtNum(ts.filter(t=>t.flags.length).length)].join("§")};
+        "Alerts|"+fmtNum(al)].join("§"),
+      hl:'data-hlsrc="sizeb|'+esc(b[2])+'" '+hlDim("sizeb",b[2]),
+      agg:hlAgg("sizeb",b[2],al),aggKey:"sizeb|"+b[2]};
   }).filter(x=>x.v>0);
 
-  const deskItems=DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id)).map(d=>{
-    const ts=rows.filter(t=>t.deskId===d.id);
-    const nl=ts.reduce((a,t)=>a+t.notional,0);
-    return {label:d.short,v:nl,vLabel:fmtM(nl),color:"var(--gold)",
-      agg:hlAgg("desk",d.id,ALERTS.filter(a=>matchRail(a)&&a.deskId===d.id).length),
-      hl:'data-hlsrc="desk|'+d.id+'" data-hl-desk="'+d.id+'"',
-      tip:d.name,tipsub:d.region+" · "+d.traders.length+" traders",
-      tiptable:["Notional|"+fmtM(nl),"Deals|"+fmtNum(ts.length),
-        "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
-        "Products|"+uniq(ts.map(t=>t.product)).length].join("§")};
-  }).sort((a,b)=>b.v-a.v);
-
   const rowA='<div class="gridw2 tight">'+
-    panel("Deal volume by month","stacked by asset class · rolling 12 months",
-      '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266})+"</div></div>",
+    panel("Deal volume by month","stacked by asset class · 12 months",
+      '<div class="panel-body"><div class="chart-well tall">'+
+        stackedBars(months,null,{w:660,h:266,dim:"ac",hlMonth:true,unitLabel:"deals"})+"</div></div>",
       "The book's own shape across the year. Quarter ends and roll dates are visible without anyone marking them.")+
     panel("Asset class mix","share of deals",
       '<div class="panel-body"><div class="chart-well donut-well">'+
       donut(acSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(acSegs,rows.length)+"</div></div>",
-      "Hovering a class lights it across the page.")+
+      "Hovering a class lights it across every panel on the page.")+
     panel("Booking channel","how the deals reached the system",
       '<div class="panel-body"><div class="chart-well donut-well">'+
       donut(chSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(chSegs,rows.length)+"</div></div>",
@@ -4648,27 +4717,30 @@ function paneActivity(){
     "</div>";
 
   const rowB='<div class="grid4t tight">'+
+    panel("Transaction count by product","top 12 by deals",
+      '<div class="panel-body"><div class="chart-well">'+hbars(prodCount,{w:520,rowH:19,labW:148})+"</div></div>",
+      "How often the floor deals in each product.")+
+    panel("Volume by product","top 12 by notional",
+      '<div class="panel-body"><div class="chart-well">'+hbars(prodVol,{w:520,rowH:19,labW:148})+"</div></div>",
+      "The same products by size. Where this order differs from the count beside it, the product trades in blocks rather than in flow.")+
+    panel("Transaction count by counterparty","top 12 by deals · red = related party",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyCount,{w:540,rowH:19,labW:168})+"</div></div>",
+      "Who the floor deals with most often.")+
+    panel("Volume by counterparties","top 12 by notional · red = related party",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyVol,{w:540,rowH:19,labW:168})+"</div></div>",
+      "A name large by notional and small by count is a block relationship; the reverse is a flow one. Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
+    "</div>";
+
+  const rowC='<div class="grid3 tight">'+
     panel("Execution hours","the trading day · desk-local time",
       '<div class="panel-body"><div class="chart-well">'+hourChart(hrs,{w:560,h:212})+"</div></div>",
       "Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against.")+
-    panel("Most traded products","by deal count",
-      '<div class="panel-body"><div class="chart-well">'+hbars(prodItems,{w:520,rowH:19,labW:150})+"</div></div>",
-      "Ranked by ticket count rather than notional, so a busy small-clip product is not hidden by a quiet large-clip one.")+
     panel("Ticket size distribution","deals per size band",
       '<div class="panel-body"><div class="chart-well">'+hbars(sizeItems,{w:460,rowH:19,labW:110})+"</div></div>",
       "A book's size profile is never linear. The tail on the right is where the authorisation rules live.")+
     panel("Tenor profile","how long the risk runs",
       '<div class="panel-body"><div class="chart-well">'+hbars(tenorItems,{w:460,rowH:26,labW:120})+"</div></div>",
       "The whole book by maturity band, against which any one trader's mix can be read.")+
-    "</div>";
-
-  const rowC='<div class="grid2 tight">'+
-    panel("Largest counterparties","by notional · red = related-party register",
-      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyItems,{w:540,rowH:19,labW:190})+"</div></div>",
-      "Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
-    panel("Volume by desk","by notional",
-      '<div class="panel-body"><div class="chart-well">'+hbars(deskItems,{w:540,rowH:20,labW:150})+"</div></div>",
-      "Financing desks dominate on notional and barely register on ticket count — which is why the alert index is per deal, not per dollar.")+
     "</div>";
 
   /* Trading activity, one small chart per trader. Alert panels answer "who is
