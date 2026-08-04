@@ -111,6 +111,31 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .grid2c{display:grid;grid-template-columns:1fr 1.45fr;gap:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+/* Denser rows. Seeing more charts at once beats seeing any one of them large —
+   a surveillance floor reads across panels, not down into them. These trade
+   padding and chart height for panel count, and collapse to fewer columns
+   before anything becomes unreadable. */
+.grid4t{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.grid5t{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.gridw2{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px}
+.gridw3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px}
+.tight .panel-hd{padding:9px 11px;min-height:0}
+.tight .panel-hd h3{font-size:0.71875rem}
+.tight .panel-hd .slo{font-size:0.5625rem}
+.tight .panel-body{padding:9px 11px}
+.tight .chart-well{height:168px}
+.tight .chart-well.tall{height:206px}
+.tight .chart-well.donut-well{min-height:0;gap:10px;padding:2px 0}
+.tight .foot{padding:7px 11px;font-size:0.5625rem;line-height:1.45}
+.tight .dlegend{min-width:10em}
+.tight .dlegend .drow{font-size:0.625rem;margin-bottom:4px}
+.tight .dlegend .dtrack{height:4px;margin:2px 0 0}
+.tight .trendkey{padding:0 11px 8px;font-size:0.53125rem;gap:4px 10px}
+.tight .rank-list{height:236px}
+@media (max-width:1560px){.grid5t{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1360px){.grid4t{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gridw2,.gridw3{grid-template-columns:1fr 1fr}}
+@media (max-width:1000px){.grid4t,.grid5t,.gridw2,.gridw3{grid-template-columns:1fr}}
 .mt14{margin-top:14px}
 
 .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:11px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
@@ -536,6 +561,7 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
     <div class="tabs" role="tablist">
       <div class="tabs-left">
         <button class="tab" role="tab" data-tab="overview" aria-selected="true">Surveillance Overview</button>
+        <button class="tab" role="tab" data-tab="activity" aria-selected="false">Trade Activity</button>
         <button class="tab" role="tab" data-tab="detections" aria-selected="false">Detections<span class="cnt" id="tabcnt">0</span></button>
         <button class="tab" role="tab" data-tab="rules" aria-selected="false">Rule Library</button>
         <button class="tab" role="tab" data-tab="blotter" aria-selected="false">Trade Blotter</button>
@@ -4305,105 +4331,27 @@ function paneOverview(){
   sevSegs.forEach(sg=>{ sg.hl='data-hlsrc="sev|'+esc(sg.label)+'" data-hl-sev="'+esc(sg.label)+'"'; sg.agg=hlAggP("sev",sg.label,sg.v); });
   stSegs.forEach(sg=>{ sg.hl='data-hlsrc="status|'+esc(sg.label)+'" data-hl-status="'+esc(sg.label)+'"'; sg.agg=hlAggP("status",sg.label,sg.v); });
 
-  /* Trading activity, one small chart per trader. Alert panels answer "who is
-     firing"; this answers the question underneath it — what does this person's
-     book actually look like, period by period, and does it look like their
-     neighbours'. Squeezed on purpose: a burst, a gap, or a drift into longer
-     tenors is a shape you see before you read a number. */
-  const A=state.act;
-  const actCols=actColumns();
-  const act=traderActivity(actCols,A.metric);
-  const unit=A.metric==="notional"?"m":"n";
-  const isTenor=A.metric==="tenor";
-  const actRows=TRADERS.filter(traderInRail).slice().sort((a,b)=>
-    a.deskId.localeCompare(b.deskId,undefined,{numeric:true})||TRADER_STATS[b.id].idx-TRADER_STATS[a.id].idx);
-  const cellTot=c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0);
-  const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(0,...act.by[t.id].map(cellTot))));
-  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor spread"]];
-  const YEARS=uniq(Array.from({length:DAYS},(_,d)=>dateForIdx(d).getFullYear())).sort();
-
-  const actCards=actCols.length?actRows.map(t=>{
-    const cells=act.by[t.id];
-    const tot=cells.reduce((a,c)=>a+cellTot(c),0);
-    const peak=Math.max(0,...cells.map(cellTot));
-    const allT=isTenor?cells.reduce((a,c)=>a.concat(c.tenors||[]),[]):null;
-    return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
-      '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
-      '<div class="an">'+esc(t.name)+"</div>"+
-      '<div class="ad">'+esc(DESK_BY_ID[t.deskId].short)+" · "+esc(t.grade.replace("Executive Director","ED"))+"</div>"+
-      (isTenor?tenorScatter(cells,{w:188,h:62,yoy:A.yoy})
-              :sparkStack(cells,act.segs,{w:188,h:62,unit:unit,yoy:A.yoy,max:A.scale==="shared"?sharedMax:0}))+
-      '<div class="af"><span>'+(isTenor?fmtNum(allT.length)+" deals"
-          :A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
-      "<b>"+(isTenor?(allT.length?fmtYrs(median(allT))+" med · "+uniq(allT.map(x=>x.toFixed(2))).length+" tenors":"—")
-          :"peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak)))+"</b></div>"+
-      "</div>";
-  }).join(""):'<div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div>';
-
-  const actLegend=(isTenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):act.segs)
-    .map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("")+
-    (A.yoy?'<span class="alg"><i class="dash"></i>Same period last year</span>':"");
-
-  const actStrip='<div class="fstrip actstrip">'+
-    '<label><span>Year</span><select id="a-year">'+YEARS.map(y=>opt(String(y),String(y),String(A.year))).join("")+"</select></label>"+
-    '<label><span>Cut by</span><div class="segbtns">'+
-      [["week","Week"],["day","Day"]].map(u=>'<button data-actunit="'+u[0]+'" aria-pressed="'+(A.unit===u[0])+'">'+u[1]+"</button>").join("")+
-    "</div></label>"+
-    '<label><span>'+(A.unit==="week"?"Weeks of the year":"Days of the year")+'</span>'+
-      '<input type="text" id="a-range" class="wkin" placeholder="'+(A.unit==="week"?"1-9":"1-60")+'" value="'+esc(A.range)+'"></label>'+
-    '<label><span>Measure</span><div class="segbtns">'+
-      METRICS.map(m=>'<button data-actmetric="'+m[0]+'" aria-pressed="'+(A.metric===m[0])+'">'+m[1]+"</button>").join("")+
-    "</div></label>"+
-    '<label><span>Columns</span><div class="segbtns">'+
-      [[0,"Auto"],[3,"3"],[4,"4"],[6,"6"],[8,"8"],[11,"11"]].map(c=>
-        '<button data-actcols="'+c[0]+'" aria-pressed="'+(A.cols===c[0])+'">'+c[1]+"</button>").join("")+
-    "</div></label>"+
-    (isTenor?"":'<label><span>Scale</span><div class="segbtns">'+
-      [["own","Own peak"],["shared","Shared"]].map(x=>
-        '<button data-actscale="'+x[0]+'" aria-pressed="'+(A.scale===x[0])+'">'+x[1]+"</button>").join("")+
-    "</div></label>")+
-    '<label><span>Compare</span><div class="segbtns">'+
-      '<button data-actyoy="1" aria-pressed="'+(!!A.yoy)+'">Year on year</button></div></label>'+
-    '<div class="fspacer"></div><div class="alegend">'+actLegend+"</div></div>";
-
-  const gridStyle=A.cols?' style="grid-template-columns:repeat('+A.cols+',minmax(0,1fr))"':"";
-  const span=actCols.length?(A.unit==="week"?"weeks ":"days ")+actCols[0].key+"–"+actCols[actCols.length-1].key+" of "+A.year:"no periods in range";
-  const activity=panel("Trading activity by trader",
-    span+" · "+actRows.length+" traders · one column per "+A.unit+(A.yoy?" · dashed = same period last year":""),
-    actStrip+'<div class="agrid"'+gridStyle+">"+actCards+"</div>",
-    (isTenor
-      ? "Each dot is a group of deals at one maturity, sized by how many. A book concentrated on one point of the curve is a row of large dots; a book spread across it is a column of small ones — which is the difference between a trader running a mandate and a trader wandering. The line is their median tenor."
-      : "Each chart is one trader's own book, period by period, stacked by asset class.")+
-    " Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the one to open. "+
-    "<b>Click a card</b> to lock that trader across every panel on the page; <b>double-click</b> for the trader file.");
-
-  const rowA='<div class="grid2b">'+
-    panel("Alert volume by month","stacked by severity · rolling 12 months · dark overlay = current selection",
+  const ageItems=AGE_BUCKETS.map(b=>{
+    const n=open.filter(a=>ageOf(a)>=b[1]&&ageOf(a)<=b[2]).length;
+    return {label:b[0],v:n,color:b[3],agg:hlAgg("age",b[0],n),aggKey:"age|"+b[0]};
+  });
+  const rowA='<div class="gridw2 tight">'+
+    panel("Alert volume by month","by severity · 12 months",
       '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266,hlMonth:true})+"</div></div>",
-      "Each column is one calendar month of alerts across every rule. With <b>Data highlight</b> on, hovering a trader or a rule anywhere "+
-      "on the page draws their own count inside each column — the month a pattern started shows up as a step. "+
-      "<b>Click a column</b> to open that month in the Detections queue.")+
+      "One column per calendar month. Hovering a trader or rule anywhere on the page draws their own count inside each column — the month a pattern started shows as a step.")+
     panel("Severity mix","last "+state.dateRangeDays+" days",
       '<div class="panel-body"><div class="chart-well donut-well">'+
-      donut(sevSegs,String(scoped.length),"alerts",156,24)+
+      donut(sevSegs,String(scoped.length),"alerts",112,19)+
       donutLegend(sevSegs,scoped.length,s=>'data-sevclick="'+esc(s.label)+'"')+"</div></div>",
-      "Critical and High carry a 3-business-day disposition target. <b>Hover a row</b> to light that severity across the page, <b>click</b> to filter the queue.")+
-    "</div>";
-
-  const rowB='<div class="grid2c">'+
+      "Critical and High carry a 3-day disposition target.")+
     panel("Disposition","last "+state.dateRangeDays+" days",
       '<div class="panel-body"><div class="chart-well donut-well">'+
-      donut(stSegs,decided.length?fmtPct(passed.length/decided.length,0):"—","passed",156,24)+
+      donut(stSegs,decided.length?fmtPct(passed.length/decided.length,0):"—","passed",112,19)+
       donutLegend(stSegs,scoped.length,s=>'data-statusclick="'+esc(s.label)+'"')+"</div></div>",
       "A high pass rate on one rule is a tuning problem; a low one on a trader is not.")+
-    panel("Detection volume — daily","full 12 months · 7-day mean · dark fill = current selection",
-      '<div class="panel-body" style="padding-bottom:4px"><div class="chart-well">'+dailyTrend(daily,{w:900,h:236})+"</div></div>"+
-      '<div class="trendkey"><span><i class="lk" style="background:var(--run)"></i>Alerts raised per day</span>'+
-      '<span><i class="lk" style="background:var(--violet)"></i>7-day mean</span>'+
-      '<span><i class="lk" style="background:var(--ink)"></i>Highlighted selection</span></div>',
-      "Volume spikes cluster on month ends and around the quarterly reporting dates. Hovering a name elsewhere on the page fills in that trader's own "+
-      "daily series against the floor's, which is where a pattern that starts on a date separates from one that has always been there.")+
     "</div>";
+
+
 
   /* Two charts that exist for the linking: a category fingerprint and a
      booking-hour profile. Neither says much on its own — the floor's mix and
@@ -4430,15 +4378,22 @@ function paneOverview(){
   scopedAll.forEach(a=>{ if(a.hour!=null) hourCounts[a.hour]++; });
   const hourMax=Math.max(1,...hourCounts);
 
-  const rowH='<div class="grid2">'+
-    panel("Typology fingerprint","alerts by rule category · 12 months · red = upheld",
+  /* The daily trend is 365 points; at a quarter of the width its axis stops
+     being readable, so it takes double. Density is the point, but a chart
+     nobody can read is not density. */
+  const rowB='<div class="gridw2 tight">'+
+    panel("Detection volume — daily","daily · dark fill = selection",
+      '<div class="panel-body" style="padding-bottom:2px"><div class="chart-well">'+dailyTrend(daily,{w:900,h:236})+"</div></div>"+
+      '<div class="trendkey"><span><i class="lk" style="background:var(--run)"></i>Per day</span>'+
+      '<span><i class="lk" style="background:var(--violet)"></i>7-day mean</span>'+
+      '<span><i class="lk" style="background:var(--ink)"></i>Selection</span></div>',
+      "Hovering a name elsewhere fills in that trader's own daily series against the floor's — which is where a pattern that starts on a date separates from one that was always there.")+
+    panel("Typology fingerprint","by rule category · red = upheld",
       '<div class="panel-body"><div class="chart-well">'+hbars(catRows,{w:520,rowH:23,labW:150})+"</div></div>"+upheldKey,
-      "The floor's mix is unremarkable; one person's is not. <b>Hover a trader</b> and the dark markers show how much of each category is theirs — "+
-      "risk concentrated in a single category is a specialism, risk spread across four unrelated ones is a method. <b>Click a category</b> to pin it.")+
-    panel("Booking-hour profile","alerting activity by execution hour · desk-local time",
+      "The floor's mix is unremarkable; one person's is not. Hover a trader and the dark markers show how much of each category is theirs.")+
+    panel("Booking-hour profile","by execution hour · desk-local",
       '<div class="panel-body"><div class="chart-well">'+hourChart(hourCounts,{w:560,h:212})+"</div></div>",
-      "When the alerting deals were actually struck. The floor's shape is the trading day; a selection that sits outside it — "+
-      "before the open, after the close, through the night — is the shape concealment makes. <b>Click an hour</b> to pin it.")+
+      "A selection sitting outside the trading day — before the open, after the close, through the night — is the shape concealment makes.")+
     "</div>";
 
   /* The detection heatmap has to survive production: two hundred traders and a
@@ -4559,16 +4514,14 @@ function paneOverview(){
     .sort((a,b)=>b.idx-a.idx).slice(0,10);
   const maxIdx=Math.max(1,...tstats.map(s=>s.idx));
 
-  const ageItems=AGE_BUCKETS.map(b=>{
-    const n=open.filter(a=>ageOf(a)>=b[1]&&ageOf(a)<=b[2]).length;
-    return {label:b[0],v:n,color:b[3],agg:hlAgg("age",b[0],n),aggKey:"age|"+b[0]};
-  });
-
-  const rowC='<div class="grid3">'+
+  const rowC='<div class="grid3 tight">'+
     panel("Top rules by hits","12 months · red = upheld",
       '<div class="panel-body"><div class="chart-well">'+hbars(ruleItems,{w:520,rowH:20,labW:186})+"</div></div>"+upheldKey,
       "The full bar is every alert the rule raised; the red length inside it is how many an officer upheld as suspicious or escalated. "+
       "A long bar with almost no red is a rule generating work rather than findings. <b>Double-click a bar</b> to open that rule.")+
+    panel("Open queue by age","against the disposition target",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ageItems,{w:420,rowH:26,labW:110})+"</div></div>",
+      "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
     panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
@@ -4581,13 +4534,218 @@ function paneOverview(){
           '<span class="sub2">'+s.alerts+" alerts · "+s.susp+" upheld · "+s.ruleCount+" of "+RULES.length+" rules</span></div></div>";
       }).join("")+"</div></div>",
       "Divided by each trader's own deal count, so a busy name is not flagged for being busy — and a quiet one cannot hide inside a group's turnover. <b>Click a name</b> for the trader file.")+
-    panel("Open queue by age","against the disposition target",
-      '<div class="panel-body"><div class="chart-well">'+hbars(ageItems,{w:420,rowH:26,labW:110})+"</div></div>",
-      "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
     "</div>";
 
-  return kpis+activity+'<div class="mt14">'+rowA+"</div>"+'<div class="mt14">'+rowB+"</div>"+'<div class="mt14">'+rowH+"</div>"+
-    '<div class="mt14">'+matrix+"</div>"+'<div class="mt14">'+rowC+"</div>";
+  return kpis+rowA+'<div class="mt10">'+rowB+"</div>"+'<div class="mt10">'+matrix+"</div>"+'<div class="mt10">'+rowC+"</div>";
+}
+
+/* ============================================================
+   Pane — Trade Activity
+   The overview answers "what fired". This answers "what is the floor actually
+   doing" — the trading data on its own terms, before any rule touches it.
+   Everything here is scoped by the rail, so it answers the same question for a
+   desk, a trader or an asset class as it does for the whole book.
+============================================================ */
+function paneActivity(){
+  const rows=TRADES.filter(tradeMatchesRail);
+  const notl=rows.reduce((a,t)=>a+t.notional,0);
+  const sizes=rows.map(t=>t.notional);
+  const activeTraders=uniq(rows.map(t=>t.traderId)).length;
+  const bizDays=uniq(rows.map(t=>t.dayIdx)).length||1;
+
+  const kpis='<div class="kpis">'+
+    kpi("Deals booked",fmtNum(rows.length),"12 months, rail-scoped","var(--agent)")+
+    kpi("Notional",fmtM(notl),"aggregate across products","var(--run)")+
+    kpi("Median ticket",fmtM(median(sizes)),"p95 "+fmtM(pctile(sizes,0.95)),"var(--violet)")+
+    kpi("Largest ticket",fmtM(Math.max(0,...sizes)),"single deal","var(--warn)")+
+    kpi("Deals per day",fmtNum(Math.round(rows.length/bizDays)),"across "+fmtNum(bizDays)+" sessions","var(--cyan)")+
+    kpi("Traders active",fmtNum(activeTraders),"of "+TRADERS.length+" on the floor","var(--gold)")+
+    kpi("Products",fmtNum(uniq(rows.map(t=>t.product)).length),"of "+PRODUCTS.length+" approved","var(--pink)")+
+    kpi("Counterparties",fmtNum(uniq(rows.map(t=>t.ctpy)).length),"names faced","var(--pass)")+
+    "</div>";
+
+  // Monthly volume, stacked by asset class — the book's own shape over the year.
+  const months=MONTH_KEYS.map((mk,i)=>{
+    const inM=rows.filter(t=>monthIdxOf(t.date)===i);
+    return {label:mk.label,sub:i===0||mk.m===0?String(mk.y).slice(2):"",
+      parts:ASSET_CLASSES.map(ac=>({label:ac,v:inM.filter(t=>t.ac===ac).length,color:AC_COLOR[ac]}))};
+  });
+  const acSegs=ASSET_CLASSES.map(ac=>{
+    const n=rows.filter(t=>t.ac===ac).length;
+    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" data-hl-ac="'+esc(ac)+'"',agg:hlAgg("ac",ac,n)};
+  }).filter(x=>x.v>0);
+  const chSegs=CHANNELS.map(c=>({label:c[0],v:rows.filter(t=>t.channel===c[0]).length,
+    color:{"Voice":"var(--run)","eComm single-dealer":"var(--agent)","Multi-dealer platform":"var(--cyan)",
+           "API / Algo":"var(--violet)","Internal booking":"var(--ink-3)"}[c[0]]||"var(--ink-3)"})).filter(x=>x.v>0);
+
+  // The trading day itself, not the alerting subset.
+  const hrs=Array(24).fill(0);
+  rows.forEach(t=>{ hrs[Math.min(23,Math.floor(t.execMin/60))]++; });
+
+  const prodItems=PRODUCTS.map(pr=>{
+    const ts=rows.filter(t=>t.product===pr.p);
+    return {label:pr.p,v:ts.length,color:AC_COLOR[pr.ac],vLabel:fmtNum(ts.length),
+      tip:pr.p,tipsub:pr.ac,
+      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
+        "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
+        "Alerted deals|"+fmtNum(ts.filter(t=>t.flags.length).length)].join("§"),
+      agg:hlAgg("ac",pr.ac,rows.filter(t=>t.ac===pr.ac).length)};
+  }).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,12);
+
+  const ctpyItems=uniq(rows.map(t=>t.ctpy)).map(c=>{
+    const ts=rows.filter(t=>t.ctpy===c);
+    const nl=ts.reduce((a,t)=>a+t.notional,0);
+    return {label:c.length>26?c.slice(0,25)+"…":c,v:nl,vLabel:fmtM(nl),
+      color:RELATED_PARTIES[c]?"var(--fail)":"var(--agent)",
+      tip:c,tipsub:(ts[0]||{}).ctpyType+(RELATED_PARTIES[c]?" · related-party register":""),
+      tiptable:["Notional|"+fmtM(nl),"Deals|"+fmtNum(ts.length),
+        "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
+        "Traders facing this name|"+uniq(ts.map(t=>t.traderId)).length].join("§")};
+  }).sort((a,b)=>b.v-a.v).slice(0,12);
+
+  const tenorItems=TENOR_BANDS.map(b=>{
+    const ts=rows.filter(t=>tenorBandOf(t.tenor)===b.label);
+    return {label:b.label,v:ts.length,color:b.color,vLabel:fmtNum(ts.length),
+      tip:b.label,tipsub:"Tenor band",
+      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
+        "Share of the book|"+(rows.length?Math.round(ts.length/rows.length*100):0)+"%"].join("§")};
+  });
+
+  // Ticket sizes on a log scale — a book's size distribution is never linear.
+  const SZ=[[0,1],[1,5],[5,10],[10,25],[25,50],[50,100],[100,250],[250,500],[500,Infinity]];
+  const sizeItems=SZ.map(b=>{
+    const ts=rows.filter(t=>t.notional>=b[0]&&t.notional<b[1]);
+    return {label:(b[1]===Infinity?"$500m +":"$"+b[0]+"–"+b[1]+"m"),v:ts.length,color:"var(--run)",vLabel:fmtNum(ts.length),
+      tip:b[1]===Infinity?"$500m and above":"$"+b[0]+"m to $"+b[1]+"m",tipsub:"Ticket size band",
+      tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
+        "Alerted|"+fmtNum(ts.filter(t=>t.flags.length).length)].join("§")};
+  }).filter(x=>x.v>0);
+
+  const deskItems=DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id)).map(d=>{
+    const ts=rows.filter(t=>t.deskId===d.id);
+    const nl=ts.reduce((a,t)=>a+t.notional,0);
+    return {label:d.short,v:nl,vLabel:fmtM(nl),color:"var(--gold)",
+      agg:hlAgg("desk",d.id,ALERTS.filter(a=>matchRail(a)&&a.deskId===d.id).length),
+      hl:'data-hlsrc="desk|'+d.id+'" data-hl-desk="'+d.id+'"',
+      tip:d.name,tipsub:d.region+" · "+d.traders.length+" traders",
+      tiptable:["Notional|"+fmtM(nl),"Deals|"+fmtNum(ts.length),
+        "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
+        "Products|"+uniq(ts.map(t=>t.product)).length].join("§")};
+  }).sort((a,b)=>b.v-a.v);
+
+  const rowA='<div class="gridw2 tight">'+
+    panel("Deal volume by month","stacked by asset class · rolling 12 months",
+      '<div class="panel-body"><div class="chart-well tall">'+stackedBars(months,null,{w:660,h:266})+"</div></div>",
+      "The book's own shape across the year. Quarter ends and roll dates are visible without anyone marking them.")+
+    panel("Asset class mix","share of deals",
+      '<div class="panel-body"><div class="chart-well donut-well">'+
+      donut(acSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(acSegs,rows.length)+"</div></div>",
+      "Hovering a class lights it across the page.")+
+    panel("Booking channel","how the deals reached the system",
+      '<div class="panel-body"><div class="chart-well donut-well">'+
+      donut(chSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(chSegs,rows.length)+"</div></div>",
+      "Voice and internal bookings are the two channels with the least automated evidence behind them.")+
+    "</div>";
+
+  const rowB='<div class="grid4t tight">'+
+    panel("Execution hours","the trading day · desk-local time",
+      '<div class="panel-body"><div class="chart-well">'+hourChart(hrs,{w:560,h:212})+"</div></div>",
+      "Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against.")+
+    panel("Most traded products","by deal count",
+      '<div class="panel-body"><div class="chart-well">'+hbars(prodItems,{w:520,rowH:19,labW:150})+"</div></div>",
+      "Ranked by ticket count rather than notional, so a busy small-clip product is not hidden by a quiet large-clip one.")+
+    panel("Ticket size distribution","deals per size band",
+      '<div class="panel-body"><div class="chart-well">'+hbars(sizeItems,{w:460,rowH:19,labW:110})+"</div></div>",
+      "A book's size profile is never linear. The tail on the right is where the authorisation rules live.")+
+    panel("Tenor profile","how long the risk runs",
+      '<div class="panel-body"><div class="chart-well">'+hbars(tenorItems,{w:460,rowH:26,labW:120})+"</div></div>",
+      "The whole book by maturity band, against which any one trader's mix can be read.")+
+    "</div>";
+
+  const rowC='<div class="grid2 tight">'+
+    panel("Largest counterparties","by notional · red = related-party register",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyItems,{w:540,rowH:19,labW:190})+"</div></div>",
+      "Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
+    panel("Volume by desk","by notional",
+      '<div class="panel-body"><div class="chart-well">'+hbars(deskItems,{w:540,rowH:20,labW:150})+"</div></div>",
+      "Financing desks dominate on notional and barely register on ticket count — which is why the alert index is per deal, not per dollar.")+
+    "</div>";
+
+  /* Trading activity, one small chart per trader. Alert panels answer "who is
+     firing"; this answers the question underneath it — what does this person's
+     book actually look like, period by period, and does it look like their
+     neighbours'. Squeezed on purpose: a burst, a gap, or a drift into longer
+     tenors is a shape you see before you read a number. */
+  const A=state.act;
+  const actCols=actColumns();
+  const act=traderActivity(actCols,A.metric);
+  const unit=A.metric==="notional"?"m":"n";
+  const isTenor=A.metric==="tenor";
+  const actRows=TRADERS.filter(traderInRail).slice().sort((a,b)=>
+    a.deskId.localeCompare(b.deskId,undefined,{numeric:true})||TRADER_STATS[b.id].idx-TRADER_STATS[a.id].idx);
+  const cellTot=c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0);
+  const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(0,...act.by[t.id].map(cellTot))));
+  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor spread"]];
+  const YEARS=uniq(Array.from({length:DAYS},(_,d)=>dateForIdx(d).getFullYear())).sort();
+
+  const actCards=actCols.length?actRows.map(t=>{
+    const cells=act.by[t.id];
+    const tot=cells.reduce((a,c)=>a+cellTot(c),0);
+    const peak=Math.max(0,...cells.map(cellTot));
+    const allT=isTenor?cells.reduce((a,c)=>a.concat(c.tenors||[]),[]):null;
+    return '<div class="acard hlmember" data-trader="'+t.id+'" data-hlsrc="trader|'+t.id+
+      '" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'">'+
+      '<div class="an">'+esc(t.name)+"</div>"+
+      '<div class="ad">'+esc(DESK_BY_ID[t.deskId].short)+" · "+esc(t.grade.replace("Executive Director","ED"))+"</div>"+
+      (isTenor?tenorScatter(cells,{w:188,h:62,yoy:A.yoy})
+              :sparkStack(cells,act.segs,{w:188,h:62,unit:unit,yoy:A.yoy,max:A.scale==="shared"?sharedMax:0}))+
+      '<div class="af"><span>'+(isTenor?fmtNum(allT.length)+" deals"
+          :A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
+      "<b>"+(isTenor?(allT.length?fmtYrs(median(allT))+" med · "+uniq(allT.map(x=>x.toFixed(2))).length+" tenors":"—")
+          :"peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak)))+"</b></div>"+
+      "</div>";
+  }).join(""):'<div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div>';
+
+  const actLegend=(isTenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):act.segs)
+    .map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("")+
+    (A.yoy?'<span class="alg"><i class="dash"></i>Same period last year</span>':"");
+
+  const actStrip='<div class="fstrip actstrip">'+
+    '<label><span>Year</span><select id="a-year">'+YEARS.map(y=>opt(String(y),String(y),String(A.year))).join("")+"</select></label>"+
+    '<label><span>Cut by</span><div class="segbtns">'+
+      [["week","Week"],["day","Day"]].map(u=>'<button data-actunit="'+u[0]+'" aria-pressed="'+(A.unit===u[0])+'">'+u[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>'+(A.unit==="week"?"Weeks of the year":"Days of the year")+'</span>'+
+      '<input type="text" id="a-range" class="wkin" placeholder="'+(A.unit==="week"?"1-9":"1-60")+'" value="'+esc(A.range)+'"></label>'+
+    '<label><span>Measure</span><div class="segbtns">'+
+      METRICS.map(m=>'<button data-actmetric="'+m[0]+'" aria-pressed="'+(A.metric===m[0])+'">'+m[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Columns</span><div class="segbtns">'+
+      [[0,"Auto"],[3,"3"],[4,"4"],[6,"6"],[8,"8"],[11,"11"]].map(c=>
+        '<button data-actcols="'+c[0]+'" aria-pressed="'+(A.cols===c[0])+'">'+c[1]+"</button>").join("")+
+    "</div></label>"+
+    (isTenor?"":'<label><span>Scale</span><div class="segbtns">'+
+      [["own","Own peak"],["shared","Shared"]].map(x=>
+        '<button data-actscale="'+x[0]+'" aria-pressed="'+(A.scale===x[0])+'">'+x[1]+"</button>").join("")+
+    "</div></label>")+
+    '<label><span>Compare</span><div class="segbtns">'+
+      '<button data-actyoy="1" aria-pressed="'+(!!A.yoy)+'">Year on year</button></div></label>'+
+    '<div class="fspacer"></div><div class="alegend">'+actLegend+"</div></div>";
+
+  const gridStyle=A.cols?' style="grid-template-columns:repeat('+A.cols+',minmax(0,1fr))"':"";
+  const span=actCols.length?(A.unit==="week"?"weeks ":"days ")+actCols[0].key+"–"+actCols[actCols.length-1].key+" of "+A.year:"no periods in range";
+  const activity=panel("Trading activity by trader",
+    span+" · "+actRows.length+" traders · one column per "+A.unit+(A.yoy?" · dashed = same period last year":""),
+    actStrip+'<div class="agrid"'+gridStyle+">"+actCards+"</div>",
+    (isTenor
+      ? "Each dot is a group of deals at one maturity, sized by how many. A book concentrated on one point of the curve is a row of large dots; a book spread across it is a column of small ones — which is the difference between a trader running a mandate and a trader wandering. The line is their median tenor."
+      : "Each chart is one trader's own book, period by period, stacked by asset class.")+
+    " Ordered by desk, so the people next to each other on the floor are next to each other here — a book that does not look like its neighbours' is the one to open. "+
+    "<b>Click a card</b> to lock that trader across every panel on the page; <b>double-click</b> for the trader file.");
+
+
+  return kpis+rowA+'<div class="mt10">'+rowB+"</div>"+'<div class="mt10">'+rowC+"</div>"+
+    '<div class="mt10">'+activity+"</div>";
 }
 
 /* ============================================================
@@ -5318,7 +5476,7 @@ function closeMsel(){
 /* ============================================================
    Render
 ============================================================ */
-const PANES={overview:paneOverview,detections:paneDetections,rules:paneRules,blotter:paneBlotter,traders:paneTraders,log:paneLog};
+const PANES={overview:paneOverview,activity:paneActivity,detections:paneDetections,rules:paneRules,blotter:paneBlotter,traders:paneTraders,log:paneLog};
 function render(){
   renderRail(); renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
