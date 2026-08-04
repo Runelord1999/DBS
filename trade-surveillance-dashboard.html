@@ -3583,54 +3583,125 @@ function hlAggregate(spec){
   HL_AGG.set(spec,r);
   return r;
 }
+/* The same selection, counted in deals instead of alerts, with a parallel cut in
+   notional so a volume chart is marked in the currency it is drawn in. Rule,
+   category, severity and disposition are properties of an alert rather than of a
+   ticket, so for those the selection resolves to the set of deals the matching
+   alerts cite. */
+let HL_TAGG=new Map();
+function hlTradeAggregate(spec){
+  if(HL_TAGG.has(spec)) return HL_TAGG.get(spec);
+  const [key,val]=spec.split("|");
+  const mk=()=>({trader:{},desk:{},ac:{},product:{},ctpy:{},channel:{},tenorb:{},sizeb:{},
+                 hour:{},month:{}});
+  const r=mk(); r.vol=mk(); r.n=0; r.notional=0;
+  let ids=null;
+  if(key==="rule"||key==="cat"||key==="sev"||key==="status"){
+    ids=Object.create(null);
+    ALERTS.forEach(a=>{ if(matchRail(a)&&hlMatches(a,key,val)) a.tradeIds.forEach(id=>{ids[id]=1;}); });
+  }
+  const hit=t=>{
+    switch(key){
+      case "trader":  return t.traderId===val;
+      case "desk":    return t.deskId===val;
+      case "ac":      return t.ac===val;
+      case "product": return t.product===val;
+      case "ctpy":    return t.ctpy===val;
+      case "channel": return t.channel===val;
+      case "tenorb":  return tenorBandOf(t.tenor)===val;
+      case "sizeb":   return sizeBandOf(t.notional)===val;
+      case "hour":    return Math.min(23,Math.floor(t.execMin/60))===+val;
+      case "month":   return monthIdxOf(t.date)===+val;
+      default:        return !!ids[t.id];
+    }
+  };
+  const bump=(dim,k,nl)=>{ r[dim][k]=(r[dim][k]||0)+1; r.vol[dim][k]=(r.vol[dim][k]||0)+nl; };
+  TRADES.forEach(t=>{
+    if(!tradeMatchesRail(t)||!hit(t)) return;
+    r.n++; r.notional+=t.notional;
+    bump("trader",t.traderId,t.notional);
+    bump("desk",t.deskId,t.notional);
+    bump("ac",t.ac,t.notional);
+    bump("product",t.product,t.notional);
+    bump("ctpy",t.ctpy,t.notional);
+    bump("channel",t.channel,t.notional);
+    bump("tenorb",tenorBandOf(t.tenor),t.notional);
+    bump("sizeb",sizeBandOf(t.notional),t.notional);
+    bump("hour",Math.min(23,Math.floor(t.execMin/60)),t.notional);
+    const mi=monthIdxOf(t.date); if(mi>=0) bump("month",mi,t.notional);
+  });
+  HL_TAGG.set(spec,r);
+  return r;
+}
 /* Paint every aggregate: keep it lit when the selection is present in it, and
    size its marker to the share the selection accounts for. Four passes, one per
    marker shape — a div bar, a horizontal SVG bar, a vertical SVG column, and
    the daily series. */
-/* "P:sev|Critical" reads the period-scoped cut; "sev|Critical" the 12-month one. */
-const hlSub=(agg,spec)=>{
-  if(!agg) return 0;
-  const i=spec.indexOf("|"), key=spec.slice(i+1);
-  let dim=spec.slice(0,i), src=agg;
-  if(dim.slice(0,2)==="P:"){ dim=dim.slice(2); src=agg.period; }
-  return ((src||{})[dim]||{})[key]||0;
+/* An aggregate names the cut it reads from with a prefix. "sev|Critical" is the
+   12-month alert count, "P:sev|Critical" the review-period one, "T:product|FX Spot"
+   the deal count, "V:product|FX Spot" the notional. The activity charts are drawn
+   from deals, so they have to be measured in deals — a marker sized in alerts
+   over a bar sized in deals is a ratio of two different populations, and at
+   1,727 alerts against 27,565 deals it renders as no marker at all. */
+const HL_CUT={"P:":a=>a.a.period,"T:":a=>a.t,"V:":a=>a.t.vol};
+const hlSplit=spec=>{
+  const i=spec.indexOf("|"), d=spec.slice(0,i);
+  return spec.charAt(1)===":"?[d.slice(0,2),d.slice(2),spec.slice(i+1)]:["",d,spec.slice(i+1)];
+};
+const hlSub=(aggs,spec)=>{
+  if(!aggs) return 0;
+  const p=hlSplit(spec), cut=HL_CUT[p[0]];
+  return (((cut?cut(aggs):aggs.a)||{})[p[1]]||{})[p[2]]||0;
 };
 /* Is this aggregate the selection itself? A bar the cursor is on is already
    lit and already 100% of itself, so drawing a share marker over it would
    simply repaint it in the marker colour — which reads as the chart changing
    colour under the mouse rather than as a measurement. */
-const hlIsSelf=(spec,sel)=>!!sel&&(spec===sel||(spec.slice(0,2)==="P:"&&spec.slice(2)===sel));
-function hlPaintAggregates(agg,sel){
+const hlIsSelf=(spec,sel)=>{
+  if(!sel) return false;
+  const a=hlSplit(spec), b=hlSplit(sel);
+  return a[1]===b[1]&&a[2]===b[2];
+};
+/* Whether a bar stays lit is not "does the selection touch it". Selecting FX Spot
+   must not light FX Swap: they are siblings on the same axis, and because a deal
+   set spans several products, several counterparties and several size bands, any
+   overlap test lights nearly the whole chart — which reads as the chart selecting
+   things the user did not click. So within the selection's own dimension only the
+   exact match survives, and its siblings go dark like any other unselected member.
+   Across other dimensions a bar stays lit wherever the selection is present, which
+   is what lets picking a trader redraw the execution-hour profile. */
+const hlSameDim=(spec,sel)=>!!sel&&hlSplit(spec)[1]===hlSplit(sel)[1];
+function hlPaintAggregates(aggs,sel){
+  const shareOf=(spec,sub,total)=>
+    hlSameDim(spec,sel)||total<=0?0:Math.min(1,sub/total);
   $$("[data-hl-agg]").forEach(el=>{
     const spec=el.getAttribute("data-hl-agg");
-    const sub=hlSub(agg,spec);
-    el.classList.toggle("hl-has",!!agg&&sub>0);
-    const total=+el.getAttribute("data-hl-total")||0;
+    const sub=hlSub(aggs,spec);
+    el.classList.toggle("hl-has",!!aggs&&(hlSameDim(spec,sel)?hlIsSelf(spec,sel):sub>0));
     const mark=el.querySelector&&el.querySelector(".hlmark");
-    if(mark) mark.style.width=(hlIsSelf(spec,sel)?0
-      :(total>0?Math.min(1,sub/total):0)*(+el.getAttribute("data-hl-rate")||100)).toFixed(1)+"%";
+    if(mark) mark.style.width=(shareOf(spec,sub,+el.getAttribute("data-hl-total")||0)*
+      (+el.getAttribute("data-hl-rate")||100)).toFixed(1)+"%";
   });
   $$("rect.hlmark-svg").forEach(r=>{
     const spec=r.getAttribute("data-hl-for");
-    const sub=hlSub(agg,spec);
-    const total=+r.getAttribute("data-hl-total")||0, len=+r.getAttribute("data-hl-len")||0;
-    r.setAttribute("width",(hlIsSelf(spec,sel)?0:(total>0?Math.min(1,sub/total):0)*len).toFixed(1));
+    r.setAttribute("width",(shareOf(spec,hlSub(aggs,spec),+r.getAttribute("data-hl-total")||0)*
+      (+r.getAttribute("data-hl-len")||0)).toFixed(1));
   });
   $$("rect.hlshare").forEach(r=>{
     const spec=r.getAttribute("data-hl-for");
-    const sub=hlIsSelf(spec,sel)?0:hlSub(agg,spec);
+    const sub=hlSameDim(spec,sel)?0:hlSub(aggs,spec);
     const px=+r.getAttribute("data-hl-px")||0, base=+r.getAttribute("data-hl-base")||0;
     const h=Math.max(0,sub*px);
     r.setAttribute("height",h.toFixed(1));
     r.setAttribute("y",(base-h).toFixed(1));
   });
   $$("path.hlseries").forEach(pth=>{
-    if(!agg){ pth.setAttribute("d",""); return; }
+    if(!aggs){ pth.setAttribute("d",""); return; }
     const x0=+pth.getAttribute("data-x0"), dx=+pth.getAttribute("data-dx");
     const base=+pth.getAttribute("data-base"), py=+pth.getAttribute("data-py"), n=+pth.getAttribute("data-n");
     const off=DAYS-n;
     let d="M"+x0.toFixed(1)+","+base.toFixed(1);
-    for(let i=0;i<n;i++) d+=" "+(x0+i*dx).toFixed(1)+","+(base-agg.days[off+i]*py).toFixed(1);
+    for(let i=0;i<n;i++) d+=" "+(x0+i*dx).toFixed(1)+","+(base-aggs.a.days[off+i]*py).toFixed(1);
     pth.setAttribute("d",d+" "+(x0+(n-1)*dx).toFixed(1)+","+base.toFixed(1)+"Z");
   });
 }
@@ -3658,11 +3729,11 @@ function hlApply(spec){
       "{background:color-mix(in srgb,var(--brand) 16%,transparent)}"+
     ".hl-active rect"+sel+",.hl-active circle"+sel+"{stroke:var(--ink);stroke-width:1.6}";
   document.body.classList.add("hl-active");
-  const agg=hlAggregate(spec);
-  hlPaintAggregates(agg,spec);
-  hlLabel(spec,agg);
+  const aggs={a:hlAggregate(spec),t:hlTradeAggregate(spec)};
+  hlPaintAggregates(aggs,spec);
+  hlLabel(spec,aggs);
 }
-function hlLabel(spec,agg){
+function hlLabel(spec,aggs){
   let el=$("#hl-pin");
   if(!el){ el=document.createElement("div"); el.id="hl-pin"; el.className="hlpin"; document.body.appendChild(el); }
   if(!spec||!state.highlight){ el.classList.remove("on"); return; }
@@ -3674,7 +3745,8 @@ function hlLabel(spec,agg){
     :k==="month"?(MONTH_KEYS[+v]||{}).full||v:v;
   el.innerHTML='<b></b><span></span>';
   el.querySelector("b").textContent=(HL_NOUN[k]||k)+" · "+label;
-  el.querySelector("span").textContent="· "+fmtNum(agg?agg.n:0)+" alerts in scope"+
+  el.querySelector("span").textContent="· "+fmtNum(aggs?aggs.t.n:0)+" deals · "+
+    fmtNum(aggs?aggs.a.n:0)+" alerts in scope"+
     (hlPinned?" · pinned, click again or press Esc to release":"");
   el.classList.add("on");
 }
@@ -3683,7 +3755,7 @@ function hlClear(){ if(!hlPinned) hlApply(null); }
 function hlPin(spec){ hlPinned=hlPinned===spec?null:spec; hlApply(hlPinned); }
 /* The selection survives a re-render: panes are rebuilt from scratch on every
    filter change, so the pinned rule has to be re-attached to the new nodes. */
-function hlRefresh(){ HL_AGG=new Map(); hlApply(hlPinned); }
+function hlRefresh(){ HL_AGG=new Map(); HL_TAGG=new Map(); hlApply(hlPinned); }
 document.addEventListener("mouseover",e=>{
   if(!state.highlight) return;
   const src=e.target.closest("[data-hlsrc]");
@@ -3714,6 +3786,11 @@ function hlAgg(dim,key,total,ratePct){
 }
 /* Same, for a panel that only shows the selected review period. */
 const hlAggP=(dim,key,total,ratePct)=>hlAgg("P:"+dim,key,total,ratePct);
+/* And for the activity panels, which are drawn from deals: T counts tickets,
+   V measures them in notional, so a volume bar is marked in notional and a count
+   bar in deals rather than both being marked in alerts. */
+const hlAggT=(dim,key,total,ratePct)=>hlAgg("T:"+dim,key,total,ratePct);
+const hlAggV=(dim,key,total,ratePct)=>hlAgg("V:"+dim,key,total,ratePct);
 
 /* ============================================================
    Chart primitives — hand-rolled SVG, themed through CSS variables
@@ -3780,7 +3857,7 @@ function stackedBars(cats,series,opts){
     });
     // The selection's own count for this month, drawn from the baseline up: the
     // month a trader's pattern started is visible as a step in this overlay.
-    if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
+    if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="'+(opts.cut||"")+'month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
       '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
     if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
     g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)">'+esc(c.label)+"</text>";
@@ -3877,14 +3954,22 @@ function hourChart(counts,opts){
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
        '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
   }
+  /* The columns are aggregates in their own right: pick a trader anywhere on the
+     page and this chart redraws as that trader's session, lit where they deal and
+     dark where they don't. The cut has to match what the chart counts — deals on
+     the activity tab, alerts on the detection one — or the marker is scaled
+     against a population sixteen times larger than the bar it sits in. */
+  const cut=opts.cut||"", noun=opts.unitLabel||"Alerts";
+  const tot=Math.max(1,counts.reduce((a,c)=>a+c,0));
   counts.forEach((v,h)=>{
     const x=padL+h*bw+(bw-bar)/2;
     const outside=h<7||h>=19;
-    g+='<rect class="hlctx" x="'+x.toFixed(1)+'" y="'+Y(v).toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,(H-padB)-Y(v)).toFixed(1)+
-      '" rx="1.5" fill="'+(outside?"var(--fail)":"var(--agent)")+'" data-hl-hour="'+h+'" data-hlsrc="hour|'+h+'" data-hlpin="1"'+
+    g+='<rect x="'+x.toFixed(1)+'" y="'+Y(v).toFixed(1)+'" width="'+bar.toFixed(1)+'" height="'+Math.max(0.6,(H-padB)-Y(v)).toFixed(1)+
+      '" rx="1.5" fill="'+(outside?"var(--fail)":"var(--agent)")+'" data-hl-hour="'+h+'" data-hlsrc="hour|'+h+'" data-hlpin="1" '+
+      hlAgg(cut+"hour",h,v)+
       ' style="cursor:pointer" data-tip="'+pad2(h)+":00 – "+pad2((h+1)%24)+':00" data-tipsub="'+(outside?"Outside every desk's trading window":"Within desk hours")+
-      '" data-tiptable="Alerts|'+v+"§Share of all alerts|"+(v/Math.max(1,counts.reduce((a,c)=>a+c,0))*100).toFixed(1)+'%"/>';
-    g+='<rect class="hlshare" data-hl-for="hour|'+h+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
+      '" data-tiptable="'+esc(noun)+"|"+v+"§Share of the day|"+(v/tot*100).toFixed(1)+'%"/>';
+    g+='<rect class="hlshare" data-hl-for="'+cut+'hour|'+h+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
       '" x="'+(x+bar*0.26).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.48).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
     if(h%3===0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">'+pad2(h)+"</text>";
   });
@@ -4616,9 +4701,11 @@ function paneActivity(){
     return {label:mk.label,sub:i===0||mk.m===0?String(mk.y).slice(2):"",
       parts:ASSET_CLASSES.map(ac=>({label:ac,v:inM.filter(t=>t.ac===ac).length,color:AC_COLOR[ac]}))};
   });
+  /* Every panel here is drawn from deals, so every marker is measured in deals
+     too — "T:" for the count charts, "V:" for the notional ones. */
   const acSegs=ASSET_CLASSES.map(ac=>{
     const n=rows.filter(t=>t.ac===ac).length;
-    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" '+hlDim("ac",ac),agg:hlAgg("ac",ac,n)};
+    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" '+hlDim("ac",ac),agg:hlAggT("ac",ac,n)};
   }).filter(x=>x.v>0);
   const chSegs=CHANNELS.map(c=>{
     const n=rows.filter(t=>t.channel===c[0]).length;
@@ -4626,7 +4713,7 @@ function paneActivity(){
       color:{"Voice":"var(--run)","eComm single-dealer":"var(--agent)","Multi-dealer platform":"var(--cyan)",
              "API / Algo":"var(--violet)","Internal booking":"var(--ink-3)"}[c[0]]||"var(--ink-3)",
       hl:'data-hlsrc="channel|'+esc(c[0])+'" '+hlDim("channel",c[0]),
-      agg:hlAgg("channel",c[0],ALERTS.filter(a=>matchRail(a)&&(a.channels||[]).indexOf(c[0])>=0).length)};
+      agg:hlAggT("channel",c[0],n)};
   }).filter(x=>x.v>0);
 
   // The trading day itself, not the alerting subset.
@@ -4647,15 +4734,16 @@ function paneActivity(){
       tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(nl),
         "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
         "Traders|"+uniq(ts.map(t=>t.traderId)).length,"Alerts|"+fmtNum(al)].join("§"),
-      hl:'data-hlsrc="product|'+esc(pr.p)+'" '+hlDim("product",pr.p),
-      agg:hlAgg("product",pr.p,al)};
+      hl:'data-hlsrc="product|'+esc(pr.p)+'" '+hlDim("product",pr.p)};
   }).filter(Boolean);
   const prodCount=prodStats.slice().sort((a,b)=>b.n-a.n).slice(0,12).map(x=>({
     label:x.p,v:x.n,vLabel:fmtNum(x.n),color:AC_COLOR[x.ac],
-    tip:x.p,tipsub:x.ac+" · by transaction count",tiptable:x.tiptable,hl:x.hl,agg:x.agg,aggKey:"product|"+x.p}));
+    tip:x.p,tipsub:x.ac+" · by transaction count",tiptable:x.tiptable,hl:x.hl,
+    agg:hlAggT("product",x.p,x.n),aggKey:"T:product|"+x.p}));
   const prodVol=prodStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12).map(x=>({
     label:x.p,v:x.nl,vLabel:fmtM(x.nl),color:AC_COLOR[x.ac],
-    tip:x.p,tipsub:x.ac+" · by notional",tiptable:x.tiptable,hl:x.hl,agg:x.agg,aggKey:"product|"+x.p}));
+    tip:x.p,tipsub:x.ac+" · by notional",tiptable:x.tiptable,hl:x.hl,
+    agg:hlAggV("product",x.p,x.nl),aggKey:"V:product|"+x.p}));
 
   const ctpyStats=uniq(rows.map(t=>t.ctpy)).map(c=>{
     const ts=rows.filter(t=>t.ctpy===c);
@@ -4668,16 +4756,16 @@ function paneActivity(){
         "Median ticket|"+fmtM(median(ts.map(t=>t.notional))||0),
         "Traders facing this name|"+uniq(ts.map(t=>t.traderId)).length,
         "Alerts|"+fmtNum(al)].join("§"),
-      hl:'data-hlsrc="ctpy|'+esc(c)+'" '+hlDim("ctpy",c),
-      agg:hlAgg("ctpy",c,al)};
+      hl:'data-hlsrc="ctpy|'+esc(c)+'" '+hlDim("ctpy",c)};
   });
   const ctpyRow=x=>({label:x.short,color:x.rel?"var(--fail)":"var(--agent)",
-    tip:x.c,tipsub:x.type+(x.rel?" · related-party register":""),tiptable:x.tiptable,
-    hl:x.hl,agg:x.agg,aggKey:"ctpy|"+x.c});
+    tip:x.c,tipsub:x.type+(x.rel?" · related-party register":""),tiptable:x.tiptable,hl:x.hl});
   const ctpyCount=ctpyStats.slice().sort((a,b)=>b.n-a.n).slice(0,12)
-    .map(x=>Object.assign(ctpyRow(x),{v:x.n,vLabel:fmtNum(x.n)}));
+    .map(x=>Object.assign(ctpyRow(x),{v:x.n,vLabel:fmtNum(x.n),
+      agg:hlAggT("ctpy",x.c,x.n),aggKey:"T:ctpy|"+x.c}));
   const ctpyVol=ctpyStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12)
-    .map(x=>Object.assign(ctpyRow(x),{v:x.nl,vLabel:fmtM(x.nl)}));
+    .map(x=>Object.assign(ctpyRow(x),{v:x.nl,vLabel:fmtM(x.nl),
+      agg:hlAggV("ctpy",x.c,x.nl),aggKey:"V:ctpy|"+x.c}));
 
   const tenorItems=TENOR_BANDS.map(b=>{
     const ts=rows.filter(t=>tenorBandOf(t.tenor)===b.label);
@@ -4687,7 +4775,7 @@ function paneActivity(){
       tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
         "Share of the book|"+(rows.length?Math.round(ts.length/rows.length*100):0)+"%","Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="tenorb|'+esc(b.label)+'" '+hlDim("tenorb",b.label),
-      agg:hlAgg("tenorb",b.label,al),aggKey:"tenorb|"+b.label};
+      agg:hlAggT("tenorb",b.label,ts.length),aggKey:"T:tenorb|"+b.label};
   });
 
   const sizeItems=SIZE_BANDS.map(b=>{
@@ -4698,13 +4786,13 @@ function paneActivity(){
       tiptable:["Deals|"+fmtNum(ts.length),"Notional|"+fmtM(ts.reduce((a,t)=>a+t.notional,0)),
         "Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="sizeb|'+esc(b[2])+'" '+hlDim("sizeb",b[2]),
-      agg:hlAgg("sizeb",b[2],al),aggKey:"sizeb|"+b[2]};
+      agg:hlAggT("sizeb",b[2],ts.length),aggKey:"T:sizeb|"+b[2]};
   }).filter(x=>x.v>0);
 
   const rowA='<div class="gridw2 tight">'+
     panel("Deal volume by month","stacked by asset class · 12 months",
       '<div class="panel-body"><div class="chart-well tall">'+
-        stackedBars(months,null,{w:660,h:266,dim:"ac",hlMonth:true,unitLabel:"deals"})+"</div></div>",
+        stackedBars(months,null,{w:660,h:266,dim:"ac",hlMonth:true,cut:"T:",unitLabel:"deals"})+"</div></div>",
       "The book's own shape across the year. Quarter ends and roll dates are visible without anyone marking them.")+
     panel("Asset class mix","share of deals",
       '<div class="panel-body"><div class="chart-well donut-well">'+
@@ -4733,8 +4821,9 @@ function paneActivity(){
 
   const rowC='<div class="grid3 tight">'+
     panel("Execution hours","the trading day · desk-local time",
-      '<div class="panel-body"><div class="chart-well">'+hourChart(hrs,{w:560,h:212})+"</div></div>",
-      "Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against.")+
+      '<div class="panel-body"><div class="chart-well">'+
+        hourChart(hrs,{w:560,h:212,cut:"T:",unitLabel:"Deals"})+"</div></div>",
+      "Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against. Select a trader anywhere on the page and this redraws as their session.")+
     panel("Ticket size distribution","deals per size band",
       '<div class="panel-body"><div class="chart-well">'+hbars(sizeItems,{w:460,rowH:19,labW:110})+"</div></div>",
       "A book's size profile is never linear. The tail on the right is where the authorisation rules live.")+
