@@ -85,6 +85,48 @@ The seed prints these when it finishes. Every account uses the password
 
 ---
 
+## The published demo
+
+`gfm-workbench-demo/` at the repository root is a static build of this app,
+published on the DBS site and linked from the root `index.html`. It is the
+Section 11 pitch artifact: leadership opens a URL and sees the capacity ceiling
+being breached, with no infrastructure to stand up first.
+
+```bash
+npm run seed        # if you have not already
+npm run build:demo  # regenerates gfm-workbench-demo/
+```
+
+**It runs the real application, not a mock.** The build aliases `express` to a
+small router shim (`web/src/demo/express-shim.js`) and runs
+`server/src/routes/*.js` unmodified against a wasm SQLite copy of the seeded
+database. Every handler, validation rule, permission check and capacity
+calculation is the same code the Node server runs — so the demo cannot drift
+from the tool, and fixing a bug in one fixes it in the other.
+
+What that buys, and what it costs:
+
+- Everything works: filters, drill-in, editing, the sizing rubric, the capacity
+  check, approving demand, CSV export. Approve the sized Triage item and Tech BA
+  moves from 114% to 117.4% committed in FY26 Q4, exactly as it would live.
+- Writes are real but local. The database lives in the browser tab; reloading
+  restores the seeded portfolio. Nothing is shared between viewers.
+- There is no sign-in. A **View as** switcher swaps between seeded personas
+  instead, which shows the role-shaped screens better than a login form does —
+  a resourced team member sees three nav items, the PSC sees seven and can edit
+  nothing.
+- It costs about 1 MB gzipped, mostly the SQLite wasm runtime and the dataset.
+
+`scripts/export-demo-db.mjs` refuses to package a database whose people are not
+all on `@gfm.example` addresses, so a live portfolio cannot be built into a
+publicly served page by accident.
+
+**The demo is not the tool.** It is a read-through-a-window version for pitching.
+Real use needs the Node server, a real database, and the hosting decision in
+[docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md).
+
+---
+
 ## The capacity model
 
 This is the part worth arguing with, so it is stated plainly. It lives in
@@ -212,8 +254,15 @@ fabricated seed data only.
   start — that is a starting point to confirm, not a decision that has been
   made. See [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md).
 
-There is no cloud SaaS backend and no external service dependency. GitHub Pages
-cannot host this — it is static-only and cannot run the API or persist data.
+There is no cloud SaaS backend and no external service dependency.
+
+**GitHub Pages cannot host the application.** It is static-only: it cannot run
+the API, and it cannot persist anything shared between users. What is published
+there is the demo described above — a fabricated dataset running in the
+viewer's own browser. That page sits at a **publicly readable URL**, which is
+fine precisely because every figure on it is invented. It must never become the
+home of the real tool, and the demo dataset must never be regenerated from a
+live database (the export script blocks this).
 
 ---
 

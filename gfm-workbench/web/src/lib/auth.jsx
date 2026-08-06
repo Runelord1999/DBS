@@ -1,7 +1,8 @@
 import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from 'react';
-import { api, setToken } from './api.js';
+import { api, IS_DEMO, setToken } from './api.js';
+import { getPersonas, setPersona, startDemoServer } from '@demo';
 
 const AuthContext = createContext(null);
 
@@ -22,14 +23,22 @@ export function AuthProvider({ children }) {
   const [person, setPerson] = useState(null);
   const [reference, setReference] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [personas, setPersonas] = useState([]);
 
   const load = useCallback(async () => {
     try {
+      // The demo has no password flow — it boots the in-browser API and adopts
+      // a seeded persona, so the role switcher replaces the sign-in screen.
+      if (IS_DEMO) {
+        await startDemoServer();
+        setPersonas(getPersonas());
+      }
       const [me, ref] = await Promise.all([api.get('/auth/me'), api.get('/reference')]);
       setUser(me.user);
       setPerson(me.person);
       setReference(ref);
-    } catch {
+    } catch (err) {
+      if (IS_DEMO) console.error('Demo failed to start', err);
       setUser(null);
       setPerson(null);
     } finally {
@@ -59,6 +68,13 @@ export function AuthProvider({ children }) {
     setPerson(null);
   }, []);
 
+  /** Demo only: adopt another seeded persona and re-read everything as them. */
+  const switchPersona = useCallback(async (userId) => {
+    setPersona(userId);
+    setLoading(true);
+    await load();
+  }, [load]);
+
   const value = useMemo(() => ({
     user,
     person,
@@ -66,11 +82,14 @@ export function AuthProvider({ children }) {
     loading,
     login,
     logout,
+    isDemo: IS_DEMO,
+    personas,
+    switchPersona,
     reloadReference: async () => setReference(await api.get('/reference')),
     isAdmin: user?.accessRole === 'admin',
     canEdit: ['admin', 'pm', 'biz_lead'].includes(user?.accessRole),
     isReadOnly: ['resource', 'psc'].includes(user?.accessRole),
-  }), [user, person, reference, loading, login, logout]);
+  }), [user, person, reference, loading, login, logout, personas, switchPersona]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

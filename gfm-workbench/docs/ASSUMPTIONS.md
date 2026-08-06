@@ -210,6 +210,24 @@ data.**
   `updated_date` on RAG entries. If evidencing who changed a budget or a sizing
   estimate matters, that needs designing in.
 
+### The published demo
+
+`gfm-workbench-demo/` is built from the fabricated seed and served publicly from
+the repository's site. It carries no authentication by design — there is nothing
+to protect, and a login screen on a dataset of invented projects would only
+imply the data mattered.
+
+Two properties keep that safe, and both should be preserved:
+
+- `scripts/export-demo-db.mjs` refuses to package any database whose people are
+  not all on `@gfm.example` addresses. Rebuilding the demo against a live
+  database fails rather than publishing it.
+- The demo bundles the **route** modules only. It has no network egress, no
+  credentials, and no path to a real database.
+
+If the repository ever stops being public, or if the demo is ever pointed at
+something other than the seed, revisit both.
+
 ---
 
 ## 5. What to settle first

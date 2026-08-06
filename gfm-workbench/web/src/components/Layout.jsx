@@ -19,7 +19,7 @@ const NAV = [
 ];
 
 export function Layout({ children }) {
-  const { user, person, logout } = useAuth();
+  const { user, person, logout, isDemo, personas, switchPersona } = useAuth();
   const items = NAV.filter((item) => item.roles.includes(user.accessRole));
 
   return (
@@ -60,10 +60,41 @@ export function Layout({ children }) {
                 {person ? ` · ${person.role}` : ''}
               </div>
             </div>
-            <button type="button" className="btn btn-sm" onClick={logout}>Sign out</button>
+            {isDemo ? (
+              /* The demo has no sign-in, so the switcher doubles as the clearest
+                 way to show that the screens differ by role rather than by filter. */
+              <label className="flex items-center gap-1.5">
+                <span className="text-[0.6875rem] muted">View as</span>
+                <select
+                  className="field"
+                  style={{ width: 'auto', paddingTop: '0.25rem', paddingBottom: '0.25rem' }}
+                  value={user.id}
+                  onChange={(e) => switchPersona(Number(e.target.value))}
+                >
+                  {personas.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <button type="button" className="btn btn-sm" onClick={logout}>Sign out</button>
+            )}
           </div>
         </div>
       </header>
+
+      {isDemo && (
+        <div
+          className="px-5 py-1.5 text-[0.6875rem] no-print"
+          style={{ background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}
+        >
+          <strong style={{ color: 'var(--status-warning)' }}>▲ Demo</strong>
+          <span className="secondary">
+            {' '}— fabricated portfolio, running entirely in this browser tab. Edits are real
+            and move the numbers, but nothing is saved: reload to restore the seeded data.
+          </span>
+        </div>
+      )}
 
       <main className="flex-1 px-5 py-4">{children}</main>
 

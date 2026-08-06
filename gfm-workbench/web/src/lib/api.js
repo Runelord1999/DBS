@@ -1,4 +1,13 @@
+import { demoRequest } from '@demo';
+
 const TOKEN_KEY = 'gfm-workbench-token';
+
+/**
+ * The static demo build has no server: requests are dispatched against the real
+ * route modules running in the browser over a wasm SQLite database. Everything
+ * above this file — every screen, every call — is identical either way.
+ */
+export const IS_DEMO = import.meta.env.VITE_STATIC_DEMO === '1';
 
 /**
  * The session token is the only thing kept in browser storage. All portfolio
@@ -22,7 +31,21 @@ export class ApiError extends Error {
   }
 }
 
+function raise(status, payload) {
+  throw new ApiError(
+    status,
+    payload?.error || `Request failed (${status})`,
+    payload?.details || payload?.breaches || null
+  );
+}
+
 async function request(method, path, body) {
+  if (IS_DEMO) {
+    const res = await demoRequest(method, path, body);
+    if (res.status >= 400) raise(res.status, res.body);
+    return res.body;
+  }
+
   const res = await fetch(`/api${path}`, {
     method,
     headers: {
@@ -42,13 +65,7 @@ async function request(method, path, body) {
   let payload = null;
   try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
 
-  if (!res.ok) {
-    throw new ApiError(
-      res.status,
-      payload?.error || `Request failed (${res.status})`,
-      payload?.details || payload?.breaches || null
-    );
-  }
+  if (!res.ok) raise(res.status, payload);
   return payload;
 }
 
@@ -60,22 +77,37 @@ export const api = {
   del: (path) => request('DELETE', path),
 };
 
-/** Triggers a CSV download through the authenticated API. */
-export async function downloadCsv(path, fallbackName) {
-  const res = await fetch(`/api${path}`, {
-    headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
-  });
-  if (!res.ok) throw new ApiError(res.status, 'Export failed');
-
-  const disposition = res.headers.get('content-disposition') || '';
-  const match = disposition.match(/filename="([^"]+)"/);
-  const blob = await res.blob();
+function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = match ? match[1] : fallbackName;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function filenameFrom(disposition, fallback) {
+  const match = String(disposition || '').match(/filename="([^"]+)"/);
+  return match ? match[1] : fallback;
+}
+
+/** Triggers a CSV download. Exports work in the demo too — same route code. */
+export async function downloadCsv(path, fallbackName) {
+  if (IS_DEMO) {
+    const res = await demoRequest('GET', path);
+    if (res.status >= 400) raise(res.status, res.body);
+    saveBlob(
+      new Blob([res.body], { type: 'text/csv;charset=utf-8' }),
+      filenameFrom(res.headers?.['content-disposition'], fallbackName)
+    );
+    return;
+  }
+
+  const res = await fetch(`/api${path}`, {
+    headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, 'Export failed');
+  saveBlob(await res.blob(), filenameFrom(res.headers.get('content-disposition'), fallbackName));
 }
