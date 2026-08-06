@@ -1,0 +1,24 @@
+{
+  "name": "gfm-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GFM Delivery Workbench — portfolio, capacity and demand for the GFM PM and Biz Lead teams",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build",
+    "start": "npm --workspace server run start",
+    "seed": "npm --workspace server run seed",
+    "seed:reset": "npm --workspace server run seed:reset",
+    "test": "npm --workspace server run test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
