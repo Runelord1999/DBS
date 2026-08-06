@@ -17,7 +17,9 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const source = process.env.GFM_DB_PATH || path.resolve(here, '../data/workbench.db');
-const destination = path.resolve(here, '../web/public/demo-portfolio.db');
+// Lives in src/ rather than public/ so the bundler can inline it: the published
+// page is a single self-contained .html file, matching the other DBS dashboards.
+const destination = path.resolve(here, '../web/src/demo/demo-portfolio.db');
 
 if (!fs.existsSync(source)) {
   console.error(`No database at ${source}. Run \`npm run seed\` first.`);

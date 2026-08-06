@@ -17,9 +17,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  *   node:crypto  → a stub; the demo has no password flow
  *   @server      → the server source tree, imported directly
  *
- * Output goes to a folder at the repository root so GitHub Pages serves it
- * alongside the other dashboards. Paths are relative and routing is hash-based,
- * so it works from any sub-path without server rewrites.
+ * The output is folded into a single self-contained .html file at the
+ * repository root (see scripts/bundle-demo.mjs), matching how the other DBS
+ * dashboards are published. `assetsInlineLimit` is set high enough to embed the
+ * SQLite wasm runtime and the seeded dataset as data URIs, and routing is
+ * hash-based, so the page works from any URL with no server rewrites.
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -39,9 +41,15 @@ export default defineConfig({
     include: ['sql.js'],
   },
   build: {
-    outDir: path.resolve(here, '../../gfm-workbench-demo'),
+    outDir: path.resolve(here, 'dist-demo'),
     emptyOutDir: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 1200,
+    // Embed every asset, including the ~660 KB wasm runtime and the seeded
+    // database, so the bundler leaves nothing to fetch at runtime.
+    assetsInlineLimit: 8 * 1024 * 1024,
+    // One chunk, so the page has a single <script> to inline.
+    codeSplitting: false,
+    chunkSizeWarningLimit: 4000,
+    reportCompressedSize: false,
   },
 });

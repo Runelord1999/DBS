@@ -212,7 +212,7 @@ data.**
 
 ### The published demo
 
-`gfm-workbench-demo/` is built from the fabricated seed and served publicly from
+`deliveryworkbench.html` is built from the fabricated seed and served publicly from
 the repository's site. It carries no authentication by design — there is nothing
 to protect, and a login screen on a dataset of invented projects would only
 imply the data mattered.

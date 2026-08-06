@@ -13,7 +13,7 @@
     "dev:api": "npm --workspace server run dev",
     "dev:web": "npm --workspace web run dev",
     "build": "npm --workspace web run build",
-    "build:demo": "node scripts/export-demo-db.mjs && npm --workspace web run build:demo",
+    "build:demo": "node scripts/export-demo-db.mjs && npm --workspace web run build:demo && node scripts/bundle-demo.mjs",
     "start": "npm --workspace server run start",
     "seed": "npm --workspace server run seed",
     "seed:reset": "npm --workspace server run seed:reset",

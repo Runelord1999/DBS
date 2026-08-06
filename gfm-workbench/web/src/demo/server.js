@@ -14,6 +14,8 @@
 
 import express from './express-shim.js';
 import { openDemoDatabase } from './sqlite.js';
+// Inlined as a data URI by the demo build, so the whole tool ships as one file.
+import databaseUrl from './demo-portfolio.db?url';
 
 import { requireAuth } from '@server/lib/auth.js';
 import { errorMiddleware } from '@server/lib/http.js';
@@ -104,8 +106,7 @@ function createDemoApp(database) {
 export async function startDemoServer() {
   if (app) return { personas, currentUserId };
 
-  const base = import.meta.env.BASE_URL || '/';
-  db = await openDemoDatabase(`${base}demo-portfolio.db`);
+  db = await openDemoDatabase(databaseUrl);
   personas = loadPersonas(db);
   currentUserId = personas[0]?.id ?? null;
   app = createDemoApp(db);
