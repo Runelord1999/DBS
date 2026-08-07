@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * Folds the demo build into a single self-contained HTML file.
+ * Places the demo build where GitHub Pages serves it.
  *
- * The other dashboards on the DBS site are standalone .html files served from
- * the repository root, and this one is published the same way. Vite has already
- * inlined the SQLite runtime and the seeded dataset as data URIs (the demo
- * config sets a very high assetsInlineLimit); this step inlines the remaining
- * stylesheet and script so the page has no external references at all.
+ *   deliveryworkbench.html   entry page at the repository root, alongside the
+ *                            other DBS dashboards
+ *   workbench-assets/        script, stylesheet, SQLite wasm runtime, dataset
+ *
+ * The assets are deliberately separate files. An earlier version inlined
+ * everything into a single ~1.8 MB page, and every Pages deployment stalled at
+ * the CDN publish step for as long as that file was present; this keeps the
+ * largest file in the same range as the dashboards the site already serves.
  */
 
 import fs from 'node:fs';
@@ -15,47 +18,34 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.resolve(here, '../web/dist-demo');
-const output = path.resolve(here, '../../deliveryworkbench.html');
+const repoRoot = path.resolve(here, '../..');
+const pageOut = path.join(repoRoot, 'deliveryworkbench.html');
+const assetsOut = path.join(repoRoot, 'workbench-assets');
 
 const indexPath = path.join(buildDir, 'index.html');
-if (!fs.existsSync(indexPath)) {
-  console.error(`No demo build at ${buildDir}. Run the Vite demo build first.`);
+const assetsIn = path.join(buildDir, 'workbench-assets');
+
+if (!fs.existsSync(indexPath) || !fs.existsSync(assetsIn)) {
+  console.error(`Incomplete demo build at ${buildDir}. Run the Vite demo build first.`);
   process.exit(1);
 }
 
-let html = fs.readFileSync(indexPath, 'utf8');
+// Replace the previous publish wholesale, so renamed hashed assets do not
+// accumulate in the repository.
+fs.rmSync(assetsOut, { recursive: true, force: true });
+fs.cpSync(assetsIn, assetsOut, { recursive: true });
+fs.copyFileSync(indexPath, pageOut);
 
-const readAsset = (src) => {
-  const relative = src.replace(/^\.?\//, '');
-  const file = path.join(buildDir, relative);
-  if (!fs.existsSync(file)) throw new Error(`Referenced asset is missing: ${src}`);
-  return fs.readFileSync(file, 'utf8');
-};
+const files = fs.readdirSync(assetsOut)
+  .map((name) => ({ name, size: fs.statSync(path.join(assetsOut, name)).size }))
+  .sort((a, b) => b.size - a.size);
 
-// <link rel="stylesheet" href="./assets/x.css"> → <style>…</style>
-html = html.replace(
-  /<link[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g,
-  (_match, href) => `<style>\n${readAsset(href)}\n</style>`
-);
+const total = files.reduce((sum, f) => sum + f.size, fs.statSync(pageOut).size);
+const mb = (bytes) => `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 
-// <script type="module" src="./assets/x.js"> → <script type="module">…</script>
-html = html.replace(
-  /<script([^>]*)\ssrc="([^"]+)"([^>]*)><\/script>/g,
-  (_match, before, src, after) => {
-    const attrs = `${before}${after}`.replace(/\scrossorigin/g, '').trim();
-    // The bundle is inlined verbatim; </script> inside a string literal would
-    // otherwise close the tag early.
-    const code = readAsset(src).replace(/<\/script>/gi, '<\\/script>');
-    return `<script ${attrs}>\n${code}\n</script>`;
-  }
-);
-
-if (/(src|href)="\.?\/?assets\//.test(html)) {
-  console.error('Refusing to write: the page still references external assets.');
-  process.exit(1);
+console.log(`Published demo → ${pageOut}`);
+console.log(`  ${'deliveryworkbench.html'.padEnd(34)} ${mb(fs.statSync(pageOut).size)}`);
+for (const f of files) {
+  console.log(`  ${path.join('workbench-assets', f.name).padEnd(34)} ${mb(f.size)}`);
 }
-
-fs.writeFileSync(output, html);
-
-const mb = (fs.statSync(output).size / (1024 * 1024)).toFixed(2);
-console.log(`Wrote self-contained demo → ${output} (${mb} MB)`);
+console.log(`  ${'total'.padEnd(34)} ${mb(total)}`);

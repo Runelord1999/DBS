@@ -17,11 +17,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  *   node:crypto  → a stub; the demo has no password flow
  *   @server      → the server source tree, imported directly
  *
- * The output is folded into a single self-contained .html file at the
- * repository root (see scripts/bundle-demo.mjs), matching how the other DBS
- * dashboards are published. `assetsInlineLimit` is set high enough to embed the
- * SQLite wasm runtime and the seeded dataset as data URIs, and routing is
- * hash-based, so the page works from any URL with no server rewrites.
+ * Output is an entry page at the repository root — deliveryworkbench.html, to
+ * match the other DBS dashboards — with its runtime beside it in
+ * workbench-assets/ (see scripts/bundle-demo.mjs).
+ *
+ * The assets are kept as separate files rather than inlined into the page. A
+ * single ~1.8 MB HTML file was the previous shape, and every GitHub Pages
+ * deployment stalled at the CDN publish step while it was present; splitting it
+ * keeps the largest file near the size of files this site already serves.
+ * Routing is hash-based, so the page still works from any URL with no server
+ * rewrites.
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -44,12 +49,15 @@ export default defineConfig({
     outDir: path.resolve(here, 'dist-demo'),
     emptyOutDir: true,
     sourcemap: false,
-    // Embed every asset, including the ~660 KB wasm runtime and the seeded
-    // database, so the bundler leaves nothing to fetch at runtime.
-    assetsInlineLimit: 8 * 1024 * 1024,
-    // One chunk, so the page has a single <script> to inline.
+    // Assets land beside the page rather than inside it.
+    assetsDir: 'workbench-assets',
+    // Default inlining: the wasm runtime and the seeded database stay as their
+    // own files instead of becoming multi-megabyte data URIs.
+    assetsInlineLimit: 4096,
+    // One JS chunk, so the entry page needs a single <script> tag and no
+    // relative-path juggling for lazy chunks.
     codeSplitting: false,
-    chunkSizeWarningLimit: 4000,
+    chunkSizeWarningLimit: 1000,
     reportCompressedSize: false,
   },
 });

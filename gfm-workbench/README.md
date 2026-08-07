@@ -87,20 +87,22 @@ The seed prints these when it finishes. Every account uses the password
 
 ## The published demo
 
-`deliveryworkbench.html` at the repository root is a static build of this app —
-one self-contained file, like the other DBS dashboards, published on the site
-and linked from the root `index.html`. It is the Section 11 pitch artifact:
-leadership opens a URL and sees the capacity ceiling being breached, with no
-infrastructure to stand up first.
+`deliveryworkbench.html` at the repository root is a static build of this app,
+published on the DBS site and linked from the root `index.html`. It is the
+Section 11 pitch artifact: leadership opens a URL and sees the capacity ceiling
+being breached, with no infrastructure to stand up first.
 
 ```bash
 npm run seed        # if you have not already
-npm run build:demo  # regenerates deliveryworkbench.html
+npm run build:demo  # regenerates the page and workbench-assets/
 ```
 
-The page has exactly one network request — itself. The SQLite wasm runtime and
-the seeded dataset are embedded as data URIs, so it works from any URL, and
-from `file://` if someone just wants to open a copy locally.
+The page loads four files from `workbench-assets/` beside it: the script, the
+stylesheet, the SQLite wasm runtime and the seeded dataset. They are kept
+separate rather than inlined — an earlier single-file version put a 1.8 MB page
+in the repository, and every GitHub Pages deployment then stalled at the CDN
+publish step until it was split up. Because the assets are fetched, the page
+needs to be served over HTTP; opening the file directly from disk will not work.
 
 **It runs the real application, not a mock.** The build aliases `express` to a
 small router shim (`web/src/demo/express-shim.js`) and runs
