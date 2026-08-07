@@ -54,6 +54,12 @@ a{color:var(--brand)}
 .shell{display:grid;grid-template-columns:262px 1fr;min-height:100vh}
 .rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
 .brand{display:flex;align-items:center;gap:10px}
+a.brand{text-decoration:none;color:inherit;border-radius:9px;padding:3px;margin:-3px;transition:background .15s ease}
+a.brand:hover{background:color-mix(in srgb,var(--brand,var(--agent)) 10%,transparent)}
+a.brand:hover .brand-mark{transform:scale(1.06)}
+a.brand .brand-mark{transition:transform .15s ease}
+a.brand h1{color:var(--ink)} a.brand p{color:var(--ink-3)}
+
 .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:0.6875rem;box-shadow:0 4px 14px color-mix(in srgb,var(--brand) 35%,transparent);flex:0 0 auto}
 .brand h1{font-size:0.8125rem;margin:0;font-weight:700;letter-spacing:-.01em}
 .brand p{margin:1px 0 0;font-size:0.65625rem;color:var(--ink-3)}
@@ -539,8 +545,8 @@ tr.clickable:hover .expandhint{opacity:1}
 <body>
 <div class="shell">
   <aside class="rail">
-    <div class="brand"><div class="brand-mark">TS</div>
-      <div><h1>Trade Surveillance</h1><p>Anomaly &amp; fraud pattern detection</p></div></div>
+    <a class="brand" href="index.html" data-tip="Back to all dashboards"><div class="brand-mark">TS</div>
+      <div><h1>Trade Surveillance</h1><p>Anomaly &amp; fraud pattern detection</p></div></a>
 
     <div class="field"><span class="eyebrow" data-eyebrow="trader">Trader</span>
       <button type="button" class="msel-btn" data-msel="trader" aria-expanded="false"><span>All traders</span></button></div>
