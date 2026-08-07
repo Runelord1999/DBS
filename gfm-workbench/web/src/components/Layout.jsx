@@ -30,12 +30,12 @@ export function Layout({ children }) {
       >
         <div className="flex items-center gap-4 px-5 py-2.5">
           {/*
-            On the published site the title doubles as the way back to the DBS
-            dashboards index, matching the brand mark on the other dashboards:
-            a relative "index.html" so it works from a copy as well as from
-            GitHub Pages, where it resolves against the /DBS base. In the full
-            application there is nothing above the workbench, so it behaves like
-            an ordinary logo and returns to the home screen.
+            On the published site the title doubles as the way back to the
+            dashboards index, matching the brand mark on the sibling
+            dashboards: a relative "index.html" so it works from a copy as well
+            as from a hosted sub-path. In the full application there is nothing
+            above the workbench, so it behaves like an ordinary logo and
+            returns to the home screen.
           */}
           {isDemo ? (
             <a
@@ -48,7 +48,7 @@ export function Layout({ children }) {
                 GFM Delivery Workbench
               </div>
               <div className="text-[0.6875rem] leading-tight" style={{ color: 'var(--series-1)' }}>
-                ← All DBS dashboards
+                ← All dashboards
               </div>
             </a>
           ) : (

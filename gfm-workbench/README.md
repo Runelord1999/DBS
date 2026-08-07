@@ -88,7 +88,7 @@ The seed prints these when it finishes. Every account uses the password
 ## The published demo
 
 `deliveryworkbench.html` at the repository root is a static build of this app,
-published on the DBS site and linked from the root `index.html`. It is the
+published on the site and linked from the root `index.html`. It is the
 Section 11 pitch artifact: leadership opens a URL and sees the capacity ceiling
 being breached, with no infrastructure to stand up first.
 

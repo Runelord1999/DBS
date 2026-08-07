@@ -3,7 +3,7 @@
  * Places the demo build where GitHub Pages serves it.
  *
  *   deliveryworkbench.html   entry page at the repository root, alongside the
- *                            other DBS dashboards
+ *                            sibling dashboards
  *   workbench-assets/        script, stylesheet, SQLite wasm runtime, dataset
  *
  * The assets are deliberately separate files. An earlier version inlined

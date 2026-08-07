@@ -24,7 +24,7 @@
   --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
   --brand:#00D6BE;
 }
-/* DBS — the logo red carries the chrome. Data-series colours stay navy/teal so
+/* Red — the logo red carries the chrome. Data-series colours stay navy/teal so
    red keeps its meaning where it matters (breaches, failures). */
 [data-theme="dbs"]{
   --dbs-red:#ED1C24; --dbs-red-dark:#B0141B; --dbs-red-tint:#FBE7E8;
@@ -225,7 +225,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
 
-/* ---- DBS skin: structural red accents, so the theme reads as DBS at a glance ---- */
+/* ---- Red skin: structural red accents, so the theme reads as red at a glance ---- */
 [data-theme="dbs"] body{background:
   linear-gradient(180deg,color-mix(in srgb,var(--dbs-red) 9%,transparent),transparent 220px),
   var(--ground)}
@@ -254,7 +254,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
       <div><h1>Agent Delivery Ops</h1><p>Release Assurance</p></div></a>
     <div>
       <label class="field"><span class="eyebrow">Theme</span>
-        <select id="theme-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">DBS</option><option value="blue">Blue</option></select></label>
+        <select id="theme-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option><option value="blue">Blue</option></select></label>
       <label class="field"><span class="eyebrow">Project</span>
         <select id="s-proj"></select></label>
       <label class="field"><span class="eyebrow">Release</span>

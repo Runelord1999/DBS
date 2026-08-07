@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Static demo build — the version published to the DBS site.
+ * Static demo build — the version published to the dashboards site.
  *
  * It bundles the real route modules and runs them in the browser against a wasm
  * SQLite copy of the seeded portfolio, so the demo cannot drift from the tool.
@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
  *   @server      → the server source tree, imported directly
  *
  * Output is an entry page at the repository root — deliveryworkbench.html, to
- * match the other DBS dashboards — with its runtime beside it in
+ * match the sibling dashboards — with its runtime beside it in
  * workbench-assets/ (see scripts/bundle-demo.mjs).
  *
  * The assets are kept as separate files rather than inlined into the page. A

@@ -69,10 +69,10 @@ The app runs as a single Node process serving both the API and the built front
 end, so it will run on any internal server that can run Node 20+.
 
 **To confirm, before real data:** where it actually runs, who administers it,
-how it is backed up, and whether any component touches anything outside DBS
-infrastructure. There is currently no external service dependency and no cloud
-SaaS backend, which is intentional — that property should be preserved
-deliberately rather than by accident.
+how it is backed up, and whether any component touches anything outside the
+organisation's own infrastructure. There is currently no external service
+dependency and no cloud SaaS backend, which is intentional — that property
+should be preserved deliberately rather than by accident.
 
 Note that publishing this repository is a **code** decision, not a hosting
 decision. GitHub Pages is static-only: it cannot run the API or persist
