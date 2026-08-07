@@ -29,12 +29,41 @@ export function Layout({ children }) {
         style={{ background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}
       >
         <div className="flex items-center gap-4 px-5 py-2.5">
-          <div className="shrink-0">
-            <div className="text-[0.9375rem] font-bold leading-tight">GFM Delivery Workbench</div>
-            <div className="text-[0.6875rem] muted leading-tight">
-              Portfolio, capacity and demand — one book of work
-            </div>
-          </div>
+          {/*
+            On the published site the title doubles as the way back to the DBS
+            dashboards index, matching the brand mark on the other dashboards:
+            a relative "index.html" so it works from a copy as well as from
+            GitHub Pages, where it resolves against the /DBS base. In the full
+            application there is nothing above the workbench, so it behaves like
+            an ordinary logo and returns to the home screen.
+          */}
+          {isDemo ? (
+            <a
+              href="index.html"
+              title="Back to all dashboards"
+              className="shrink-0 group"
+              style={{ color: 'inherit', textDecoration: 'none' }}
+            >
+              <div className="text-[0.9375rem] font-bold leading-tight group-hover:underline">
+                GFM Delivery Workbench
+              </div>
+              <div className="text-[0.6875rem] leading-tight" style={{ color: 'var(--series-1)' }}>
+                ← All DBS dashboards
+              </div>
+            </a>
+          ) : (
+            <NavLink
+              to="/"
+              end
+              className="shrink-0"
+              style={{ color: 'inherit', textDecoration: 'none' }}
+            >
+              <div className="text-[0.9375rem] font-bold leading-tight">GFM Delivery Workbench</div>
+              <div className="text-[0.6875rem] muted leading-tight">
+                Portfolio, capacity and demand — one book of work
+              </div>
+            </NavLink>
+          )}
 
           <nav className="flex flex-wrap items-center gap-0.5 ml-2">
             {items.map((item) => (
