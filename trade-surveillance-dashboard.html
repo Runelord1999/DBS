@@ -480,6 +480,20 @@ tr.clickable:hover .expandhint{opacity:1}
 .detbody .block{margin-top:12px}
 .detbody .block:first-child{margin-top:0}
 .detfoot{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--hair)}
+/* The scatter scrolls sideways under a y axis that does not move, so the scale
+   stays readable at any point in the window. */
+.tsbody{display:flex;align-items:flex-start;gap:0;padding:4px 12px 10px}
+.tsaxis{flex:0 0 auto}
+.tswrap{flex:1 1 auto;overflow-x:auto;overflow-y:hidden;min-width:0}
+.tssvg{display:block}
+.tslegs{display:flex;flex-wrap:wrap;gap:6px 22px;padding:2px 16px 12px}
+.tsleg{display:flex;flex-wrap:wrap;align-items:center;gap:4px 11px;font-size:0.625rem;color:var(--ink-2)}
+.tslegh{font-size:0.5625rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
+.tslegi{display:inline-flex;align-items:center;gap:4px;cursor:crosshair;white-space:nowrap}
+.tslegi i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.tslegmore{font-size:0.5625rem;color:var(--ink-3);font-style:italic}
+.tsnote{margin:0 16px 10px;padding:7px 10px;border-radius:6px;font-size:0.625rem;
+  background:color-mix(in srgb,var(--warn) 12%,transparent);color:var(--ink-2)}
 .acard .an{font-size:0.6875rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* The name is a control, not a label: it scopes the page to that trader. Dashed
    underline so it reads as clickable without shouting across a grid of forty. */
@@ -588,6 +602,7 @@ tr.clickable:hover .expandhint{opacity:1}
       <div class="tabs-left">
         <button class="tab" role="tab" data-tab="overview" aria-selected="true">Surveillance Overview</button>
         <button class="tab" role="tab" data-tab="activity" aria-selected="false">Trade Activity</button>
+        <button class="tab" role="tab" data-tab="timeseries" aria-selected="false">Trade Activity TimeSeries</button>
         <button class="tab" role="tab" data-tab="detections" aria-selected="false">Detections<span class="cnt" id="tabcnt">0</span></button>
         <button class="tab" role="tab" data-tab="rules" aria-selected="false">Rule Library</button>
         <button class="tab" role="tab" data-tab="blotter" aria-selected="false">Trade Blotter</button>
@@ -3551,6 +3566,8 @@ const state={
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
   act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
+  // enc holds at most one of trader/desk, enforced where it is toggled.
+  ts:{enc:["ac"],n:3,unit:"month",y:"notional",zoom:1},
   heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
@@ -5055,6 +5072,286 @@ function paneActivity(){
 }
 
 /* ============================================================
+   Pane — Trade activity time series
+   One dot per deal, plotted against the clock. Size is notional, so a block
+   stands out from flow without reading a number; colour and shape carry whichever
+   dimension the officer is interrogating. The point of the view is not any single
+   deal — it is the shape a book makes over months, and the places where that shape
+   breaks: a burst of tickets in a quiet week, a name that only trades after the
+   close, a size that appears once and never again.
+============================================================ */
+const TS_SHAPES=["circle","square","triUp","diamond","triDown","hex","plus","star","pent"];
+/* A dot's outline, centred on 0,0 at radius r. Shape has to survive at 3px, so
+   these are deliberately blunt — a nine-pointed star reads as a smudge. */
+function tsMark(shape,cx,cy,r,fill,extra){
+  const a=(n,rot)=>{let d="";for(let i=0;i<n;i++){const t=rot+i*2*Math.PI/n;
+    d+=(i?" ":"")+(cx+r*Math.cos(t)).toFixed(1)+","+(cy+r*Math.sin(t)).toFixed(1);}return d;};
+  const at='fill="'+fill+'" '+(extra||"");
+  switch(shape){
+    case "square":  return '<rect x="'+(cx-r*.86).toFixed(1)+'" y="'+(cy-r*.86).toFixed(1)+'" width="'+(r*1.72).toFixed(1)+'" height="'+(r*1.72).toFixed(1)+'" '+at+"/>";
+    case "triUp":   return '<polygon points="'+a(3,-Math.PI/2)+'" '+at+"/>";
+    case "triDown": return '<polygon points="'+a(3,Math.PI/2)+'" '+at+"/>";
+    case "diamond": return '<polygon points="'+a(4,-Math.PI/2)+'" '+at+"/>";
+    case "pent":    return '<polygon points="'+a(5,-Math.PI/2)+'" '+at+"/>";
+    case "hex":     return '<polygon points="'+a(6,0)+'" '+at+"/>";
+    case "plus":    { const t=r*.42,o=r*1.05;
+      return '<path d="M'+(cx-t)+','+(cy-o)+'h'+(2*t)+'v'+(o-t)+'h'+(o-t)+'v'+(2*t)+'h'+(-(o-t))+'v'+(o-t)+
+             'h'+(-2*t)+'v'+(-(o-t))+'h'+(-(o-t))+'v'+(-2*t)+'h'+(o-t)+'z" '+at+"/>"; }
+    case "star":    { let d="";for(let i=0;i<10;i++){const t=-Math.PI/2+i*Math.PI/5,rr=i%2?r*.46:r*1.15;
+      d+=(i?" ":"")+(cx+rr*Math.cos(t)).toFixed(1)+","+(cy+rr*Math.sin(t)).toFixed(1);}
+      return '<polygon points="'+d+'" '+at+"/>"; }
+    default:        return '<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+r.toFixed(1)+'" '+at+"/>";
+  }
+}
+/* Distinct hues by golden angle, with lightness and saturation cycling so that
+   neighbouring categories differ on more than hue alone. Sixty-eight traders will
+   never be fully separable by colour — the legend and the rail are what make a
+   crowded selection readable — but adjacent names stay apart. */
+function tsPalette(n){
+  const out=[];
+  for(let i=0;i<n;i++){
+    const h=(i*137.508)%360, s=58+(i%3)*13, l=(i%2?42:56)-(i%4===3?7:0);
+    out.push("hsl("+h.toFixed(0)+","+s+"%,"+l+"%)");
+  }
+  return out;
+}
+const TS_UNIT_DAYS={day:1,week:7,month:30};
+/* The dimensions the dots can be encoded by, and the one rule about combining
+   them: a desk is a set of traders, so colouring by both says nothing the desk
+   alone did not already say. */
+const TS_DIMS=[["ac","Asset class"],["trader","Trader"],["desk","Desk"]];
+function tsEncOf(){
+  const e=state.ts.enc.filter(d=>TS_DIMS.some(x=>x[0]===d));
+  return e.length?e:["ac"];
+}
+function tsKeyer(dim){
+  return dim==="ac"?(t=>t.ac):dim==="trader"?(t=>t.traderId):(t=>t.deskId);
+}
+function tsLabel(dim,k){
+  return dim==="ac"?k
+    :dim==="trader"?((TRADER_BY_ID[k]||{}).name||k)
+    :((DESK_BY_ID[k]||{}).short||k);
+}
+function paneTimeseries(){
+  const S=state.ts;
+  const enc=tsEncOf();
+  /* One dimension carries both channels; two split them. Asset class always takes
+     shape because nine shapes is the most a reader can hold, and there are exactly
+     nine asset classes — the trader or desk then has the whole colour wheel. */
+  const shapeDim=enc.length===1?enc[0]:"ac";
+  const colorDim=enc.length===1?enc[0]:enc.find(d=>d!=="ac")||"ac";
+
+  const spanDays=Math.max(1,Math.min(DAYS,Math.round(S.n*TS_UNIT_DAYS[S.unit])));
+  const d0=Math.max(0,DAYS-spanDays), d1=DAYS-1;
+  const rows=TRADES.filter(t=>tradeMatchesRail(t)&&t.dayIdx>=d0);
+
+  // Category registries, built only from what is actually in view.
+  const shapeKeys=uniq(rows.map(tsKeyer(shapeDim))).sort();
+  const colorKeys=uniq(rows.map(tsKeyer(colorDim))).sort();
+  const shapeOf={}; shapeKeys.forEach((k,i)=>shapeOf[k]=TS_SHAPES[i%TS_SHAPES.length]);
+  const colorOf={};
+  if(colorDim==="ac") colorKeys.forEach(k=>colorOf[k]=AC_COLOR[k]||"var(--run)");
+  else { const pal=tsPalette(colorKeys.length); colorKeys.forEach((k,i)=>colorOf[k]=pal[i]); }
+
+  /* Too many dots is not a rendering problem, it is a reading problem: past a few
+     thousand the chart is a smear and the officer learns nothing. Thin evenly and
+     say so, rather than quietly drawing a fraction of the book. */
+  const CAP=7000;
+  const shown=rows.length>CAP
+    ? rows.filter((_,i)=>i%Math.ceil(rows.length/CAP)===0)
+    : rows;
+  const thinned=shown.length<rows.length;
+
+  const dayW=[9,16,30,58][S.zoom]||16;
+  const padL=58, padR=22, padT=16, padB=30;
+  const plotW=Math.max(400,spanDays*dayW);
+  const W=padL+plotW+padR, H=470, plotH=H-padT-padB;
+
+  // Y scales. Notional is read on a log axis because a book spans four orders of
+  // magnitude and a linear axis puts every flow ticket on the floor.
+  const yDefs={
+    notional:{lab:"Notional",fmt:v=>fmtM(Math.pow(10,v)),
+      val:t=>Math.log10(Math.max(0.1,t.notional))},
+    /* Unclamped on purpose. Capping the scale railed a tenth of the book onto the
+       axis edge, where a hundred unrelated prints read as one dense cluster — and
+       the far-from-mid print is the entire reason to look at this axis. */
+    dev:{lab:"Deviation from mid (bps)",fmt:v=>(v>0?"+":"")+v.toFixed(0),
+      val:t=>t.devBps||0},
+    tenor:{lab:"Tenor (years)",fmt:v=>v<1?Math.round(v*12)+"m":v.toFixed(1)+"y",
+      // t.tenor is the quoted label — "3M", "1Y" — so it has to be resolved to years.
+      val:t=>{const y=tenorYears(t.tenor); return isFinite(y)?y:0;}},
+    hour:{lab:"Execution time",fmt:v=>pad2(Math.round(v))+":00",
+      val:t=>t.execMin/60},
+  };
+  const Y=yDefs[S.y]||yDefs.notional;
+  let lo=Infinity,hi=-Infinity;
+  shown.forEach(t=>{const v=Y.val(t); if(v<lo)lo=v; if(v>hi)hi=v;});
+  if(!isFinite(lo)){lo=0;hi=1;}
+  if(hi-lo<1e-6){hi=lo+1;}
+  if(S.y==="hour"){ lo=0; hi=24; }          // a day is 24 hours; do not pad it into 26
+  else { const padv=(hi-lo)*0.08; lo-=padv; hi+=padv; }
+  const yPx=v=>padT+plotH-((v-lo)/(hi-lo))*plotH;
+
+  // Notional drives radius on a square-root scale, so area — not width — reads as size.
+  const nMax=Math.max(1,...shown.map(t=>t.notional));
+  const rOf=n=>1.7+Math.sqrt(Math.max(0,n)/nMax)*(S.zoom>=2?7.4:5.2);
+  const xOf=t=>padL+(t.dayIdx-d0+t.execMin/1440)*dayW;
+
+  let g="";
+  // Weekend and out-of-hours shading: a dot standing in a shaded band is a dot
+  // booked when nobody was watching, and that should be visible before it is read.
+  for(let d=d0;d<=d1;d++){
+    const dt=dateForIdx(d), x=padL+(d-d0)*dayW;
+    if(!isBiz(dt)){
+      g+='<rect x="'+x.toFixed(1)+'" y="'+padT+'" width="'+dayW.toFixed(1)+'" height="'+plotH+
+        '" fill="var(--fail)" opacity=".05"/>';
+    }else if(S.y==="hour"){
+      g+='<rect x="'+x.toFixed(1)+'" y="'+yPx(24).toFixed(1)+'" width="'+dayW.toFixed(1)+'" height="'+(yPx(19.5)-yPx(24)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>'+
+         '<rect x="'+x.toFixed(1)+'" y="'+yPx(7).toFixed(1)+'" width="'+dayW.toFixed(1)+'" height="'+(yPx(0)-yPx(7)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>';
+    }
+    if(dayW>=26||dt.getDate()===1||(dayW>=14&&dt.getDay()===1)){
+      g+='<line x1="'+x.toFixed(1)+'" y1="'+padT+'" x2="'+x.toFixed(1)+'" y2="'+(padT+plotH)+
+        '" stroke="var(--hair)" opacity=".7"/>';
+    }
+  }
+  // Gridlines and the y axis, drawn before the dots so nothing sits on top of data.
+  const TICKS=6;
+  for(let i=0;i<=TICKS;i++){
+    const v=lo+(hi-lo)*i/TICKS, y=yPx(v);
+    g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(padL+plotW)+'" y2="'+y.toFixed(1)+
+      '" stroke="var(--hair)" stroke-dasharray="'+(S.y==="dev"&&Math.abs(v)<(hi-lo)/TICKS/2?"0":"2 3")+'"/>';
+  }
+  if(S.y==="dev"&&lo<0&&hi>0)
+    g+='<line x1="'+padL+'" y1="'+yPx(0).toFixed(1)+'" x2="'+(padL+plotW)+'" y2="'+yPx(0).toFixed(1)+
+      '" stroke="var(--ink-3)" opacity=".55"/>';
+
+  // Date labels, thinned to whatever the current day width can carry.
+  const every=dayW>=58?1:dayW>=30?3:dayW>=16?7:21;
+  for(let d=d0;d<=d1;d++){
+    if((d-d0)%every) continue;
+    const dt=dateForIdx(d), x=padL+(d-d0+0.5)*dayW;
+    g+='<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+14)+'" text-anchor="middle" font-size="'+cf(8.5)+
+      '" fill="var(--ink-3)" font-family="var(--mono)">'+fmtDateShort(dt)+"</text>";
+    if(dt.getDate()<=7&&every<=7)
+      g+='<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+24)+'" text-anchor="middle" font-size="'+cf(7.5)+
+        '" fill="var(--ink-3)" opacity=".8">'+MONTHS[dt.getMonth()]+"</text>";
+  }
+
+  /* The dots. Sorted large-first so a block never hides behind the flow it dwarfs,
+     and painted at partial opacity so density itself carries information: a solid
+     patch is a cluster, not a single deal. */
+  const wire=shown.length<=5000;
+  const pts=shown.slice().sort((a,b)=>b.notional-a.notional);
+  pts.forEach(t=>{
+    const r=rOf(t.notional), x=xOf(t), y=yPx(Y.val(t));
+    const extra=wire
+      ? 'data-trade="'+t.id+'" data-hlsrc="trader|'+t.traderId+'" data-hl-trader="'+t.traderId+
+        '" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+' '+hlDim("product",t.product)+
+        ' style="cursor:pointer" data-tip="'+esc(t.trader+" · "+t.product)+
+        '" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" · "+t.deskShort)+
+        '" data-tiptable="'+esc(["Notional|"+fmtM(t.notional),"Instrument|"+t.instrument,
+          "Direction|"+t.dir,"Counterparty|"+t.ctpy,
+          "Deviation|"+(t.devBps>0?"+":"")+(t.devBps||0).toFixed(1)+" bps",
+          "Tenor|"+(t.tenor||"—")].join("§"))+'"'
+      : 'pointer-events="none"';
+    g+=tsMark(shapeOf[tsKeyer(shapeDim)(t)]||"circle",x,y,r,
+      colorOf[tsKeyer(colorDim)(t)]||"var(--run)",
+      'fill-opacity="'+(r>7?".62":".78")+'" stroke="var(--panel)" stroke-width=".6" '+extra);
+  });
+
+  const chart='<div class="tswrap"><svg class="tssvg" width="'+W+'" height="'+H+
+    '" viewBox="0 0 '+W+" "+H+'" role="img">'+g+"</svg></div>";
+  // The y axis rides outside the scroller, so it stays put while the years move.
+  let ax="";
+  for(let i=0;i<=TICKS;i++){
+    const v=lo+(hi-lo)*i/TICKS;
+    ax+='<text x="'+(padL-8)+'" y="'+(yPx(v)+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+
+      '" fill="var(--ink-3)" font-family="var(--mono)">'+esc(Y.fmt(v))+"</text>";
+  }
+  ax+='<text x="13" y="'+(padT+plotH/2).toFixed(1)+'" transform="rotate(-90 13 '+(padT+plotH/2).toFixed(1)+
+    ')" text-anchor="middle" font-size="'+cf(9)+'" fill="var(--ink-2)" font-weight="700">'+esc(Y.lab)+"</text>";
+  const axis='<svg class="tsaxis" width="'+padL+'" height="'+H+'" viewBox="0 0 '+padL+" "+H+'" aria-hidden="true">'+ax+"</svg>";
+
+  /* Controls. Trader and desk are offered as one exclusive pair rather than
+     silently dropping whichever was picked second. */
+  const strip='<div class="fstrip actstrip">'+
+    '<label><span>Colour &amp; shape by</span><div class="segbtns">'+
+      TS_DIMS.map(d=>'<button data-tsenc="'+d[0]+'" aria-pressed="'+(enc.indexOf(d[0])>=0)+
+        '" data-tip="'+esc(d[1])+'" data-tipsub="'+
+        esc(d[0]==="ac"?"Combines with either trader or desk."
+           :"Trader and desk are alternatives — picking one clears the other, because a desk is a set of traders.")+
+        '">'+d[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
+    '<label><span>&nbsp;</span><div class="segbtns">'+
+      [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
+        '<button data-tsunit="'+u[0]+'" aria-pressed="'+(S.unit===u[0])+'">'+u[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Vertical axis</span><div class="segbtns">'+
+      [["notional","Notional"],["dev","Off mid"],["tenor","Tenor"],["hour","Time of day"]].map(y=>
+        '<button data-tsy="'+y[0]+'" aria-pressed="'+(S.y===y[0])+'">'+y[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Day width</span><div class="segbtns">'+
+      ["XS","S","M","L"].map((z,i)=>'<button data-tszoom="'+i+'" aria-pressed="'+(S.zoom===i)+'">'+z+"</button>").join("")+
+    "</div></label>"+
+    '<div class="fspacer"></div>'+
+    '<span class="tiny">'+fmtNum(shown.length)+(thinned?" of "+fmtNum(rows.length):"")+
+      " deals · "+spanDays+" days</span></div>";
+
+  // Legends: shape and colour separately when two dimensions are in play, because
+  // one combined key would imply pairings that do not exist.
+  const legRow=(dim,keys,render)=>{
+    const cap=22, list=keys.slice(0,cap);
+    return '<div class="tsleg"><span class="tslegh">'+
+      esc((TS_DIMS.find(x=>x[0]===dim)||[])[1]||dim)+"</span>"+
+      list.map(render).join("")+
+      (keys.length>cap?'<span class="tslegmore">+'+(keys.length-cap)+" more — narrow the rail to name them</span>":"")+
+      "</div>";
+  };
+  const swatch=k=>shapeDim===colorDim
+    ? '<svg width="13" height="13" viewBox="0 0 13 13">'+
+        tsMark(shapeOf[k]||"circle",6.5,6.5,5,colorOf[k],'fill-opacity=".85"')+"</svg>"
+    : '<i style="background:'+colorOf[k]+'"></i>';
+  let legend=legRow(colorDim,colorKeys,k=>
+    '<span class="tslegi" '+hlDim(colorDim==="ac"?"ac":colorDim,k)+' data-hlsrc="'+
+      esc(colorDim+"|"+k)+'">'+swatch(k)+esc(tsLabel(colorDim,k))+"</span>");
+  if(shapeDim!==colorDim)
+    legend+=legRow(shapeDim,shapeKeys,k=>
+      '<span class="tslegi" '+hlDim("ac",k)+' data-hlsrc="ac|'+esc(k)+'">'+
+      '<svg width="13" height="13" viewBox="0 0 13 13">'+
+        tsMark(shapeOf[k],6.5,6.5,5,"var(--ink-2)","")+"</svg>"+esc(k)+"</span>");
+  // Size is a legend of its own — without it the radii are decorative.
+  const sizeTicks=[nMax*0.05,nMax*0.3,nMax].map(v=>
+    '<span class="tslegi"><svg width="'+(rOf(v)*2+4).toFixed(0)+'" height="20" viewBox="0 0 '+
+      (rOf(v)*2+4).toFixed(0)+' 20">'+tsMark("circle",rOf(v)+2,10,rOf(v),"var(--ink-3)",'fill-opacity=".55"')+
+      "</svg>"+fmtM(v)+"</span>").join("");
+  legend+='<div class="tsleg"><span class="tslegh">Notional</span>'+sizeTicks+"</div>";
+
+  const kpis='<div class="kpis">'+
+    kpi("Deals in view",fmtNum(rows.length),spanDays+" days, rail-scoped","var(--agent)")+
+    kpi("Notional",fmtM(rows.reduce((a,t)=>a+t.notional,0)),"across the window","var(--run)")+
+    kpi("Traders",fmtNum(uniq(rows.map(t=>t.traderId)).length),"active in the window","var(--violet)")+
+    kpi("Largest ticket",fmtM(Math.max(0,...rows.map(t=>t.notional))),"single deal","var(--warn)")+
+    kpi("Outside desk hours",fmtNum(rows.filter(t=>t.execMin<420||t.execMin>=1170).length),
+      "deals booked early or late","var(--fail)")+
+    kpi("Weekend or holiday",fmtNum(rows.filter(t=>!isBiz(t.date)).length),"deals on a non-business day","var(--gold)")+
+    "</div>";
+
+  return kpis+panel("Trade activity time series",
+    "one dot per deal · size = notional · "+
+      (enc.length===1
+        ? "colour and shape by "+((TS_DIMS.find(x=>x[0]===enc[0])||[])[1]||"").toLowerCase()
+        : "shape by asset class, colour by "+((TS_DIMS.find(x=>x[0]===colorDim)||[])[1]||"").toLowerCase()),
+    strip+'<div class="panel-body tsbody">'+axis+chart+"</div>"+
+    '<div class="tslegs">'+legend+"</div>"+
+    (thinned?'<div class="tsnote">Showing '+fmtNum(shown.length)+" of "+fmtNum(rows.length)+
+      " deals — evenly thinned so the chart stays readable. Shorten the horizon or narrow the rail to plot every deal.</div>":""),
+    "Scroll the chart sideways to travel the window. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. "+
+    "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal. "+
+    "A book has a shape — a cadence, a size range, a time of day. What is worth opening is the deal that does not share it.");
+}
+
+/* ============================================================
    Pane — Detections queue
 ============================================================ */
 function detFiltered(){
@@ -5810,7 +6107,7 @@ function closeMsel(){
 /* ============================================================
    Render
 ============================================================ */
-const PANES={overview:paneOverview,activity:paneActivity,detections:paneDetections,rules:paneRules,blotter:paneBlotter,traders:paneTraders,log:paneLog};
+const PANES={overview:paneOverview,activity:paneActivity,timeseries:paneTimeseries,detections:paneDetections,rules:paneRules,blotter:paneBlotter,traders:paneTraders,log:paneLog};
 function render(){
   renderRail(); renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
@@ -5894,6 +6191,21 @@ function handleChrome(t,e){
   if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return true; }
   if(t.closest("#b-clear")){ Object.assign(state.blot,{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",
     from:isoDate(dateAt(29)),to:isoDate(TODAY),page:0}); render(); return true; }
+  /* Trader and desk are alternatives, so selecting one clears the other rather
+     than producing a pairing that says nothing the desk did not already say.
+     Asset class combines with either, and the last dimension cannot be cleared —
+     an unencoded scatter is a grey cloud. */
+  const te=t.closest("[data-tsenc]");
+  if(te){
+    const d=te.dataset.tsenc, cur=state.ts.enc.slice(), i=cur.indexOf(d);
+    if(i>=0){ if(cur.length>1) cur.splice(i,1); }
+    else { if(d==="trader"||d==="desk"){ const j=cur.indexOf(d==="trader"?"desk":"trader"); if(j>=0) cur.splice(j,1); }
+           cur.push(d); }
+    state.ts.enc=cur; render(); return true;
+  }
+  const tu=t.closest("[data-tsunit]"); if(tu){ state.ts.unit=tu.dataset.tsunit; render(); return true; }
+  const ty=t.closest("[data-tsy]");    if(ty){ state.ts.y=ty.dataset.tsy; render(); return true; }
+  const tz=t.closest("[data-tszoom]"); if(tz){ state.ts.zoom=+tz.dataset.tszoom; render(); return true; }
   const am=t.closest("[data-actmetric]"); if(am){ state.act.metric=am.dataset.actmetric; render(); return true; }
   const asc=t.closest("[data-actscale]"); if(asc){ state.act.scale=asc.dataset.actscale; render(); return true; }
   const aun=t.closest("[data-actunit]"); if(aun){ state.act.unit=aun.dataset.actunit; state.act.range=""; render(); return true; }
@@ -5992,6 +6304,7 @@ document.addEventListener("change",e=>{
     "b-dir":["blot","dir"],"b-from":["blot","from"],"b-to":["blot","to"],"l-status":["log","status"]};
   if(map[t.id]){ const m=map[t.id]; state[m[0]][m[1]]=t.value; if(m[1]==="ac") state.blot.product=""; state[m[0]].page=0; render(); return; }
   if(t.id==="a-range"){ state.act.range=t.value; render(); return; }
+  if(t.id==="ts-n"){ state.ts.n=Math.max(1,Math.min(400,parseInt(t.value,10)||1)); render(); return; }
   if(t.id==="a-year"){ state.act.year=+t.value; render(); return; }
   if(t.id==="d-open"){ state.det.openOnly=t.checked; state.det.page=0; render(); return; }
   if(t.id==="b-flagged"){ state.blot.flagged=t.checked; state.blot.page=0; render(); return; }
