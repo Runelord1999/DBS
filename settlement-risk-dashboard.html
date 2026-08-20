@@ -28,7 +28,7 @@
   --brand:#00D6BE;
   --heat-1:#2FD39A; --heat-2:#F2D64B; --heat-3:#FF9A3C; --heat-4:#FF5470;
 }
-/* DBS — the logo red carries the chrome. Data-series colours stay navy/teal so
+/* Red — the logo red carries the chrome. Data-series colours stay navy/teal so
    red keeps its meaning where it matters (breaches, failures). */
 [data-theme="dbs"]{
   --dbs-red:#ED1C24; --dbs-red-dark:#B0141B; --dbs-red-tint:#FBE7E8;
@@ -56,6 +56,13 @@ a{color:var(--brand)}
 .shell{display:grid;grid-template-columns:262px 1fr;min-height:100vh}
 .rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
 .brand{display:flex;align-items:center;gap:10px}
+a.brand{text-decoration:none;color:inherit;border-radius:9px;padding:3px;margin:-3px;transition:background .15s ease}
+a.brand:hover{background:color-mix(in srgb,var(--brand) 10%,transparent)}
+a.brand:hover .brand-mark{transform:scale(1.06)}
+a.brand .brand-mark{transition:transform .15s ease}
+a.brand h1,a.brand p{color:inherit}
+a.brand h1{color:var(--ink)} a.brand p{color:var(--ink-3)}
+
 .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:0.6875rem;box-shadow:0 4px 14px color-mix(in srgb,var(--brand) 35%,transparent);flex:0 0 auto}
 .brand h1{font-size:0.8125rem;margin:0;font-weight:700;letter-spacing:-.01em}
 .brand p{margin:1px 0 0;font-size:0.65625rem;color:var(--ink-3)}
@@ -421,7 +428,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .tt .tt-k{font-size:0.8125rem;color:var(--ink-2);white-space:nowrap}
 .tt .tt-v{font-size:0.8125rem;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right;white-space:nowrap}
 
-/* ---- DBS skin: structural red accents, so the theme reads as DBS at a glance ---- */
+/* ---- Red skin: structural red accents, so the theme reads as red at a glance ---- */
 [data-theme="dbs"] body{background:
   linear-gradient(180deg,color-mix(in srgb,var(--dbs-red) 9%,transparent),transparent 220px),
   var(--ground)}
@@ -446,8 +453,8 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 <body>
 <div class="shell">
   <aside class="rail">
-    <div class="brand"><div class="brand-mark">GFM</div>
-      <div><h1>Settlement Risk</h1><p>Limits · Utilization · Alerts</p></div></div>
+    <a class="brand" href="index.html" data-tip="Back to all dashboards"><div class="brand-mark">GFM</div>
+      <div><h1>Settlement Risk</h1><p>Limits · Utilization · Alerts</p></div></a>
 
     <div class="field"><span class="eyebrow">Country</span>
       <button type="button" class="msel-btn" id="msel-btn-country" data-msel="country" aria-expanded="false"><span>All countries</span></button></div>
@@ -495,7 +502,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
         <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
       </div>
       <div class="tabs-right">
-        <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">DBS</option></select>
+        <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option></select>
         <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="4" step="1" value="2"><span class="fA big">A</span></div>
       </div>
     </div>

@@ -1,0 +1,25 @@
+{
+  "name": "gfm-workbench-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GFM Delivery Workbench — React front end",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:demo": "vite build --config vite.demo.config.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.13.1",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0"
+  }
+}

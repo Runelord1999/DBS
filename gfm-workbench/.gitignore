@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# Data governance (Build Brief Section 10) — NON-NEGOTIABLE.
+# Real project names, budget figures and headcount data must never be
+# committed. The live database lives here and stays out of git, permanently.
+# ---------------------------------------------------------------------------
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Exports may contain real portfolio data once the tool is in live use.
+exports/
+*.csv
+!seed/**/*.csv
+
+node_modules/
+dist/
+dist-demo/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

@@ -24,7 +24,7 @@
   --agent:#00D6BE; --gold:#F1C14B; --violet:#9B87D8; --pink:#FF7EB6; --cyan:#38D6F0;
   --brand:#00D6BE;
 }
-/* DBS — the logo red carries the chrome. Data-series colours stay navy/teal so
+/* Red — the logo red carries the chrome. Data-series colours stay navy/teal so
    red keeps its meaning where it matters (breaches, failures). */
 [data-theme="dbs"]{
   --dbs-red:#ED1C24; --dbs-red-dark:#B0141B; --dbs-red-tint:#FBE7E8;
@@ -56,6 +56,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .shell{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
 .rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:18px}
 .brand{display:flex;align-items:center;gap:10px}
+a.brand{text-decoration:none;color:inherit;border-radius:9px;padding:3px;margin:-3px;transition:background .15s ease}
+a.brand:hover{background:color-mix(in srgb,var(--brand) 10%,transparent)}
+a.brand:hover .brand-mark{transform:scale(1.06)}
+a.brand .brand-mark{transition:transform .15s ease}
+a.brand h1,a.brand p{color:inherit}
+a.brand h1{color:var(--ink)} a.brand p{color:var(--ink-3)}
+
 .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--run));display:grid;place-items:center;color:var(--brand-ink);font-weight:800;font-size:11px;box-shadow:0 4px 14px color-mix(in srgb,var(--brand) 35%,transparent)}
 .brand h1{font-size:13px;margin:0;font-weight:700;letter-spacing:-.01em}
 .brand p{margin:1px 0 0;font-size:10.5px;color:var(--ink-3)}
@@ -208,7 +215,7 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 .tt{position:fixed;z-index:900;max-width:270px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
 
-/* ---- DBS skin: structural red accents, so the theme reads as DBS at a glance ---- */
+/* ---- Red skin: structural red accents, so the theme reads as red at a glance ---- */
 [data-theme="dbs"] body{background:
   linear-gradient(180deg,color-mix(in srgb,var(--dbs-red) 9%,transparent),transparent 220px),
   var(--ground)}
@@ -233,11 +240,11 @@ tbody tr.clickable:hover{background:var(--panel-2)}
 <body>
 <div class="shell">
   <aside class="rail">
-    <div class="brand"><div class="brand-mark">GFM</div>
-      <div><h1>Agent Delivery Ops</h1><p>Portfolio · Savings · Tokens</p></div></div>
+    <a class="brand" href="index.html" data-tip="Back to all dashboards"><div class="brand-mark">GFM</div>
+      <div><h1>Agent Delivery Ops</h1><p>Portfolio · Savings · Tokens</p></div></a>
     <div>
       <label class="field"><span class="eyebrow">Theme</span>
-        <select id="theme-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">DBS</option><option value="blue">Blue</option></select></label>
+        <select id="theme-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option><option value="blue">Blue</option></select></label>
       <label class="field"><span class="eyebrow">Portfolio</span>
         <select id="s1"><option>GFM — all projects</option><option>FX &amp; Rates</option><option>Credit &amp; Derivs</option></select></label>
       <div class="field" data-tip="The traditional-delivery cost estimate is deliberately cut by this percentage before it's compared to agent spend, so the saving figure stays conservative rather than best-case."><span class="eyebrow">Baseline (conservative)</span>
