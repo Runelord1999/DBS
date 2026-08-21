@@ -517,6 +517,7 @@ tr.clickable:hover .expandhint{opacity:1}
 .tsgrip:hover::after{background:var(--brand);opacity:1}
 .tspick-panel{position:fixed;width:min(320px,calc(100vw - 20px));max-height:320px;z-index:130}
 .tspick{min-width:150px}
+.tshl{min-width:190px}
 .tslegs{display:flex;flex-wrap:wrap;gap:6px 22px;padding:2px 16px 12px}
 .tsleg{display:flex;flex-wrap:wrap;align-items:center;gap:4px 11px;font-size:0.625rem;color:var(--ink-2)}
 .tslegh{font-size:0.5625rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
@@ -3865,6 +3866,10 @@ function hlPaintAggregates(aggs,sel){
 let hlStyleEl=null, hlPinned=null;
 function hlStyle(){ if(!hlStyleEl){ hlStyleEl=document.createElement("style"); document.head.appendChild(hlStyleEl); } return hlStyleEl; }
 function hlApply(spec){
+  // Esc, a second click on the dot, or a pin from anywhere else all land here, so
+  // the menu is synced from the one place every path passes through.
+  const hlSel=$("#ts-hltrader");
+  if(hlSel){ const v=spec&&spec.slice(0,7)==="trader|"?spec.slice(7):""; if(hlSel.value!==v) hlSel.value=v; }
   const st=hlStyle();
   const [key,val]=spec?spec.split("|"):[];
   const attr=spec?HL_KEYS[key]:null;
@@ -3916,6 +3921,9 @@ function hlLabel(spec,aggs){
 function hlSet(spec){ if(!hlPinned) hlApply(spec); }
 function hlClear(){ if(!hlPinned) hlApply(null); }
 function hlPin(spec){ hlPinned=hlPinned===spec?null:spec; hlApply(hlPinned); }
+/* Set rather than toggle: a menu says what it wants, so re-choosing the name
+   already showing must leave it locked, not clear it. */
+function hlLock(spec){ hlPinned=spec||null; hlApply(hlPinned); }
 /* The selection survives a re-render: panes are rebuilt from scratch on every
    filter change, so the pinned rule has to be re-attached to the new nodes. */
 function hlRefresh(){ HL_AGG=new Map(); HL_TAGG=new Map(); hlApply(hlPinned); }
@@ -4658,7 +4666,7 @@ const PANEL_INFO={
 "Trade activity time series":{
  what:"One dot per deal across the window. Size is notional; colour and shape carry whichever dimension you select.",
  read:"Scroll sideways to travel the window, and scroll on the plot to zoom from months down to seconds. Weekends and holidays are compressed to a fifth of a weekday's width, so the axis is continuous in time but not linear in it. On the time-of-day axis the shaded bands are the hours outside every desk's window.",
- flag:"Three shapes repay the most attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
+ flag:"Lock a name into the outline with Highlight trader\u2019s trades and read where their deals sit among everyone else\u2019s. Beyond that, three shapes repay the most attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
 
 "Detection queue":{
  what:"Every alert matching the current filters, newest first, with the pattern stated in plain words on each row.",
@@ -5513,6 +5521,11 @@ function openTsPick(btn){
   tsPickOpen=dim;
 }
 
+/* Whatever pinned the highlight — a dot, a legend swatch, this menu — the menu
+   shows it, so the control and the chart never disagree about what is locked. */
+function tsPinnedTrader(){
+  return hlPinned&&hlPinned.slice(0,7)==="trader|"?hlPinned.slice(7):"";
+}
 function paneTimeseries(){
   const S=state.ts;
   const enc=tsEncOf();
@@ -5541,6 +5554,15 @@ function paneTimeseries(){
     "</div></label>"+
     // One picker per active dimension: choose the dimension, then choose its members.
     enc.filter(tsHasPick).map(tsPickBtn).join("")+
+    /* Highlighting is not filtering. This locks one name's deals into the outline
+       and leaves every other deal on the chart, because the question it answers is
+       "where does this person sit in the floor's activity" — which a filtered chart
+       cannot answer at all. */
+    '<label><span>Highlight trader\u2019s trades</span><select id="ts-hltrader" class="tshl">'+
+      opt("","\u2014 none \u2014",tsPinnedTrader())+
+      TRADERS.slice().sort((a,b)=>a.name.localeCompare(b.name))
+        .map(t=>opt(t.id,t.name+" · "+DESK_BY_ID[t.deskId].short,tsPinnedTrader())).join("")+
+    "</select></label>"+
     '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
     '<label><span>&nbsp;</span><div class="segbtns">'+
       [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
@@ -5577,7 +5599,8 @@ function paneTimeseries(){
     "<b>Drag the grip</b> under the chart to give it more of the screen. "+
     "Weekends and holidays are the narrow shaded columns, drawn at a fifth of a weekday's width so the days that carry the trading get the room — the axis is continuous in time but not linear in it. "+
     "On the time-of-day axis the shaded bands are the hours outside every desk's window. "+
-    "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal.");
+    "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal. "+
+    "<b>Highlight trader\u2019s trades</b> locks one name\u2019s deals into the outline and leaves everyone else on the chart \u2014 it is the one control here that does not take anything away, because seeing where a person sits inside the floor\u2019s activity needs the floor still visible.");
 }
 
 /* The draw. Only the visible slice is built, with a screen of overscan either
@@ -6832,6 +6855,12 @@ document.addEventListener("change",e=>{
     "b-ac":["blot","ac"],"b-product":["blot","product"],"b-desk":["blot","desk"],"b-trader":["blot","trader"],
     "b-dir":["blot","dir"],"b-from":["blot","from"],"b-to":["blot","to"],"l-status":["log","status"]};
   if(map[t.id]){ const m=map[t.id]; state[m[0]][m[1]]=t.value; if(m[1]==="ac") state.blot.product=""; state[m[0]].page=0; render(); return; }
+  if(t.id==="ts-hltrader"){
+    // A highlight control with the master switch off would simply look broken.
+    if(!state.highlight){ state.highlight=true; const c=$("#hl-toggle"); if(c) c.checked=true; }
+    hlLock(t.value?"trader|"+t.value:null);
+    return;
+  }
   if(t.id==="a-range"){ state.act.range=t.value; render(); return; }
   if(t.id==="ts-n"){ state.ts.n=Math.max(1,Math.min(400,parseInt(t.value,10)||1)); render(); return; }
   if(t.id==="a-year"){ state.act.year=+t.value; render(); return; }
