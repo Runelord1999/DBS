@@ -486,6 +486,21 @@ tr.clickable:hover .expandhint{opacity:1}
 .detbody .block{margin-top:12px}
 .detbody .block:first-child{margin-top:0}
 .detfoot{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--hair)}
+.pinfo{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+  margin-left:7px;border-radius:50%;border:1px solid var(--ink-3);background:none;color:var(--ink-3);
+  font-size:0.5625rem;font-weight:800;font-family:var(--mono);line-height:1;cursor:help;
+  vertical-align:middle;padding:0;transition:background .12s ease,color .12s ease,border-color .12s ease}
+.pinfo:hover,.pinfo[aria-expanded="true"]{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.infopop{position:fixed;z-index:120;display:none;width:min(384px,calc(100vw - 20px));
+  background:var(--panel-3);border:1px solid var(--hair);border-radius:10px;padding:13px 15px 14px;
+  box-shadow:0 18px 44px rgba(0,0,0,.30)}
+.infopop.on{display:block}
+.ip-t{font-size:0.75rem;font-weight:800;color:var(--ink);margin-bottom:9px}
+.ip-k{font-size:0.5625rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-3);margin-top:10px}
+.ip-k.flag{color:var(--warn)}
+.ip-k:first-of-type{margin-top:0}
+.ip-v{font-size:0.6875rem;line-height:1.5;color:var(--ink-2);margin-top:3px}
 /* The scatter scrolls sideways under a y axis that does not move, so the scale
    stays readable at any point in the window. */
 .tsbody{display:flex;align-items:flex-start;gap:0;padding:4px 12px 10px}
@@ -4502,8 +4517,216 @@ function kpi(eyebrow,value,sub,accent){
   return '<div class="kpi" style="--accent:'+(accent||"var(--agent)")+'"><div class="eyebrow">'+esc(eyebrow)+
     '</div><b class="num">'+esc(value)+"</b><small>"+esc(sub)+"</small></div>";
 }
+/* ============================================================
+   Panel guidance
+   Every chart on this page was built to answer a question, and a chart whose
+   question is not obvious is decoration. Each panel therefore carries three
+   sentences: what it shows, how to read it, and — the one that matters — what a
+   problem actually looks like on this particular chart. The third is written as a
+   shape, not a threshold: "a column that doubles and stays doubled", "a dot alone
+   in the shaded band". A reader who knows the shape can spot it before any rule
+   fires, which is the whole point of putting a human in front of a screen.
+============================================================ */
+const PANEL_INFO={
+"Alert volume by month":{
+ what:"Every alert raised in the last twelve months, stacked by severity, one column per calendar month.",
+ read:"Read the total height for load and the red band for how much of that load is Critical. Quarter ends and roll dates are genuinely busier, so a seasonal bulge is not by itself a finding.",
+ flag:"A step change that does not come back down — a book whose alert count doubles in one month and stays there has changed how it trades. A Critical band that grows while the total stays flat matters more than a taller column: the same volume of work turned more serious."},
+
+"Severity mix":{
+ what:"The severity split of every alert inside the review period.",
+ read:"Severity states the consequence if the pattern is real, not the engine's confidence. Critical and High carry a three-day disposition target, so this donut is also a workload forecast.",
+ flag:"A Critical share drifting up over successive periods, or a mix that suddenly inverts. Both usually mean one trader or one rule has started firing repeatedly rather than the floor as a whole moving."},
+
+"Disposition":{
+ what:"What reviewers concluded about the alerts in this period — open, in review, explained, suspicious, or escalated.",
+ read:"Around half explained is healthy. That is the design working: a rule set that never fires on a legitimate book has its thresholds set too high to catch anything.",
+ flag:"A pass rate near ninety per cent means the tests are tuned to be comfortable. A pass rate near twenty per cent means the floor has a real problem or a rule is mis-specified — either way it is the same investigation. A growing Open slice is an SLA problem, not a detection one."},
+
+"Detection volume — daily":{
+ what:"Alerts per day across the year, with a seven-day mean drawn through them.",
+ read:"The line is noise; the mean is the trend. Hovering a trader anywhere on the page draws their own daily series inside this one, so an individual's contribution separates from the floor's.",
+ flag:"A date where the mean steps up and holds. That is where a pattern started, and it is far more useful than any single tall day — spikes are usually month-end, steps are usually behaviour."},
+
+"Typology fingerprint":{
+ what:"Alerts by rule category, with the portion upheld as suspicious or escalated marked in red.",
+ read:"Green is alerts raised, red is alerts that survived review. The ratio, not the length, is the signal: a long bar that is almost entirely green is a noisy rule, not a dangerous category.",
+ flag:"Compare the floor's fingerprint with one trader's — hover a name and the dark markers show how much of each category is theirs. A person whose shape differs from the floor's is the one to open, especially when their red is concentrated in a category the floor barely triggers."},
+
+"Booking-hour profile":{
+ what:"Alerts by the hour of the day the deal was executed, in the desk's own local time.",
+ read:"The shaded bands are the hours outside every desk's trading window. A normal session is a single broad hump across the working day.",
+ flag:"Anything standing in a shaded band. Out-of-hours activity happens without supervision, without a live price to check against, and often without a middle-office reviewer — three controls absent at once. A second hump late in the day is worth more attention than a taller main one."},
+
+"Detection heatmap":{
+ what:"Every rule against every trader — or category against desk, and the same matrix transposed on the Traders & Groups tab. Darker means more alerts.",
+ read:"Read across a row to see which people a rule catches, and down a column to see which rules one person triggers. Switch the axes and the top-N to move between the whole floor and the hot corner of it.",
+ flag:"A column lit across several unrelated rules. One typology can be an accident; four unrelated ones is a method. A single very dark cell is usually one rule mis-tuned against one book — that is a tuning conversation, not a conduct one."},
+
+"Top rules by hits":{
+ what:"The rules firing most often in the review period, with the upheld portion marked.",
+ read:"Volume alone says nothing about risk. A rule at the top of this list with almost nothing upheld is consuming review capacity and returning nothing.",
+ flag:"Use it to find tuning debt rather than misconduct. The rules worth defending are the ones lower down the list with a high upheld share."},
+
+"Open queue by age":{
+ what:"Alerts still awaiting disposition, bucketed by how long they have been waiting.",
+ read:"Critical and High alerts older than three business days breach the surveillance SLA and are shown in the breach colour.",
+ flag:"Weight in the oldest buckets is a resourcing signal, not a trading one — but it has a conduct consequence: an alert dispositioned six weeks late is evidence nobody was watching, whatever the eventual conclusion."},
+
+"Highest-risk traders":{
+ what:"Traders ranked by severity-weighted alerts per hundred of their own deals, with their multiple against the peer cohort median beside it.",
+ read:"Dividing by each trader's own deal count is what stops a busy name being flagged for being busy, and stops a quiet one hiding inside a desk's turnover. The ×N is the same number restated against colleagues of the same grade trading the same books.",
+ flag:"A high index with a high cohort multiple is the strongest single signal on the page. A high index where the whole cohort is also high is a desk-level or product-level question instead — check the neighbours before opening the file."},
+
+"Deal volume by month":{
+ what:"Every deal booked in the last twelve months, stacked by asset class.",
+ read:"This is the book's own shape, alerting or not. Quarter ends and roll dates are visible without anyone marking them.",
+ flag:"An asset class appearing in a month where it was previously absent, or a band that grows while the others hold. New activity at size is the pattern behind several mandate and first-trade typologies."},
+
+"Asset class mix":{
+ what:"The share of deals in each asset class across the window.",
+ read:"Hovering a class lights it across every panel on the page, so the mix can be traced into hours, sizes, tenors and counterparties.",
+ flag:"Compare one trader against the floor. A name whose mix includes a class their desk barely trades is worth a look at their approved product list."},
+
+"Booking channel":{
+ what:"How deals reached the system — voice, single-dealer, multi-dealer, algo, or internal booking.",
+ read:"Channel is a proxy for how much automated evidence sits behind a deal. Voice and internal bookings carry the least.",
+ flag:"A trader whose voice or internal share is far above their cohort's. It is not misconduct on its own, but it is where misconduct is easiest to hide, so it changes what other alerts on that name are worth."},
+
+"Transaction count by product":{
+ what:"The twelve products the floor deals most often, by number of tickets.",
+ read:"Read it beside Volume by product. Where the two rankings disagree, the product trades in blocks rather than in flow.",
+ flag:"A product high by count and trivial by notional can be ticket splitting — many small tickets where one large one belonged."},
+
+"Volume by product":{
+ what:"The twelve largest products by notional across the window.",
+ read:"The same products as the count chart, measured by size. The disagreement between the two orderings is the point.",
+ flag:"A product that is large by notional and rare by count is a block relationship. Every deal in it deserves a price check, because a single off-market print there costs more than a hundred flow tickets."},
+
+"Transaction count by counterparty":{
+ what:"The names the floor deals with most often. Red marks a counterparty on the related-party register.",
+ read:"Concentration by count shows the relationships, not the exposure. Hover a name to see which traders face it.",
+ flag:"One trader accounting for most of the flow to a single name, particularly a red one. Related-party dealing is not prohibited, but it is where price favouritism and connected financing both start."},
+
+"Volume by counterparties":{
+ what:"The twelve largest counterparties by notional. Red marks a related party.",
+ read:"A name large by notional and small by count is a block relationship; the reverse is a flow one.",
+ flag:"Concentration is not itself a finding, but every off-market pattern eventually points at one of these names. A related party high on this list, faced mostly by one trader, is the combination worth opening."},
+
+"Execution hours":{
+ what:"Every deal — not just the alerting ones — by the hour it was executed, in desk-local time.",
+ read:"The shaded regions are outside every desk's window. This is the baseline the after-hours rule measures against. Select a trader anywhere on the page and the chart redraws as their session.",
+ flag:"Select individual traders and watch the shape change. Most people light 07:00 to 19:00; the ones who light 03:00 or 22:00 are visible in a single glance, and there are usually only one or two on a floor."},
+
+"Ticket size distribution":{
+ what:"Deals grouped into notional bands, from under a million to the largest tickets on the book.",
+ read:"A book's size profile is never linear — it should fall away smoothly towards the right. The tail on the right is where the authorisation rules live.",
+ flag:"A bulge immediately below a round number or an authorisation level. Ticket sizes that cluster just under a threshold, rather than scattering across it, are the signature of threshold gaming and of ticket splitting."},
+
+"Tenor profile":{
+ what:"The whole book by maturity band — how long the risk actually runs.",
+ read:"Each desk has a natural profile: an FX spot book sits almost entirely in the shortest band, a rates book spreads across the curve.",
+ flag:"A trader with weight in a band their mandate does not reach. Tenor authorisations are personal, so a single long-dated deal on a short-dated book is a breach even when the desk is approved for it."},
+
+"Trading activity by trader":{
+ what:"One small chart per trader — their own book, period by period, ordered so that people who sit next to each other on the floor sit next to each other here.",
+ read:"The charts are deliberately squeezed. You are not reading values off them; you are comparing shapes between neighbours doing the same job.",
+ flag:"The book that does not look like its neighbours'. A burst in an otherwise quiet series, a gap where a colleague has none, a drift into longer tenors, or a series that stops dead — each is a shape you see before you read a number."},
+
+"Trade activity time series":{
+ what:"One dot per deal across the window. Size is notional; colour and shape carry whichever dimension you select.",
+ read:"Scroll sideways to travel the window. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. Switch the vertical axis to interrogate size, price, maturity or the clock.",
+ flag:"Three shapes repay the most attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
+
+"Detection queue":{
+ what:"Every alert matching the current filters, newest first, with the pattern stated in plain words on each row.",
+ read:"Click a row to open the finding underneath it — the pattern, the market the deals were struck into, and the deals themselves. Double-click for the full alert file, where the disposition is recorded.",
+ flag:"Work the score and age columns together. A high score sitting unreviewed past three days is the combination the SLA exists to prevent, and the one an auditor will ask about first."},
+
+"Rule library":{
+ what:"All fifty typologies, with the exact test each applies, what that test is measured against, and every data element it reads.",
+ read:"Every threshold shown is the production setting. The fields chip on each card lists the data the rule needs and the system each field has to come from.",
+ flag:"Use it to challenge a rule rather than to browse. If a test is wrong for how your product trades, the card gives you the precise wording to argue against — and a rule with no feed behind it is a control on paper only."},
+
+"Trade blotter":{
+ what:"The underlying deal records — every ticket the detection layer reads, filterable and searchable.",
+ read:"This is the evidence layer. Anything asserted anywhere else on the page can be traced back to rows here.",
+ flag:"Sort by deviation from mid, or filter to flagged deals, to see the prints that sit furthest from the market before any rule has judged them."},
+
+"Alerts against volume":{
+ what:"Each trader as a bubble: deals booked across the bottom, alerts up the side, bubble size by how many were upheld.",
+ read:"Most of the floor forms a diagonal — more trading, more alerts. That diagonal is what normal looks like.",
+ flag:"A name sitting high and to the left alerts more than its trading volume explains. That is the whole purpose of the chart, and a large bubble in that corner means those alerts survived review."},
+
+"Desks":{
+ what:"Each desk as a roll-up of the people in it — how many are running hot, and how the worst one looks.",
+ read:"Deliberately never a pooled ratio: a desk average is the number that lets a small book hide inside a large one. Read the count of hot names and the worst individual instead.",
+ flag:"A desk where several names are hot at once. One elevated trader is an individual question; three on the same desk is a supervision or incentive question, and it belongs to the desk head rather than to surveillance."},
+
+"Trader risk index":{
+ what:"Every trader with their risk index, cohort multiple, alert and upheld counts, and their personal authorisations.",
+ read:"The index is severity-weighted alerts per hundred of the trader's own deals. The cohort multiple restates it against colleagues of the same grade trading the same books.",
+ flag:"Sort by cohort multiple rather than by index. A ×3 against peers doing the same job is a stronger signal than a high absolute number on a desk where everybody is high."},
+
+"Decisions by month":{
+ what:"Review decisions recorded each month, split by what was concluded.",
+ read:"This measures the review function, not the trading floor. Steady throughput with a stable mix is what a functioning process looks like.",
+ flag:"A month where decisions collapse — capacity lost, and a backlog forming that will show up as SLA breaches later. A month where escalations spike without alert volume rising means reviewers changed their minds, not that the floor changed its behaviour."},
+
+"Reason codes used":{
+ what:"The reasons reviewers gave when dispositioning alerts.",
+ read:"A healthy distribution is varied: different alerts get closed for different reasons.",
+ flag:"One code carrying most of the closures. That usually means alerts are being cleared by habit rather than by investigation, and it undermines every disposition recorded under it."},
+
+"Disposition log":{
+ what:"The audit trail — who decided what, when, and on what reasoning.",
+ read:"Every entry is attributable and time-stamped. This is what evidences that the surveillance function ran, independently of what it concluded.",
+ flag:"Decisions clustered into a few minutes, or one reviewer closing an implausible number in a session. Both are review-quality problems, and both are visible here before they are visible anywhere else."},
+};
+
+/* The popover. Click to open, click again or Esc to close — a hover box vanishes
+   the moment the reader moves towards it, which is the wrong behaviour for text
+   somebody is meant to actually read. */
+let infoOpen=null;
+function closeInfo(){
+  const el=$("#infopop"); if(el) el.classList.remove("on");
+  $$("[data-infopop]").forEach(b=>b.setAttribute("aria-expanded","false"));
+  infoOpen=null;
+}
+function openInfo(btn){
+  const key=btn.getAttribute("data-infopop"), inf=PANEL_INFO[key];
+  if(!inf) return;
+  let el=$("#infopop");
+  if(!el){ el=document.createElement("div"); el.id="infopop"; el.className="infopop"; document.body.appendChild(el); }
+  el.innerHTML="";
+  const h=document.createElement("div"); h.className="ip-t"; h.textContent=key; el.appendChild(h);
+  [["What this chart is",inf.what],["How to read it",inf.read],["Where an anomaly shows up",inf.flag]]
+    .forEach((sec,i)=>{
+      const k=document.createElement("div"); k.className="ip-k"+(i===2?" flag":""); k.textContent=sec[0];
+      const v=document.createElement("div"); v.className="ip-v"; v.textContent=sec[1];
+      el.appendChild(k); el.appendChild(v);
+    });
+  el.classList.add("on");
+  // Anchored under the icon, then pulled back inside the viewport on both axes.
+  const r=btn.getBoundingClientRect(), pad=10;
+  let left=r.left, top=r.bottom+8;
+  if(left+el.offsetWidth>window.innerWidth-pad) left=Math.max(pad,window.innerWidth-el.offsetWidth-pad);
+  if(top+el.offsetHeight>window.innerHeight-pad) top=Math.max(pad,r.top-el.offsetHeight-8);
+  el.style.left=Math.round(left)+"px"; el.style.top=Math.round(top)+"px";
+  btn.setAttribute("aria-expanded","true");
+  infoOpen=key;
+}
+
+/* Guidance is keyed off the title rather than passed at each call site, so a new
+   panel either has an entry or visibly has none — there is no way to add a chart
+   and quietly forget to explain it. */
 function panel(title,right,body,foot,cls){
-  return '<div class="panel '+(cls||"")+'"><div class="panel-hd"><h3>'+title+"</h3>"+(right?'<div class="slo">'+right+"</div>":"")+
+  const inf=PANEL_INFO[title]
+    ? '<button type="button" class="pinfo" data-infopop="'+esc(title)+
+      '" aria-expanded="false" aria-label="About this chart">i</button>'
+    : "";
+  return '<div class="panel '+(cls||"")+'"><div class="panel-hd"><h3>'+title+inf+"</h3>"+
+    (right?'<div class="slo">'+right+"</div>":"")+
     "</div>"+body+(foot?'<div class="foot">'+foot+"</div>":"")+"</div>";
 }
 function sevTag(s){ return '<span class="tag '+SEV_TAG[s]+'">'+s+"</span>"; }
@@ -6118,6 +6341,7 @@ function render(){
   renderRail(); renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
   $$(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
+  closeInfo();
   Object.keys(MSEL_OPTS).forEach(refreshMselBtn);
   // The pane is rebuilt from scratch, so a pinned selection has to be
   // re-attached to the new nodes and its aggregate cache re-cut to the rail.
@@ -6172,6 +6396,8 @@ function handleChrome(t,e){
     state.det.open=state.det.open===id?"":id;
     render(); return true;
   }
+  const ipb=t.closest("[data-infopop]");
+  if(ipb){ const k=ipb.getAttribute("data-infopop"); if(infoOpen===k) closeInfo(); else { closeInfo(); openInfo(ipb); } return true; }
   const chip=t.closest("[data-clearchip]"); if(chip){ state.filters[chip.dataset.clearchip]=new Set(); render(); return true; }
   /* The activity grid is a picker as much as a display. Clicking a trader's name
      scopes the whole page to them, exactly as choosing them in the rail's trader
@@ -6289,6 +6515,7 @@ document.addEventListener("click",e=>{
   }
   if(handleDrill(t,e)) return;
   if(openMsel&&!t.closest(".msel-panel")&&!t.closest(".msel-btn")) closeMsel();
+  if(infoOpen&&!t.closest("#infopop")&&!t.closest("[data-infopop]")) closeInfo();
 });
 document.addEventListener("dblclick",e=>{
   clearTimeout(_clickTimer);
@@ -6336,7 +6563,7 @@ document.addEventListener("input",e=>{
               "l-search":v=>{state.log.search=v;state.log.page=0;}};
   if(live[id]){ clearTimeout(_typing); _typing=setTimeout(()=>liveInput(id,live[id]),160); }
 });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); closeInfo(); } });
 
 /* ============================================================
    Boot
