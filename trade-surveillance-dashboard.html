@@ -667,7 +667,15 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 
 /* ============================================================
    Tooltip engine — one floating box, driven by data-tip attributes.
+
+   Most elements carry their tooltip as markup. A few cannot afford to: the
+   time series draws thousands of dots, and a hundred-odd characters of label
+   and detail table on each one is megabytes of attribute text rebuilt on every
+   scroll frame. Those elements instead carry data-tipgen naming a generator,
+   which is called once, on hover, against the element that is actually under
+   the cursor. Generators are registered later, once the data they read exists.
 ============================================================ */
+const TIPGEN={};
 (function(){
   let box=null,lastEl=null;
   function ensure(){ if(!box){box=document.createElement("div");box.className="tt";document.body.appendChild(box);} return box; }
@@ -679,13 +687,23 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
     el.style.left=left+"px"; el.style.top=top+"px";
   }
   document.addEventListener("mousemove",e=>{
-    const t=e.target.closest("[data-tip]");
+    const t=e.target.closest("[data-tip],[data-tipgen]");
     const el=ensure();
     if(!t){el.classList.remove("show");lastEl=null;return;}
     if(t!==lastEl){
-      const title=t.getAttribute("data-tip")||"";
-      const sub=t.getAttribute("data-tipsub");
-      const rows=t.getAttribute("data-tiptable");
+      let title=t.getAttribute("data-tip")||"";
+      let sub=t.getAttribute("data-tipsub");
+      let rows=t.getAttribute("data-tiptable");
+      const gen=t.getAttribute("data-tipgen");
+      if(gen&&TIPGEN[gen]){
+        const d=TIPGEN[gen](t)||{};
+        if(d.title!=null) title=d.title;
+        if(d.sub!=null) sub=d.sub;
+        if(d.rows!=null) rows=d.rows;
+      }
+      // A generator that found nothing must show nothing. Without this an
+      // element whose data has gone would sit under an empty floating box.
+      if(!title&&!rows){ el.classList.remove("show"); lastEl=t; return; }
       el.innerHTML="";
       if(rows){
         // Built with textContent, never innerHTML — values come straight from data.
@@ -3605,7 +3623,7 @@ const state={
   // enc holds at most one of trader/desk, enforced where it is toggled.
   // px is pixels per day and runs continuously from months down to seconds.
   // Only trader has a chart-level picker; desk and asset class come from the rail.
-  ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{trader:[]}},
+  ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{trader:[]},case:""},
   heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
@@ -4666,7 +4684,7 @@ const PANEL_INFO={
 "Trade activity time series":{
  what:"One dot per deal across the window. Size is notional; colour and shape carry whichever dimension you select.",
  read:"Scroll sideways to travel the window, and scroll on the plot to zoom from months down to seconds. Weekends and holidays are compressed to a fifth of a weekday's width, so the axis is continuous in time but not linear in it. On the time-of-day axis the shaded bands are the hours outside every desk's window.",
- flag:"Lock a name into the outline with Highlight trader\u2019s trades and read where their deals sit among everyone else\u2019s. Beyond that, three shapes repay the most attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
+ flag:"Two controls put a question on the chart without taking anything off it. Highlight trader\u2019s trades locks one name into the outline, so you can read where their deals sit among everyone else\u2019s. Highlight detection cases rings the deals a detection actually cites \u2014 by severity, by review status, by typology, or one named case \u2014 and colours each ring by the severity of the case citing it, so a deal caught by a Critical is never drawn as a Low. Rings that bunch into one day, one counterparty or one band of the notional axis are the finding; rings scattered evenly through ordinary flow usually are not. Beyond that, three shapes repay attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
 
 "Detection queue":{
  what:"Every alert matching the current filters, newest first, with the pattern stated in plain words on each row.",
@@ -5563,6 +5581,7 @@ function paneTimeseries(){
       TRADERS.slice().sort((a,b)=>a.name.localeCompare(b.name))
         .map(t=>opt(t.id,t.name+" · "+DESK_BY_ID[t.deskId].short,tsPinnedTrader())).join("")+
     "</select></label>"+
+    tsCaseSelect(rows)+
     '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
     '<label><span>&nbsp;</span><div class="segbtns">'+
       [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
@@ -5600,8 +5619,119 @@ function paneTimeseries(){
     "Weekends and holidays are the narrow shaded columns, drawn at a fifth of a weekday's width so the days that carry the trading get the room — the axis is continuous in time but not linear in it. "+
     "On the time-of-day axis the shaded bands are the hours outside every desk's window. "+
     "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal. "+
-    "<b>Highlight trader\u2019s trades</b> locks one name\u2019s deals into the outline and leaves everyone else on the chart \u2014 it is the one control here that does not take anything away, because seeing where a person sits inside the floor\u2019s activity needs the floor still visible.");
+    "<b>Highlight trader\u2019s trades</b> locks one name\u2019s deals into the outline and leaves everyone else on the chart. "+
+    "<b>Highlight detection cases</b> rings the deals a detection cites \u2014 all of them, by severity, by review status, by typology, or one named case \u2014 with the ring coloured by the severity of the case citing it. "+
+    "Neither control filters: seeing where a person or a case sits inside the floor\u2019s activity needs the rest of the floor still visible. "+
+    "Ringed deals get first call on the dots the chart can draw, so a named case always appears in full; only a very broad selection over a very wide window is sampled, and the status line above says so when it is. "+
+    "To go the other way, open any alert and use <b>Show these deals on the time series</b> \u2014 it widens the horizon to reach the trade date, clears any scoping that would hide them, and scrolls to the deals.");
 }
+
+/* ============================================================
+   Detection-case highlighting on the time series
+
+   The trader highlight answers "where does this person sit in the floor's
+   activity". This answers the other question a reviewer arrives with: "where do
+   the cases sit". A case selection rings the deals a detection actually cites,
+   coloured by the severity of the case citing them, and leaves every other deal
+   on the chart — the point is to see whether the flagged deals cluster in time,
+   in size or in the hours they were booked, which a filtered chart hides.
+
+   Specs: "" none · "any" · "sev|Critical" · "st|Escalated" · "rule|TS-01" ·
+   "alert|ALT-00001" (set by the Show-on-time-series button in an alert).
+============================================================ */
+const TS_CASE_KINDS={
+  sev:(a,v)=>a.sev===v, st:(a,v)=>a.status===v,
+  rule:(a,v)=>a.ruleId===v, alert:(a,v)=>a.id===v,
+};
+function tsCaseHits(t,spec){
+  const as=t.alerts;
+  if(!spec||!as||!as.length) return null;
+  if(spec==="any") return as;
+  const i=spec.indexOf("|");
+  const fn=TS_CASE_KINDS[spec.slice(0,i)];
+  if(!fn) return null;
+  const v=spec.slice(i+1), hit=as.filter(a=>fn(a,v));
+  return hit.length?hit:null;
+}
+// The ring takes the severity of the most serious case citing the deal: one
+// deal can be cited by several, and a Critical must not be drawn as a Low.
+function tsCaseSev(hits){
+  let worst=null;
+  for(const a of hits) if(!worst||SEV_RANK[a.sev]>SEV_RANK[worst]) worst=a.sev;
+  return worst;
+}
+/* The picker. Counts are of DEALS in the current horizon, not of alerts, because
+   the number the chart is about to draw is the number the reader should see
+   before choosing — an option promising 811 critical alerts and then ringing
+   2,300 dots would be its own small lie. */
+function tsCaseSelect(rows){
+  const cur=state.ts.case||"";
+  let anyN=0;
+  const bySev={},bySt={},byRule={};
+  rows.forEach(t=>{
+    const as=t.alerts;
+    if(!as||!as.length) return;
+    anyN++;
+    const sevSeen={},stSeen={},ruleSeen={};
+    as.forEach(a=>{
+      if(!sevSeen[a.sev]){ sevSeen[a.sev]=1; bySev[a.sev]=(bySev[a.sev]||0)+1; }
+      if(!stSeen[a.status]){ stSeen[a.status]=1; bySt[a.status]=(bySt[a.status]||0)+1; }
+      if(!ruleSeen[a.ruleId]){ ruleSeen[a.ruleId]=1; byRule[a.ruleId]=(byRule[a.ruleId]||0)+1; }
+    });
+  });
+  const o=(v,lab,n)=>opt(v,lab+(n!=null?"  ("+fmtNum(n)+" deals)":""),cur);
+  const grp=(lab,inner)=>inner?'<optgroup label="'+esc(lab)+'">'+inner+"</optgroup>":"";
+  // A case pinned from an alert is not in any of the standing lists, so it is
+  // added explicitly — otherwise the control would sit on "none" while the
+  // chart was plainly showing a selection.
+  const pinned=cur.slice(0,6)==="alert|"
+    ? opt(cur,"Case "+cur.slice(6)+" — pinned from the alert",cur) : "";
+  const statuses=["Escalated","Suspicious","In Review","Open","Passed"].filter(s=>bySt[s]);
+  const rules=RULES.filter(r=>byRule[r.id]).sort((a,b)=>byRule[b.id]-byRule[a.id]);
+  return '<label><span>Highlight detection cases</span><select id="ts-hlcase" class="tshl">'+
+    o("","— none —")+pinned+
+    o("any","Any detection",anyN)+
+    grp("By severity",SEV_ORDER.filter(s=>bySev[s]).map(s=>o("sev|"+s,s,bySev[s])).join(""))+
+    grp("By review status",statuses.map(s=>o("st|"+s,s,bySt[s])).join(""))+
+    grp("By typology",rules.map(r=>o("rule|"+r.id,r.id+" "+r.name,byRule[r.id])).join(""))+
+    "</select></label>";
+}
+function tsCaseLabel(spec){
+  if(!spec) return "";
+  if(spec==="any") return "any detection";
+  const i=spec.indexOf("|"), k=spec.slice(0,i), v=spec.slice(i+1);
+  if(k==="rule") return v+" "+((RULES.find(r=>r.id===v)||{}).name||"");
+  if(k==="alert") return "case "+v;
+  if(k==="st") return v.toLowerCase()+" cases";
+  return v.toLowerCase()+" severity";
+}
+
+/* Dot tooltips are generated on hover rather than written into every mark.
+   Embedding them cost roughly 250 characters per dot — at the cap that is over
+   a megabyte of attribute text rebuilt on every scroll frame — so they used to
+   be switched off above 3,000 dots, which is below the count the opening view
+   draws. Generating on demand costs one lookup and restores the tooltip at
+   every zoom level. */
+TIPGEN.trade=el=>{
+  const t=TRADES_BY_ID[el.getAttribute("data-trade")];
+  if(!t) return null;
+  const as=t.alerts||[];
+  const rows=["Notional|"+fmtM(t.notional),"Instrument|"+t.instrument,
+    "Direction|"+t.dir,"Counterparty|"+t.ctpy+" · "+t.ctpyType,
+    "Deviation|"+(t.devBps>0?"+":"")+(t.devBps||0).toFixed(1)+" bps",
+    "Tenor|"+(t.tenor||"—"),"Channel|"+t.channel,
+    "Booking|"+t.status+(t.amends?" · "+t.amends+" amendment"+(t.amends>1?"s":""):"")];
+  // A flagged deal says so here, with the case reference, so the dot does not
+  // have to be clicked to find out whether it is one of the ones in question.
+  if(as.length){
+    const worst=as.slice().sort((x,y)=>SEV_RANK[y.sev]-SEV_RANK[x.sev])[0];
+    rows.push("Detections|"+as.length+" · "+as.map(a=>a.ruleId).join(", "));
+    rows.push("Highest severity|"+worst.sev+" · "+worst.id+" · "+worst.status);
+  }
+  return {title:t.trader+" · "+t.product,
+          sub:fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" · "+t.deskShort+" · "+t.id,
+          rows:rows.join("§")};
+};
 
 /* The draw. Only the visible slice is built, with a screen of overscan either
    side, because a ten-day window at second resolution is a canvas 2.6 million
@@ -5636,6 +5766,18 @@ function tsDraw(){
   const tsT=x=>tsMinAt(u0+x/S.px);          // and back
   const totalW=Math.max(1,tsSpanUnits(d0,DAYS)*S.px);
   canvas.style.width=Math.round(totalW)+"px";
+  /* A pending centre is consumed before the visible slab is measured, so the
+     jump lands in one draw rather than painting the old position first. It is
+     then re-applied once on the next frame: arriving from another tab, the
+     scroller has not finished laying out, and a clientWidth read that early put
+     the target off-centre by half of whatever the width was wrong by. */
+  if(tsPendingCenter!=null&&isFinite(tsPendingCenter)){
+    const half=(wrap.clientWidth||600)/2;
+    wrap.scrollLeft=Math.max(0,Math.min(Math.max(0,totalW-half*2),tsX(tsPendingCenter)-half));
+    const again=tsCenterPass>0?tsPendingCenter:null;
+    if(again!=null){ tsCenterPass--; requestAnimationFrame(()=>{ tsPendingCenter=again; tsDraw(); }); }
+    tsPendingCenter=null;
+  }
   /* The plot is sized from the scroller's own content box rather than the panel's,
      and a gutter is reserved whenever the content overflows. Two different things
      were putting the horizontal scrollbar over the date labels: the SVG was drawn
@@ -5671,8 +5813,46 @@ function tsDraw(){
      denser slab was not worth the trade: past this many dots the chart reads as
      a mass anyway, and the old cap left the default view with 5,877 dots that
      could not be hovered at all. */
-  const CAP=4500, thinned=slice.length>CAP;
-  if(thinned) slice=slice.filter((_,i)=>i%Math.ceil(slice.length/CAP)===0);
+  const CAP=4500;
+  /* A case selection gets first call on the dot budget, but not all of it. A
+     named case is a handful of deals and is always drawn in full; a broad
+     selection over a wide window can match thousands, and letting it take the
+     whole budget left the chart showing nothing but rings — which is a filtered
+     chart, exactly what this control is not meant to be. So the ringed deals are
+     capped at CASE_MAX and a floor of context dots is always kept, because a
+     case only means something read against the flow it sits in. */
+  const CTX_MIN=1200, CASE_MAX=CAP-CTX_MIN;
+  const caseSpec=S.case||"", caseSev={};
+  let caseHits=[];
+  if(caseSpec){
+    caseHits=slice.filter(t=>{
+      const h=tsCaseHits(t,caseSpec);
+      if(!h) return false;
+      caseSev[t.id]=tsCaseSev(h);
+      return true;
+    });
+  }
+  let thinned=false, caseThinned=false;
+  if(caseHits.length>CASE_MAX){
+    const st=Math.ceil(caseHits.length/CASE_MAX);
+    caseHits.forEach((t,i)=>{ if(i%st!==0) delete caseSev[t.id]; });
+    caseHits=caseHits.filter((_,i)=>i%st===0);
+    caseThinned=true; thinned=true;
+  }
+  if(slice.length>CAP){
+    if(caseHits.length){
+      const rest=slice.filter(t=>!caseSev[t.id]);
+      const keep=Math.max(CTX_MIN,CAP-caseHits.length);
+      const step=Math.max(1,Math.ceil(rest.length/keep));
+      const kept=rest.filter((_,i)=>i%step===0);
+      thinned=thinned||kept.length<rest.length;
+      // Re-sorted into time order: the draw relies on the slice being ordered.
+      slice=caseHits.concat(kept).sort((a,b)=>a.tmin-b.tmin);
+    }else{
+      thinned=true;
+      slice=slice.filter((_,i)=>i%Math.ceil(slice.length/CAP)===0);
+    }
+  }
 
   const yDefs={
     notional:{lab:"Notional",fmt:v=>fmtM(Math.pow(10,v)),val:t=>Math.log10(Math.max(0.1,t.notional))},
@@ -5744,26 +5924,24 @@ function tsDraw(){
     tk+=stepMin;
   }
 
-  /* Three tiers, because the cost is not evenly spread. The highlight hooks are a
-     few short attributes and go on every dot, so hovering one always lights that
-     trader across the page. The tooltip label is longer and the detail table longer
-     still, so those are rationed — a chart showing thousands of dots is being read
-     as a shape, not interrogated ticket by ticket. */
-  const label=slice.length<=3000, detail=slice.length<=1500;
+  /* Every dot carries the same short attribute set: the highlight hooks, the deal
+     id, and the name of the tooltip generator. Nothing is rationed by dot count
+     any more — the long text is built on hover instead of written here. */
+  let rings="";
   slice.slice().sort((a,b)=>b.notional-a.notional).forEach(t=>{
     const r=rOf(t.notional), x=X(t.tmin), y=yPx(Y.val(t));
-    let extra='data-trade="'+t.id+'" data-hlsrc="trader|'+t.traderId+'" data-hl-trader="'+t.traderId+
-      '" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+' style="cursor:pointer"';
-    if(label) extra+=' data-tip="'+esc(t.trader+" · "+t.product)+
-      '" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" · "+t.deskShort)+'"';
-    if(detail) extra+=' data-tiptable="'+esc(["Notional|"+fmtM(t.notional),"Instrument|"+t.instrument,
-      "Direction|"+t.dir,"Counterparty|"+t.ctpy,
-      "Deviation|"+(t.devBps>0?"+":"")+(t.devBps||0).toFixed(1)+" bps",
-      "Tenor|"+(t.tenor||"\u2014")].join("§"))+'"';
+    const extra='data-trade="'+t.id+'" data-tipgen="trade" data-hlsrc="trader|'+t.traderId+
+      '" data-hl-trader="'+t.traderId+'" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+
+      ' style="cursor:pointer"';
     g+=tsMark(shapeOf[tsKeyer(shapeDim)(t)]||"circle",x,y,r,
       colorOf[tsKeyer(colorDim)(t)]||"var(--run)",
       'fill-opacity="'+(r>7?".62":".78")+'" stroke="var(--panel)" stroke-width=".6" '+extra);
+    /* Case rings are collected as they go and emitted after the last dot, so a
+       ring is never painted over by a larger deal drawn on top of it. */
+    if(caseSev[t.id]) rings+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(r+3.4).toFixed(1)+
+      '" fill="none" stroke="'+SEV_COLOR[caseSev[t.id]]+'" stroke-width="1.8" opacity=".95" pointer-events="none"/>';
   });
+  g+=rings;
 
   if(!slice.length){
     const span=Math.max(1e-6,tsT(wrap.scrollLeft+viewW)-tsT(wrap.scrollLeft));
@@ -5793,6 +5971,8 @@ function tsDraw(){
   const stat=$("#ts-stat");
   if(stat) stat.textContent=fmtNum(win.length)+" deals in window · "+
     ({sec:"seconds",min:"minutes",hour:"hours",day:"days"}[tier.unit])+" resolution"+
+    (caseSpec?" · "+fmtNum(caseHits.length)+" ringed for "+tsCaseLabel(caseSpec)+
+      (caseThinned?" (sampled — zoom in or narrow the selection to see them all)":""):"")+
     (thinned?" · thinned to keep the view readable":"");
 
   const leg=$("#ts-legend");
@@ -5813,6 +5993,20 @@ function tsDraw(){
     if(shapeDim!==colorDim)
       html+=legRow(shapeDim,shapeKeys,k=>'<span class="tslegi" '+hlDim("ac",k)+' data-hlsrc="ac|'+esc(k)+'">'+
         '<svg width="13" height="13" viewBox="0 0 13 13">'+tsMark(shapeOf[k],6.5,6.5,5,"var(--ink-2)","")+"</svg>"+esc(k)+"</span>");
+    /* The ring legend names the severity scale and, where a selection is live,
+       says how many of the ringed deals sit at each level — the distribution
+       matters more than the total when deciding where to look first. */
+    if(caseSpec){
+      const n={}; caseHits.forEach(t=>{ const s=caseSev[t.id]; n[s]=(n[s]||0)+1; });
+      html+='<div class="tsleg"><span class="tslegh">Detection cases</span>'+
+        SEV_ORDER.filter(s=>n[s]).map(s=>'<span class="tslegi" data-hlsrc="sev|'+esc(s)+'" '+
+          hlDim("sev",s)+'><svg width="15" height="15" viewBox="0 0 15 15">'+
+          '<circle cx="7.5" cy="7.5" r="3.2" fill="var(--ink-3)" fill-opacity=".55"/>'+
+          '<circle cx="7.5" cy="7.5" r="6" fill="none" stroke="'+SEV_COLOR[s]+'" stroke-width="1.8"/></svg>'+
+          esc(s)+" · "+fmtNum(n[s])+"</span>").join("")+
+        (caseHits.length?"":'<span class="tslegmore">no deals from this selection fall in the current view — scroll or widen the horizon</span>')+
+        "</div>";
+    }
     html+='<div class="tsleg"><span class="tslegh">Notional</span>'+
       [nMax*0.05,nMax*0.3,nMax].map(v=>'<span class="tslegi"><svg width="'+(rOf(v)*2+4).toFixed(0)+
         '" height="20" viewBox="0 0 '+(rOf(v)*2+4).toFixed(0)+' 20">'+
@@ -5823,6 +6017,9 @@ function tsDraw(){
 }
 /* Redraws are coalesced to one per frame: a wheel gesture fires dozens of events
    and each one would otherwise rebuild the slab. */
+/* Set by the jump-from-a-case action and consumed by the next draw. Declared
+   with the chart rather than with the handler so the draw never outruns it. */
+let tsPendingCenter=null, tsCenterPass=0;
 let tsRAF=null;
 function tsSchedule(){ if(tsRAF) return; tsRAF=requestAnimationFrame(()=>{ tsRAF=null; tsDraw(); }); }
 function tsZoom(factor,clientX){
@@ -6453,7 +6650,10 @@ function alertDrawer(a){
       '<div style="display:flex;align-items:center;gap:10px"><span class="tiny">Alerts per month</span>'+spark(trMonths,220,26,"var(--fail)")+"</div>"+
       (Object.keys(otherByRule).length?'<div style="margin-top:10px">'+Object.keys(otherByRule).sort((x,y)=>otherByRule[y]-otherByRule[x]).slice(0,8)
         .map(rid=>'<span class="tag t-muted" style="margin:0 4px 4px 0">'+rid+" ×"+otherByRule[rid]+"</span>").join("")+"</div>":"")+
-      '<div style="margin-top:10px"><button class="btn-ghost" data-trader="'+tr.id+'">Open the trader file →</button></div></div>'+
+      '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn-ghost" data-trader="'+tr.id+'">Open the trader file →</button>'+
+        '<button class="btn-ghost" data-tscase="'+a.id+'" data-tip="Rings this case’s deals on the time series and scrolls to them, leaving the rest of the floor’s activity in place for comparison">Show these deals on the time series →</button>'+
+      "</div></div>"+
 
     decideBlock(a)+
 
@@ -6662,6 +6862,34 @@ function goDetections(patch){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
+/* Jump from a case to the deals it cites, on the time series. Three things have
+   to be true before the chart can show them, and all three are fixed here rather
+   than left for the reader to work out from an empty plot: the horizon has to
+   reach back to the trade date, the chart's own trader pick has to be off, and
+   the rail must not be scoped somewhere that excludes the deals. */
+function goTimeSeriesCase(alertId){
+  const a=ALERT_BY_ID[alertId]; if(!a) return;
+  const cited=a.tradeIds.map(id=>TRADES_BY_ID[id]).filter(Boolean);
+  if(!cited.length) return;
+  state.ts.case="alert|"+a.id;
+  state.ts.pick={trader:[]};
+  if(!cited.some(tradeMatchesRail)){
+    state.filters.trader=new Set(); state.filters.desk=new Set(); state.filters.assetClass=new Set();
+    TS_CACHE={sig:null,rows:[]};
+  }
+  // Horizon back far enough to include the oldest cited deal, with a day of slack.
+  const oldest=Math.min(...cited.map(t=>t.dayIdx));
+  const need=DAYS-oldest+1;
+  const per=TS_UNIT_DAYS[state.ts.unit]||1;
+  state.ts.n=Math.max(state.ts.n,Math.min(400,Math.ceil(need/per)));
+  tsPendingCenter=cited.reduce((m,t)=>Math.min(m,t.dayIdx*1440+t.execMin),Infinity);
+  tsCenterPass=1;
+  closeDrawer();
+  state.tab="timeseries";
+  render();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
 /* ============================================================
    Events
 ============================================================ */
@@ -6779,6 +7007,7 @@ function handleDrill(t,e){
   const alertEl=t.closest("[data-alert]"); if(alertEl){ e.preventDefault(); alertDrawer(ALERT_BY_ID[alertEl.dataset.alert]); return true; }
   const tradeEl=t.closest("[data-trade]"); if(tradeEl){ e.preventDefault(); tradeDrawer(TRADES_BY_ID[tradeEl.dataset.trade]); return true; }
   const trEl=t.closest("[data-trader]"); if(trEl){ e.preventDefault(); traderDrawer(TRADER_BY_ID[trEl.dataset.trader]); return true; }
+  const tsc=t.closest("[data-tscase]"); if(tsc){ e.preventDefault(); goTimeSeriesCase(tsc.dataset.tscase); return true; }
   const trr=t.closest("[data-trrule]"); if(trr){ closeDrawer(); const p=trr.dataset.trrule.split("|"); goDetections({rule:p[1],trader:p[0]}); return true; }
   const rc=t.closest("[data-ruleclick]"); if(rc){ closeDrawer(); goDetections({rule:rc.dataset.ruleclick}); return true; }
   const sevc=t.closest("[data-sevclick]"); if(sevc){ state.filters.severity=new Set([sevc.dataset.sevclick]); render(); return true; }
@@ -6861,6 +7090,9 @@ document.addEventListener("change",e=>{
     hlLock(t.value?"trader|"+t.value:null);
     return;
   }
+  // Only the chart changes — the option counts are of the horizon, which has not
+  // moved — so this redraws rather than re-rendering the pane.
+  if(t.id==="ts-hlcase"){ state.ts.case=t.value; tsDraw(); return; }
   if(t.id==="a-range"){ state.act.range=t.value; render(); return; }
   if(t.id==="ts-n"){ state.ts.n=Math.max(1,Math.min(400,parseInt(t.value,10)||1)); render(); return; }
   if(t.id==="a-year"){ state.act.year=+t.value; render(); return; }
