@@ -4647,7 +4647,7 @@ const PANEL_INFO={
 
 "Trade activity time series":{
  what:"One dot per deal across the window. Size is notional; colour and shape carry whichever dimension you select.",
- read:"Scroll sideways to travel the window. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. Switch the vertical axis to interrogate size, price, maturity or the clock.",
+ read:"Scroll sideways to travel the window, and scroll on the plot to zoom from months down to seconds. Weekends and holidays are compressed to a fifth of a weekday's width, so the axis is continuous in time but not linear in it. On the time-of-day axis the shaded bands are the hours outside every desk's window.",
  flag:"Three shapes repay the most attention. A dot alone in a shaded band — a deal booked when nobody was watching. A dot far above the crowd on the off-mid axis — a print the market does not explain. And a dense vertical cluster in one day where the surrounding days are sparse, which is a burst rather than a business."},
 
 "Detection queue":{
@@ -5383,8 +5383,40 @@ const TS_PXMIN=4, TS_PXMAX=260000;          // 260,000 px/day ≈ 3px a second
    window unreachable. Hold the canvas below that and let the horizon set the
    deepest zoom — a year still reaches five-second ticks, which is far enough. */
 const TS_MAXCANVAS=30000000;
+/* Weekends and holidays are drawn at a fifth of a weekday's width. Almost nothing
+   is booked on them, so at full width they spent two sevenths of the axis saying
+   nothing while the weekdays either side were squeezed. The axis is therefore
+   piecewise rather than linear in time, and every conversion between a minute and
+   a pixel has to go through the two functions below — including the zoom anchor
+   and the visible-slice search, which is why they are cached prefix sums rather
+   than a loop. */
+const TS_WEEKEND_W=0.2;
+const TS_DAYW=new Array(DAYS), TS_CUM=new Float64Array(DAYS+1);
+(function tsAxisScale(){
+  for(let d=0;d<DAYS;d++){
+    TS_DAYW[d]=isBiz(dateForIdx(d))?1:TS_WEEKEND_W;
+    TS_CUM[d+1]=TS_CUM[d]+TS_DAYW[d];
+  }
+})();
+// Day-units spanned between two day indices, and the inverse.
+const tsSpanUnits=(a,b)=>TS_CUM[Math.max(0,Math.min(DAYS,b))]-TS_CUM[Math.max(0,Math.min(DAYS,a))];
+/* A minute to day-units from day zero. */
+function tsUnitsAt(tmin){
+  const d=Math.floor(tmin/1440);
+  if(d<0) return TS_CUM[0]+(tmin/1440);
+  if(d>=DAYS) return TS_CUM[DAYS]+(tmin/1440-DAYS);
+  return TS_CUM[d]+((tmin-d*1440)/1440)*TS_DAYW[d];
+}
+/* And back again, by binary search over the prefix sums. */
+function tsMinAt(units){
+  if(units<=TS_CUM[0]) return units*1440;
+  if(units>=TS_CUM[DAYS]) return (DAYS+(units-TS_CUM[DAYS]))*1440;
+  let lo=0,hi=DAYS;
+  while(lo<hi-1){ const m=(lo+hi)>>1; if(TS_CUM[m]<=units) lo=m; else hi=m; }
+  return (lo+((units-TS_CUM[lo])/TS_DAYW[lo]))*1440;
+}
 const tsSpanDays=()=>Math.max(1,Math.min(DAYS,Math.round(state.ts.n*TS_UNIT_DAYS[state.ts.unit])));
-const tsMaxPx=()=>Math.min(TS_PXMAX,TS_MAXCANVAS/tsSpanDays());
+const tsMaxPx=()=>Math.min(TS_PXMAX,TS_MAXCANVAS/Math.max(1,tsSpanUnits(Math.max(0,DAYS-tsSpanDays()),DAYS)));
 const TS_UNIT_MIN={sec:1/60,min:1,hour:60,day:1440};
 const TS_TIERS=[
   {unit:"sec",step:1},{unit:"sec",step:5},{unit:"sec",step:15},{unit:"sec",step:30},
@@ -5527,7 +5559,9 @@ function paneTimeseries(){
     strip+host+legend,
     "<b>Scroll on the chart to zoom</b> — the point under the cursor stays put — and drag the scrollbar to travel. "+
     "Zooming in far enough takes the axis from months down to days, hours, minutes and finally seconds, which is the scale a burst or a layered order is actually read at. "+
-    "<b>Drag the grip</b> under the chart to give it more of the screen. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. "+
+    "<b>Drag the grip</b> under the chart to give it more of the screen. "+
+    "Weekends and holidays are the narrow shaded columns, drawn at a fifth of a weekday's width so the days that carry the trading get the room — the axis is continuous in time but not linear in it. "+
+    "On the time-of-day axis the shaded bands are the hours outside every desk's window. "+
     "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal.");
 }
 
@@ -5551,8 +5585,11 @@ function tsDraw(){
   const iAll0=tsLower(all,t0);
 
   const padL=58, padT=16, padB=30;
-  const pxPerMin=S.px/1440;
-  const totalW=Math.max(1,(t1-t0)*pxPerMin);
+  const pxPerMin=S.px/1440;                 // weekday minutes; weekends run at a fifth of it
+  const u0=tsUnitsAt(t0);
+  const tsX=tm=>(tsUnitsAt(tm)-u0)*S.px;    // minute to pixel on the piecewise axis
+  const tsT=x=>tsMinAt(u0+x/S.px);          // and back
+  const totalW=Math.max(1,tsSpanUnits(d0,DAYS)*S.px);
   canvas.style.width=Math.round(totalW)+"px";
   /* The plot is sized from the scroller's own content box rather than the panel's,
      and a gutter is reserved whenever the content overflows. Two different things
@@ -5572,7 +5609,7 @@ function tsDraw(){
   const over=viewW;                                    // one screen of overscan each way
   const left=Math.max(0,wrap.scrollLeft-over);
   const right=Math.min(totalW,wrap.scrollLeft+viewW+over);
-  const mFrom=t0+left/pxPerMin, mTo=t0+right/pxPerMin;
+  const mFrom=tsT(left), mTo=tsT(right);
 
   // Colour and shape registries come from the whole window, so a scroll never
   // repaints a category in a different colour.
@@ -5608,14 +5645,14 @@ function tsDraw(){
   const nMax=Math.max(1,...win.map(t=>t.notional));
   const rBase=S.px>=600?9.5:S.px>=120?7.4:5.2;
   const rOf=n=>1.7+Math.sqrt(Math.max(0,n)/nMax)*rBase;
-  const X=tm=>(tm-mFrom)*pxPerMin;                     // local to the drawn slab
+  const X=tm=>tsX(tm)-left;                            // local to the drawn slab
   const slabW=Math.max(1,right-left);
 
   let g="";
   const dFrom=Math.floor(mFrom/1440), dTo=Math.ceil(mTo/1440);
   for(let d=dFrom;d<=dTo;d++){
     if(d<0||d>=DAYS) continue;
-    const dt=dateForIdx(d), x=X(d*1440), w=1440*pxPerMin;
+    const dt=dateForIdx(d), x=X(d*1440), w=TS_DAYW[d]*S.px;
     if(!isBiz(dt)) g+='<rect x="'+x.toFixed(1)+'" y="'+padT+'" width="'+w.toFixed(1)+'" height="'+plotH+'" fill="var(--fail)" opacity=".05"/>';
     else if(S.y==="hour")
       g+='<rect x="'+x.toFixed(1)+'" y="'+yPx(24).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(yPx(19.5)-yPx(24)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>'+
@@ -5640,9 +5677,14 @@ function tsDraw(){
     const s=Math.round((mins-Math.floor(mins))*60);
     return pad2(Math.floor(mins/60))+":"+pad2(Math.floor(mins%60))+":"+pad2(s);
   };
-  let tk=Math.ceil(mFrom/stepMin)*stepMin, guard=0;
-  while(tk<=mTo&&guard++<4000){
+  /* Ticks are generated in time but spaced in pixels: inside a compressed weekend
+     the axis advances five times more slowly, so a step that reads well on a
+     Wednesday would stack four labels on top of each other on a Saturday. */
+  let tk=Math.ceil(mFrom/stepMin)*stepMin, guard=0, lastX=-1e9;
+  while(tk<=mTo&&guard++<8000){
     const x=X(tk);
+    if(x-lastX<TS_LABEL_PX*0.72){ tk+=stepMin; continue; }
+    lastX=x;
     g+='<line x1="'+x.toFixed(1)+'" y1="'+padT+'" x2="'+x.toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--hair)" opacity=".6"/>'+
        '<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+14)+'" text-anchor="middle" font-size="'+cf(8.5)+
        '" fill="var(--ink-3)" font-family="var(--mono)">'+esc(fmtTick(tk))+"</text>";
@@ -5672,7 +5714,7 @@ function tsDraw(){
   });
 
   if(!slice.length){
-    const span=viewW/pxPerMin;
+    const span=Math.max(1e-6,tsT(wrap.scrollLeft+viewW)-tsT(wrap.scrollLeft));
     g+='<text x="'+((wrap.scrollLeft-left)+viewW/2).toFixed(1)+'" y="'+(padT+plotH/2).toFixed(1)+
       '" text-anchor="middle" font-size="'+cf(11)+'" fill="var(--ink-3)">'+
       esc("No deals in this "+(span<2?Math.round(span*60)+"-second":span<180?Math.round(span)+"-minute":
@@ -5735,17 +5777,20 @@ function tsZoom(factor,clientX){
   const S=state.ts;
   const r=wrap.getBoundingClientRect();
   const ax=(clientX==null?r.width/2:clientX-r.left);       // anchor within the viewport
-  const before=(wrap.scrollLeft+ax)/(S.px/1440);           // minutes under the cursor
+  const spanDays=tsSpanDays();
+  const u0=tsUnitsAt(Math.max(0,DAYS-spanDays)*1440);
+  const before=u0+(wrap.scrollLeft+ax)/S.px;              // day-units under the cursor
   S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),S.px*factor));
   tsDraw();
-  wrap.scrollLeft=Math.max(0,before*(S.px/1440)-ax);       // hold that minute still
+  wrap.scrollLeft=Math.max(0,(before-u0)*S.px-ax);        // hold that instant still
   tsSchedule();
 }
 function tsFit(){
   const wrap=$("#ts-wrap"); if(!wrap) return;
   const S=state.ts;
   const spanDays=tsSpanDays();
-  S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),(wrap.clientWidth-4)/spanDays));
+  S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),
+    (wrap.clientWidth-4)/Math.max(1,tsSpanUnits(Math.max(0,DAYS-spanDays),DAYS))));
   wrap.scrollLeft=0; tsDraw();
 }
 /* Bound once, delegated, because the pane's nodes are replaced on every render. */
