@@ -5551,10 +5551,21 @@ function tsDraw(){
   const iAll0=tsLower(all,t0);
 
   const padL=58, padT=16, padB=30;
-  const H=Math.max(220,host.clientHeight||S.h), plotH=H-padT-padB;
   const pxPerMin=S.px/1440;
   const totalW=Math.max(1,(t1-t0)*pxPerMin);
   canvas.style.width=Math.round(totalW)+"px";
+  /* The plot is sized from the scroller's own content box rather than the panel's,
+     and a gutter is reserved whenever the content overflows. Two different things
+     were putting the horizontal scrollbar over the date labels: the SVG was drawn
+     to the panel height, which is taller than the area the scroller actually shows;
+     and where the platform draws overlay scrollbars — as this one does — the bar
+     floats above the content and clientHeight reserves nothing for it. A classic
+     scrollbar is already excluded from clientHeight, so the manual gutter is only
+     added when the measurement comes back zero. */
+  const overflowing=totalW>wrap.clientWidth+1;
+  const sbH=Math.max(0,wrap.offsetHeight-wrap.clientHeight);
+  const gutter=overflowing&&sbH===0?14:0;
+  const H=Math.max(200,(wrap.clientHeight||S.h)-gutter), plotH=H-padT-padB;
   canvas.style.height=H+"px";
 
   const viewW=wrap.clientWidth||600;
