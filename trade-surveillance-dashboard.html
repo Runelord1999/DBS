@@ -3884,7 +3884,13 @@ function hlApply(spec){
       "{outline:2px solid var(--ink);outline-offset:-2px;z-index:6;position:relative}"+
     ".hl-active .hlrow"+sel+",.hl-active tr"+sel+
       "{background:color-mix(in srgb,var(--brand) 16%,transparent)}"+
-    ".hl-active rect"+sel+",.hl-active circle"+sel+"{stroke:var(--ink);stroke-width:1.6}";
+    /* Every shape a mark can be drawn as, not just the two the first charts used.
+       The time series draws a dot as one of nine shapes — six of them polygons and
+       one a path — so a selector naming only rect and circle outlined a trader
+       whose asset classes happened to land on a circle or a square and silently
+       skipped everyone else. */
+    ".hl-active rect"+sel+",.hl-active circle"+sel+",.hl-active ellipse"+sel+
+      ",.hl-active polygon"+sel+",.hl-active path"+sel+"{stroke:var(--ink);stroke-width:1.6}";
   document.body.classList.add("hl-active");
   const aggs={a:hlAggregate(spec),t:hlTradeAggregate(spec)};
   hlPaintAggregates(aggs,spec);
@@ -5582,7 +5588,14 @@ function tsDraw(){
   const host=$("#ts-host"), wrap=$("#ts-wrap"), canvas=$("#ts-canvas"),
         svg=$("#ts-svg"), axis=$("#ts-axis");
   if(!host||!wrap||!svg) return;
-  const S=state.ts, enc=tsEncOf();
+  const S=state.ts;
+  /* The scale fields are read by the draw, the zoom, the scroll handler and the
+     resize grip, so a missing or corrupted one turns every coordinate into NaN and
+     the SVG silently refuses the whole slab. Normalise once, here. */
+  if(!(S.px>0)) S.px=16;
+  if(!(S.h>0)) S.h=470;
+  if(!S.pick||!Array.isArray(S.pick.trader)) S.pick={trader:[]};
+  const enc=tsEncOf();
   const shapeDim=enc.length===1?enc[0]:"ac";
   const colorDim=enc.length===1?enc[0]:enc.find(d=>d!=="ac")||"ac";
 
@@ -5631,7 +5644,11 @@ function tsDraw(){
   else { const pal=tsPalette(colorKeys.length); colorKeys.forEach((k,i)=>colorOf[k]=pal[i]); }
 
   let slice=all.slice(tsLower(all,mFrom),tsLower(all,mTo));
-  const CAP=7000, thinned=slice.length>CAP;
+  /* Thinned low enough that every drawn dot can afford to be interactive. A
+     denser slab was not worth the trade: past this many dots the chart reads as
+     a mass anyway, and the old cap left the default view with 5,877 dots that
+     could not be hovered at all. */
+  const CAP=4500, thinned=slice.length>CAP;
   if(thinned) slice=slice.filter((_,i)=>i%Math.ceil(slice.length/CAP)===0);
 
   const yDefs={
@@ -5704,19 +5721,22 @@ function tsDraw(){
     tk+=stepMin;
   }
 
-  const wire=slice.length<=5000;
+  /* Three tiers, because the cost is not evenly spread. The highlight hooks are a
+     few short attributes and go on every dot, so hovering one always lights that
+     trader across the page. The tooltip label is longer and the detail table longer
+     still, so those are rationed — a chart showing thousands of dots is being read
+     as a shape, not interrogated ticket by ticket. */
+  const label=slice.length<=3000, detail=slice.length<=1500;
   slice.slice().sort((a,b)=>b.notional-a.notional).forEach(t=>{
     const r=rOf(t.notional), x=X(t.tmin), y=yPx(Y.val(t));
-    const extra=wire
-      ? 'data-trade="'+t.id+'" data-hlsrc="trader|'+t.traderId+'" data-hl-trader="'+t.traderId+
-        '" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+' '+hlDim("product",t.product)+
-        ' style="cursor:pointer" data-tip="'+esc(t.trader+" · "+t.product)+
-        '" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" · "+t.deskShort)+
-        '" data-tiptable="'+esc(["Notional|"+fmtM(t.notional),"Instrument|"+t.instrument,
-          "Direction|"+t.dir,"Counterparty|"+t.ctpy,
-          "Deviation|"+(t.devBps>0?"+":"")+(t.devBps||0).toFixed(1)+" bps",
-          "Tenor|"+(t.tenor||"—")].join("§"))+'"'
-      : 'pointer-events="none"';
+    let extra='data-trade="'+t.id+'" data-hlsrc="trader|'+t.traderId+'" data-hl-trader="'+t.traderId+
+      '" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+' style="cursor:pointer"';
+    if(label) extra+=' data-tip="'+esc(t.trader+" · "+t.product)+
+      '" data-tipsub="'+esc(fmtDateShort(t.date)+" "+fmtTime(t.execMin)+" · "+t.deskShort)+'"';
+    if(detail) extra+=' data-tiptable="'+esc(["Notional|"+fmtM(t.notional),"Instrument|"+t.instrument,
+      "Direction|"+t.dir,"Counterparty|"+t.ctpy,
+      "Deviation|"+(t.devBps>0?"+":"")+(t.devBps||0).toFixed(1)+" bps",
+      "Tenor|"+(t.tenor||"\u2014")].join("§"))+'"';
     g+=tsMark(shapeOf[tsKeyer(shapeDim)(t)]||"circle",x,y,r,
       colorOf[tsKeyer(colorDim)(t)]||"var(--run)",
       'fill-opacity="'+(r>7?".62":".78")+'" stroke="var(--panel)" stroke-width=".6" '+extra);
