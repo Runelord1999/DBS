@@ -503,10 +503,20 @@ tr.clickable:hover .expandhint{opacity:1}
 .ip-v{font-size:0.6875rem;line-height:1.5;color:var(--ink-2);margin-top:3px}
 /* The scatter scrolls sideways under a y axis that does not move, so the scale
    stays readable at any point in the window. */
-.tsbody{display:flex;align-items:flex-start;gap:0;padding:4px 12px 10px}
+.tsbody{display:flex;align-items:stretch;gap:0;padding:4px 12px 4px;min-height:240px}
 .tsaxis{flex:0 0 auto}
-.tswrap{flex:1 1 auto;overflow-x:auto;overflow-y:hidden;min-width:0}
-.tssvg{display:block}
+.tswrap{flex:1 1 auto;overflow-x:auto;overflow-y:hidden;min-width:0;position:relative;
+  overscroll-behavior-x:contain}
+.tswrap:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+.tscanvas{position:relative;height:100%}
+.tssvg{display:block;position:absolute;top:0}
+.tsgrip{height:11px;margin:0 16px 8px;border-radius:6px;cursor:ns-resize;
+  background:var(--panel-2);border:1px solid var(--hair);display:flex;align-items:center;justify-content:center}
+.tsgrip::after{content:"";width:34px;height:2px;border-radius:2px;background:var(--ink-3);opacity:.55}
+.tsgrip:hover{border-color:var(--brand)}
+.tsgrip:hover::after{background:var(--brand);opacity:1}
+.tspick-panel{position:fixed;width:min(320px,calc(100vw - 20px));max-height:320px;z-index:130}
+.tspick{min-width:150px}
 .tslegs{display:flex;flex-wrap:wrap;gap:6px 22px;padding:2px 16px 12px}
 .tsleg{display:flex;flex-wrap:wrap;align-items:center;gap:4px 11px;font-size:0.625rem;color:var(--ink-2)}
 .tslegh{font-size:0.5625rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-right:2px}
@@ -3588,7 +3598,9 @@ const state={
   rules:{cat:"",sort:{key:"hits",dir:-1}},
   act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
   // enc holds at most one of trader/desk, enforced where it is toggled.
-  ts:{enc:["ac"],n:3,unit:"month",y:"notional",zoom:1},
+  // px is pixels per day and runs continuously from months down to seconds;
+  // pick holds the chart's own member selection, separate from the rail.
+  ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{ac:[],trader:[],desk:[]}},
   heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
@@ -5361,118 +5373,278 @@ function tsLabel(dim,k){
     :dim==="trader"?((TRADER_BY_ID[k]||{}).name||k)
     :((DESK_BY_ID[k]||{}).short||k);
 }
+/* Zoom runs continuously in pixels per day rather than in steps, because the
+   interesting question changes with the scale: at 10px a day you are looking for a
+   month that broke pattern, at 40,000 you are looking at the ninety seconds around
+   one print. The label tier follows the scale down from months to seconds. */
+const TS_PXMIN=4, TS_PXMAX=260000;          // 260,000 px/day ≈ 3px a second
+/* Browsers stop honouring a scroll container past about 33.5 million pixels and
+   truncate it without saying so, which would quietly make the far end of a long
+   window unreachable. Hold the canvas below that and let the horizon set the
+   deepest zoom — a year still reaches five-second ticks, which is far enough. */
+const TS_MAXCANVAS=30000000;
+const tsSpanDays=()=>Math.max(1,Math.min(DAYS,Math.round(state.ts.n*TS_UNIT_DAYS[state.ts.unit])));
+const tsMaxPx=()=>Math.min(TS_PXMAX,TS_MAXCANVAS/tsSpanDays());
+const TS_UNIT_MIN={sec:1/60,min:1,hour:60,day:1440};
+const TS_TIERS=[
+  {unit:"sec",step:1},{unit:"sec",step:5},{unit:"sec",step:15},{unit:"sec",step:30},
+  {unit:"min",step:1},{unit:"min",step:5},{unit:"min",step:15},{unit:"min",step:30},
+  {unit:"hour",step:1},{unit:"hour",step:3},{unit:"hour",step:6},{unit:"hour",step:12},
+  {unit:"day",step:1},{unit:"day",step:2},{unit:"day",step:7},{unit:"day",step:14},{unit:"day",step:30},
+];
+/* Chosen by the room a label needs rather than by a zoom threshold, so ticks thin
+   out smoothly instead of collapsing into a smear at the deep end — the old table
+   put a one-second label every three pixels at full zoom. */
+const TS_LABEL_PX=64;
+function tsTier(px){
+  const perMin=px/1440;
+  for(const t of TS_TIERS) if(TS_UNIT_MIN[t.unit]*t.step*perMin>=TS_LABEL_PX) return t;
+  return TS_TIERS[TS_TIERS.length-1];
+}
+
+/* Deals in time order, cached against the rail and the chart's own member picks.
+   The window can be any slice of the year, so the draw does a binary search rather
+   than a scan — at 59,000 deals and a redraw per wheel notch that difference is
+   the difference between usable and not. */
+let TS_CACHE={sig:null,rows:null};
+function tsRows(){
+  const S=state.ts;
+  const sig=JSON.stringify([[...state.filters.trader],[...state.filters.desk],
+    [...state.filters.assetClass],S.pick.ac,S.pick.trader,S.pick.desk]);
+  if(TS_CACHE.sig===sig) return TS_CACHE.rows;
+  const pk=S.pick, has=(a,v)=>!a.length||a.indexOf(v)>=0;
+  const rows=TRADES.filter(t=>tradeMatchesRail(t)&&has(pk.ac,t.ac)&&
+      has(pk.trader,t.traderId)&&has(pk.desk,t.deskId))
+    .map(t=>{ t.tmin=t.dayIdx*1440+t.execMin; return t; })
+    .sort((a,b)=>a.tmin-b.tmin);
+  TS_CACHE={sig,rows};
+  return rows;
+}
+const tsLower=(rows,v)=>{ let lo=0,hi=rows.length;
+  while(lo<hi){ const m=(lo+hi)>>1; if(rows[m].tmin<v) lo=m+1; else hi=m; } return lo; };
+
+/* A multi-select bound to the chart rather than to the rail: the rail scopes the
+   whole page, this picks what belongs on this one plot. */
+const TS_PICK_OPTS={
+  ac:()=>ASSET_CLASSES.map(a=>[a,a]),
+  trader:()=>TRADERS.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(t=>[t.id,t.name+" · "+DESK_BY_ID[t.deskId].short]),
+  desk:()=>DESKS.map(d=>[d.id,d.name]),
+};
+const TS_PICK_NOUN={ac:"asset classes",trader:"traders",desk:"desks"};
+function tsPickBtn(dim){
+  const sel=state.ts.pick[dim], opts=TS_PICK_OPTS[dim]();
+  const lab=!sel.length?"All "+TS_PICK_NOUN[dim]
+    :sel.length===1?((opts.find(o=>o[0]===sel[0])||[])[1]||sel[0])
+    :sel.length+" "+TS_PICK_NOUN[dim]+" selected";
+  return '<label><span>'+esc((TS_DIMS.find(x=>x[0]===dim)||[])[1]||dim)+
+    (sel.length?" ("+sel.length+")":"")+'</span>'+
+    '<button type="button" class="msel-btn tspick" data-tspick="'+dim+
+    '" aria-expanded="false"><span>'+esc(lab)+"</span></button></label>";
+}
+let tsPickOpen=null;
+function closeTsPick(){
+  const p=$("#tspick-panel"); if(p) p.remove();
+  $$("[data-tspick]").forEach(b=>b.setAttribute("aria-expanded","false"));
+  tsPickOpen=null;
+}
+function openTsPick(btn){
+  closeTsPick();
+  const dim=btn.dataset.tspick, sel=state.ts.pick[dim];
+  const p=document.createElement("div");
+  p.id="tspick-panel"; p.className="msel-panel open tspick-panel";
+  p.innerHTML=TS_PICK_OPTS[dim]().map(o=>
+      '<label class="msel-item"><input type="checkbox" data-tspickv="'+dim+"|"+esc(o[0])+'" '+
+      (sel.indexOf(o[0])>=0?"checked":"")+"> "+esc(o[1])+"</label>").join("")+
+    '<div class="msel-actions"><button data-tspickall="'+dim+'">Select all</button>'+
+    '<button data-tspickclear="'+dim+'">Clear</button></div>';
+  document.body.appendChild(p);
+  const r=btn.getBoundingClientRect();
+  p.style.left=Math.round(Math.min(r.left,window.innerWidth-p.offsetWidth-10))+"px";
+  p.style.top=Math.round(Math.min(r.bottom+4,window.innerHeight-p.offsetHeight-10))+"px";
+  btn.setAttribute("aria-expanded","true");
+  tsPickOpen=dim;
+}
+
 function paneTimeseries(){
   const S=state.ts;
   const enc=tsEncOf();
-  /* One dimension carries both channels; two split them. Asset class always takes
-     shape because nine shapes is the most a reader can hold, and there are exactly
-     nine asset classes — the trader or desk then has the whole colour wheel. */
+  const shapeDim=enc.length===1?enc[0]:"ac";
+  const colorDim=enc.length===1?enc[0]:enc.find(d=>d!=="ac")||"ac";
+  const spanDays=Math.max(1,Math.min(DAYS,Math.round(S.n*TS_UNIT_DAYS[S.unit])));
+  const rows=tsRows().filter(t=>t.dayIdx>=DAYS-spanDays);
+
+  const kpis='<div class="kpis">'+
+    kpi("Deals in view",fmtNum(rows.length),spanDays+" days, rail-scoped","var(--agent)")+
+    kpi("Notional",fmtM(rows.reduce((a,t)=>a+t.notional,0)),"across the window","var(--run)")+
+    kpi("Traders",fmtNum(uniq(rows.map(t=>t.traderId)).length),"active in the window","var(--violet)")+
+    kpi("Largest ticket",fmtM(Math.max(0,...rows.map(t=>t.notional))),"single deal","var(--warn)")+
+    kpi("Outside desk hours",fmtNum(rows.filter(t=>t.execMin<420||t.execMin>=1170).length),
+      "deals booked early or late","var(--fail)")+
+    kpi("Weekend or holiday",fmtNum(rows.filter(t=>!isBiz(t.date)).length),"deals on a non-business day","var(--gold)")+
+    "</div>";
+
+  const strip='<div class="fstrip actstrip">'+
+    '<label><span>Colour &amp; shape by</span><div class="segbtns">'+
+      TS_DIMS.map(d=>'<button data-tsenc="'+d[0]+'" aria-pressed="'+(enc.indexOf(d[0])>=0)+
+        '" data-tip="'+esc(d[1])+'" data-tipsub="'+
+        esc(d[0]==="ac"?"Combines with either trader or desk."
+           :"Trader and desk are alternatives — picking one clears the other, because a desk is a set of traders.")+
+        '">'+d[1]+"</button>").join("")+
+    "</div></label>"+
+    // One picker per active dimension: choose the dimension, then choose its members.
+    enc.map(tsPickBtn).join("")+
+    '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
+    '<label><span>&nbsp;</span><div class="segbtns">'+
+      [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
+        '<button data-tsunit="'+u[0]+'" aria-pressed="'+(S.unit===u[0])+'">'+u[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Vertical axis</span><div class="segbtns">'+
+      [["notional","Notional"],["dev","Off mid"],["tenor","Tenor"],["hour","Time of day"]].map(y=>
+        '<button data-tsy="'+y[0]+'" aria-pressed="'+(S.y===y[0])+'">'+y[1]+"</button>").join("")+
+    "</div></label>"+
+    '<label><span>Zoom</span><div class="segbtns">'+
+      '<button data-tszoomstep="-1" data-tip="Zoom out">&minus;</button>'+
+      '<button data-tszoomstep="1" data-tip="Zoom in">+</button>'+
+      '<button data-tsfit="1" data-tip="Fit the window to the panel">Fit</button>'+
+    "</div></label>"+
+    '<div class="fspacer"></div><span class="tiny" id="ts-stat">&nbsp;</span></div>';
+
+  const legend='<div class="tslegs" id="ts-legend"></div>';
+  const host='<div class="panel-body tsbody" id="ts-host" style="height:'+S.h+'px">'+
+      '<svg class="tsaxis" id="ts-axis" aria-hidden="true"></svg>'+
+      '<div class="tswrap" id="ts-wrap" tabindex="0">'+
+        '<div class="tscanvas" id="ts-canvas"><svg class="tssvg" id="ts-svg"></svg></div>'+
+      "</div></div>"+
+    // Drag the grip to give the plot more of a large screen.
+    '<div class="tsgrip" id="ts-grip" title="Drag to resize" aria-label="Resize chart"></div>';
+
+  return kpis+panel("Trade activity time series",
+    "one dot per deal · size = notional · "+
+      (enc.length===1
+        ? "colour and shape by "+((TS_DIMS.find(x=>x[0]===enc[0])||[])[1]||"").toLowerCase()
+        : "shape by asset class, colour by "+((TS_DIMS.find(x=>x[0]===colorDim)||[])[1]||"").toLowerCase()),
+    strip+host+legend,
+    "<b>Scroll on the chart to zoom</b> — the point under the cursor stays put — and drag the scrollbar to travel. "+
+    "Zooming in far enough takes the axis from months down to days, hours, minutes and finally seconds, which is the scale a burst or a layered order is actually read at. "+
+    "<b>Drag the grip</b> under the chart to give it more of the screen. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. "+
+    "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal.");
+}
+
+/* The draw. Only the visible slice is built, with a screen of overscan either
+   side, because a ten-day window at second resolution is a canvas 2.6 million
+   pixels wide and no browser will render an SVG that size. The canvas div carries
+   the full width so the scrollbar is honest about how much there is to travel. */
+function tsDraw(){
+  const host=$("#ts-host"), wrap=$("#ts-wrap"), canvas=$("#ts-canvas"),
+        svg=$("#ts-svg"), axis=$("#ts-axis");
+  if(!host||!wrap||!svg) return;
+  const S=state.ts, enc=tsEncOf();
   const shapeDim=enc.length===1?enc[0]:"ac";
   const colorDim=enc.length===1?enc[0]:enc.find(d=>d!=="ac")||"ac";
 
-  const spanDays=Math.max(1,Math.min(DAYS,Math.round(S.n*TS_UNIT_DAYS[S.unit])));
-  const d0=Math.max(0,DAYS-spanDays), d1=DAYS-1;
-  const rows=TRADES.filter(t=>tradeMatchesRail(t)&&t.dayIdx>=d0);
+  const spanDays=tsSpanDays();
+  S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),S.px));   // the horizon may have shrunk since
+  const d0=Math.max(0,DAYS-spanDays);
+  const t0=d0*1440, t1=DAYS*1440;
+  const all=tsRows();
+  const iAll0=tsLower(all,t0);
 
-  // Category registries, built only from what is actually in view.
-  const shapeKeys=uniq(rows.map(tsKeyer(shapeDim))).sort();
-  const colorKeys=uniq(rows.map(tsKeyer(colorDim))).sort();
+  const padL=58, padT=16, padB=30;
+  const H=Math.max(220,host.clientHeight||S.h), plotH=H-padT-padB;
+  const pxPerMin=S.px/1440;
+  const totalW=Math.max(1,(t1-t0)*pxPerMin);
+  canvas.style.width=Math.round(totalW)+"px";
+  canvas.style.height=H+"px";
+
+  const viewW=wrap.clientWidth||600;
+  const over=viewW;                                    // one screen of overscan each way
+  const left=Math.max(0,wrap.scrollLeft-over);
+  const right=Math.min(totalW,wrap.scrollLeft+viewW+over);
+  const mFrom=t0+left/pxPerMin, mTo=t0+right/pxPerMin;
+
+  // Colour and shape registries come from the whole window, so a scroll never
+  // repaints a category in a different colour.
+  const win=all.slice(iAll0,tsLower(all,t1));
+  const shapeKeys=uniq(win.map(tsKeyer(shapeDim))).sort();
+  const colorKeys=uniq(win.map(tsKeyer(colorDim))).sort();
   const shapeOf={}; shapeKeys.forEach((k,i)=>shapeOf[k]=TS_SHAPES[i%TS_SHAPES.length]);
   const colorOf={};
   if(colorDim==="ac") colorKeys.forEach(k=>colorOf[k]=AC_COLOR[k]||"var(--run)");
   else { const pal=tsPalette(colorKeys.length); colorKeys.forEach((k,i)=>colorOf[k]=pal[i]); }
 
-  /* Too many dots is not a rendering problem, it is a reading problem: past a few
-     thousand the chart is a smear and the officer learns nothing. Thin evenly and
-     say so, rather than quietly drawing a fraction of the book. */
-  const CAP=7000;
-  const shown=rows.length>CAP
-    ? rows.filter((_,i)=>i%Math.ceil(rows.length/CAP)===0)
-    : rows;
-  const thinned=shown.length<rows.length;
+  let slice=all.slice(tsLower(all,mFrom),tsLower(all,mTo));
+  const CAP=7000, thinned=slice.length>CAP;
+  if(thinned) slice=slice.filter((_,i)=>i%Math.ceil(slice.length/CAP)===0);
 
-  const dayW=[9,16,30,58][S.zoom]||16;
-  const padL=58, padR=22, padT=16, padB=30;
-  const plotW=Math.max(400,spanDays*dayW);
-  const W=padL+plotW+padR, H=470, plotH=H-padT-padB;
-
-  // Y scales. Notional is read on a log axis because a book spans four orders of
-  // magnitude and a linear axis puts every flow ticket on the floor.
   const yDefs={
-    notional:{lab:"Notional",fmt:v=>fmtM(Math.pow(10,v)),
-      val:t=>Math.log10(Math.max(0.1,t.notional))},
-    /* Unclamped on purpose. Capping the scale railed a tenth of the book onto the
-       axis edge, where a hundred unrelated prints read as one dense cluster — and
-       the far-from-mid print is the entire reason to look at this axis. */
-    dev:{lab:"Deviation from mid (bps)",fmt:v=>(v>0?"+":"")+v.toFixed(0),
-      val:t=>t.devBps||0},
+    notional:{lab:"Notional",fmt:v=>fmtM(Math.pow(10,v)),val:t=>Math.log10(Math.max(0.1,t.notional))},
+    dev:{lab:"Deviation from mid (bps)",fmt:v=>(v>0?"+":"")+v.toFixed(0),val:t=>t.devBps||0},
     tenor:{lab:"Tenor (years)",fmt:v=>v<1?Math.round(v*12)+"m":v.toFixed(1)+"y",
-      // t.tenor is the quoted label — "3M", "1Y" — so it has to be resolved to years.
       val:t=>{const y=tenorYears(t.tenor); return isFinite(y)?y:0;}},
-    hour:{lab:"Execution time",fmt:v=>pad2(Math.round(v))+":00",
-      val:t=>t.execMin/60},
+    hour:{lab:"Execution time",fmt:v=>pad2(Math.round(v))+":00",val:t=>t.execMin/60},
   };
   const Y=yDefs[S.y]||yDefs.notional;
+  // Scaled on the whole window, never on the visible slice — an axis that
+  // rescaled as you scrolled would make two dots at the same height mean
+  // different things at different scroll positions.
   let lo=Infinity,hi=-Infinity;
-  shown.forEach(t=>{const v=Y.val(t); if(v<lo)lo=v; if(v>hi)hi=v;});
+  win.forEach(t=>{const v=Y.val(t); if(v<lo)lo=v; if(v>hi)hi=v;});
   if(!isFinite(lo)){lo=0;hi=1;}
-  if(hi-lo<1e-6){hi=lo+1;}
-  if(S.y==="hour"){ lo=0; hi=24; }          // a day is 24 hours; do not pad it into 26
-  else { const padv=(hi-lo)*0.08; lo-=padv; hi+=padv; }
+  if(hi-lo<1e-6) hi=lo+1;
+  if(S.y==="hour"){ lo=0; hi=24; } else { const pv=(hi-lo)*0.08; lo-=pv; hi+=pv; }
   const yPx=v=>padT+plotH-((v-lo)/(hi-lo))*plotH;
-
-  // Notional drives radius on a square-root scale, so area — not width — reads as size.
-  const nMax=Math.max(1,...shown.map(t=>t.notional));
-  const rOf=n=>1.7+Math.sqrt(Math.max(0,n)/nMax)*(S.zoom>=2?7.4:5.2);
-  const xOf=t=>padL+(t.dayIdx-d0+t.execMin/1440)*dayW;
+  const nMax=Math.max(1,...win.map(t=>t.notional));
+  const rBase=S.px>=600?9.5:S.px>=120?7.4:5.2;
+  const rOf=n=>1.7+Math.sqrt(Math.max(0,n)/nMax)*rBase;
+  const X=tm=>(tm-mFrom)*pxPerMin;                     // local to the drawn slab
+  const slabW=Math.max(1,right-left);
 
   let g="";
-  // Weekend and out-of-hours shading: a dot standing in a shaded band is a dot
-  // booked when nobody was watching, and that should be visible before it is read.
-  for(let d=d0;d<=d1;d++){
-    const dt=dateForIdx(d), x=padL+(d-d0)*dayW;
-    if(!isBiz(dt)){
-      g+='<rect x="'+x.toFixed(1)+'" y="'+padT+'" width="'+dayW.toFixed(1)+'" height="'+plotH+
-        '" fill="var(--fail)" opacity=".05"/>';
-    }else if(S.y==="hour"){
-      g+='<rect x="'+x.toFixed(1)+'" y="'+yPx(24).toFixed(1)+'" width="'+dayW.toFixed(1)+'" height="'+(yPx(19.5)-yPx(24)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>'+
-         '<rect x="'+x.toFixed(1)+'" y="'+yPx(7).toFixed(1)+'" width="'+dayW.toFixed(1)+'" height="'+(yPx(0)-yPx(7)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>';
-    }
-    if(dayW>=26||dt.getDate()===1||(dayW>=14&&dt.getDay()===1)){
-      g+='<line x1="'+x.toFixed(1)+'" y1="'+padT+'" x2="'+x.toFixed(1)+'" y2="'+(padT+plotH)+
-        '" stroke="var(--hair)" opacity=".7"/>';
-    }
+  const dFrom=Math.floor(mFrom/1440), dTo=Math.ceil(mTo/1440);
+  for(let d=dFrom;d<=dTo;d++){
+    if(d<0||d>=DAYS) continue;
+    const dt=dateForIdx(d), x=X(d*1440), w=1440*pxPerMin;
+    if(!isBiz(dt)) g+='<rect x="'+x.toFixed(1)+'" y="'+padT+'" width="'+w.toFixed(1)+'" height="'+plotH+'" fill="var(--fail)" opacity=".05"/>';
+    else if(S.y==="hour")
+      g+='<rect x="'+x.toFixed(1)+'" y="'+yPx(24).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(yPx(19.5)-yPx(24)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>'+
+         '<rect x="'+x.toFixed(1)+'" y="'+yPx(7).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(yPx(0)-yPx(7)).toFixed(1)+'" fill="var(--fail)" opacity=".05"/>';
   }
-  // Gridlines and the y axis, drawn before the dots so nothing sits on top of data.
   const TICKS=6;
   for(let i=0;i<=TICKS;i++){
-    const v=lo+(hi-lo)*i/TICKS, y=yPx(v);
-    g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(padL+plotW)+'" y2="'+y.toFixed(1)+
-      '" stroke="var(--hair)" stroke-dasharray="'+(S.y==="dev"&&Math.abs(v)<(hi-lo)/TICKS/2?"0":"2 3")+'"/>';
+    const y=yPx(lo+(hi-lo)*i/TICKS);
+    g+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+slabW.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="2 3"/>';
   }
   if(S.y==="dev"&&lo<0&&hi>0)
-    g+='<line x1="'+padL+'" y1="'+yPx(0).toFixed(1)+'" x2="'+(padL+plotW)+'" y2="'+yPx(0).toFixed(1)+
-      '" stroke="var(--ink-3)" opacity=".55"/>';
+    g+='<line x1="0" y1="'+yPx(0).toFixed(1)+'" x2="'+slabW.toFixed(1)+'" y2="'+yPx(0).toFixed(1)+'" stroke="var(--ink-3)" opacity=".55"/>';
 
-  // Date labels, thinned to whatever the current day width can carry.
-  const every=dayW>=58?1:dayW>=30?3:dayW>=16?7:21;
-  for(let d=d0;d<=d1;d++){
-    if((d-d0)%every) continue;
-    const dt=dateForIdx(d), x=padL+(d-d0+0.5)*dayW;
-    g+='<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+14)+'" text-anchor="middle" font-size="'+cf(8.5)+
-      '" fill="var(--ink-3)" font-family="var(--mono)">'+fmtDateShort(dt)+"</text>";
-    if(dt.getDate()<=7&&every<=7)
+  /* Time ticks. The tier is chosen from the zoom, so the same code labels months
+     at one end of the range and seconds at the other. */
+  const tier=tsTier(S.px), stepMin=TS_UNIT_MIN[tier.unit]*tier.step;
+  const fmtTick=tm=>{
+    const d=Math.floor(tm/1440), mins=tm-d*1440, dt=dateForIdx(Math.max(0,Math.min(DAYS-1,d)));
+    if(tier.unit==="day") return fmtDateShort(dt);
+    if(tier.unit==="hour") return pad2(Math.floor(mins/60))+":00";
+    if(tier.unit==="min") return pad2(Math.floor(mins/60))+":"+pad2(Math.floor(mins%60));
+    const s=Math.round((mins-Math.floor(mins))*60);
+    return pad2(Math.floor(mins/60))+":"+pad2(Math.floor(mins%60))+":"+pad2(s);
+  };
+  let tk=Math.ceil(mFrom/stepMin)*stepMin, guard=0;
+  while(tk<=mTo&&guard++<4000){
+    const x=X(tk);
+    g+='<line x1="'+x.toFixed(1)+'" y1="'+padT+'" x2="'+x.toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--hair)" opacity=".6"/>'+
+       '<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+14)+'" text-anchor="middle" font-size="'+cf(8.5)+
+       '" fill="var(--ink-3)" font-family="var(--mono)">'+esc(fmtTick(tk))+"</text>";
+    // A date under the clock, so a reader zoomed to the minute still knows the day.
+    if(tier.unit!=="day"&&Math.abs(tk%1440)<stepMin)
       g+='<text x="'+x.toFixed(1)+'" y="'+(padT+plotH+24)+'" text-anchor="middle" font-size="'+cf(7.5)+
-        '" fill="var(--ink-3)" opacity=".8">'+MONTHS[dt.getMonth()]+"</text>";
+         '" fill="var(--ink-3)" opacity=".85">'+esc(fmtDateShort(dateForIdx(Math.floor(tk/1440))))+"</text>";
+    tk+=stepMin;
   }
 
-  /* The dots. Sorted large-first so a block never hides behind the flow it dwarfs,
-     and painted at partial opacity so density itself carries information: a solid
-     patch is a cluster, not a single deal. */
-  const wire=shown.length<=5000;
-  const pts=shown.slice().sort((a,b)=>b.notional-a.notional);
-  pts.forEach(t=>{
-    const r=rOf(t.notional), x=xOf(t), y=yPx(Y.val(t));
+  const wire=slice.length<=5000;
+  slice.slice().sort((a,b)=>b.notional-a.notional).forEach(t=>{
+    const r=rOf(t.notional), x=X(t.tmin), y=yPx(Y.val(t));
     const extra=wire
       ? 'data-trade="'+t.id+'" data-hlsrc="trader|'+t.traderId+'" data-hl-trader="'+t.traderId+
         '" data-hl-desk="'+t.deskId+'" '+hlDim("ac",t.ac)+' '+hlDim("product",t.product)+
@@ -5488,9 +5660,19 @@ function paneTimeseries(){
       'fill-opacity="'+(r>7?".62":".78")+'" stroke="var(--panel)" stroke-width=".6" '+extra);
   });
 
-  const chart='<div class="tswrap"><svg class="tssvg" width="'+W+'" height="'+H+
-    '" viewBox="0 0 '+W+" "+H+'" role="img">'+g+"</svg></div>";
-  // The y axis rides outside the scroller, so it stays put while the years move.
+  if(!slice.length){
+    const span=viewW/pxPerMin;
+    g+='<text x="'+((wrap.scrollLeft-left)+viewW/2).toFixed(1)+'" y="'+(padT+plotH/2).toFixed(1)+
+      '" text-anchor="middle" font-size="'+cf(11)+'" fill="var(--ink-3)">'+
+      esc("No deals in this "+(span<2?Math.round(span*60)+"-second":span<180?Math.round(span)+"-minute":
+        Math.round(span/60)+"-hour")+" view \u2014 zoom out or scroll along")+"</text>";
+  }
+  svg.setAttribute("width",Math.round(slabW));
+  svg.setAttribute("height",H);
+  svg.setAttribute("viewBox","0 0 "+Math.round(slabW)+" "+H);
+  svg.style.left=Math.round(left)+"px";
+  svg.innerHTML=g;
+
   let ax="";
   for(let i=0;i<=TICKS;i++){
     const v=lo+(hi-lo)*i/TICKS;
@@ -5499,86 +5681,94 @@ function paneTimeseries(){
   }
   ax+='<text x="13" y="'+(padT+plotH/2).toFixed(1)+'" transform="rotate(-90 13 '+(padT+plotH/2).toFixed(1)+
     ')" text-anchor="middle" font-size="'+cf(9)+'" fill="var(--ink-2)" font-weight="700">'+esc(Y.lab)+"</text>";
-  const axis='<svg class="tsaxis" width="'+padL+'" height="'+H+'" viewBox="0 0 '+padL+" "+H+'" aria-hidden="true">'+ax+"</svg>";
+  axis.setAttribute("width",padL); axis.setAttribute("height",H);
+  axis.setAttribute("viewBox","0 0 "+padL+" "+H);
+  axis.innerHTML=ax;
 
-  /* Controls. Trader and desk are offered as one exclusive pair rather than
-     silently dropping whichever was picked second. */
-  const strip='<div class="fstrip actstrip">'+
-    '<label><span>Colour &amp; shape by</span><div class="segbtns">'+
-      TS_DIMS.map(d=>'<button data-tsenc="'+d[0]+'" aria-pressed="'+(enc.indexOf(d[0])>=0)+
-        '" data-tip="'+esc(d[1])+'" data-tipsub="'+
-        esc(d[0]==="ac"?"Combines with either trader or desk."
-           :"Trader and desk are alternatives — picking one clears the other, because a desk is a set of traders.")+
-        '">'+d[1]+"</button>").join("")+
-    "</div></label>"+
-    '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
-    '<label><span>&nbsp;</span><div class="segbtns">'+
-      [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
-        '<button data-tsunit="'+u[0]+'" aria-pressed="'+(S.unit===u[0])+'">'+u[1]+"</button>").join("")+
-    "</div></label>"+
-    '<label><span>Vertical axis</span><div class="segbtns">'+
-      [["notional","Notional"],["dev","Off mid"],["tenor","Tenor"],["hour","Time of day"]].map(y=>
-        '<button data-tsy="'+y[0]+'" aria-pressed="'+(S.y===y[0])+'">'+y[1]+"</button>").join("")+
-    "</div></label>"+
-    '<label><span>Day width</span><div class="segbtns">'+
-      ["XS","S","M","L"].map((z,i)=>'<button data-tszoom="'+i+'" aria-pressed="'+(S.zoom===i)+'">'+z+"</button>").join("")+
-    "</div></label>"+
-    '<div class="fspacer"></div>'+
-    '<span class="tiny">'+fmtNum(shown.length)+(thinned?" of "+fmtNum(rows.length):"")+
-      " deals · "+spanDays+" days</span></div>";
+  const stat=$("#ts-stat");
+  if(stat) stat.textContent=fmtNum(win.length)+" deals in window · "+
+    ({sec:"seconds",min:"minutes",hour:"hours",day:"days"}[tier.unit])+" resolution"+
+    (thinned?" · thinned to keep the view readable":"");
 
-  // Legends: shape and colour separately when two dimensions are in play, because
-  // one combined key would imply pairings that do not exist.
-  const legRow=(dim,keys,render)=>{
-    const cap=22, list=keys.slice(0,cap);
-    return '<div class="tsleg"><span class="tslegh">'+
-      esc((TS_DIMS.find(x=>x[0]===dim)||[])[1]||dim)+"</span>"+
-      list.map(render).join("")+
-      (keys.length>cap?'<span class="tslegmore">+'+(keys.length-cap)+" more — narrow the rail to name them</span>":"")+
-      "</div>";
-  };
-  const swatch=k=>shapeDim===colorDim
-    ? '<svg width="13" height="13" viewBox="0 0 13 13">'+
-        tsMark(shapeOf[k]||"circle",6.5,6.5,5,colorOf[k],'fill-opacity=".85"')+"</svg>"
-    : '<i style="background:'+colorOf[k]+'"></i>';
-  let legend=legRow(colorDim,colorKeys,k=>
-    '<span class="tslegi" '+hlDim(colorDim==="ac"?"ac":colorDim,k)+' data-hlsrc="'+
-      esc(colorDim+"|"+k)+'">'+swatch(k)+esc(tsLabel(colorDim,k))+"</span>");
-  if(shapeDim!==colorDim)
-    legend+=legRow(shapeDim,shapeKeys,k=>
-      '<span class="tslegi" '+hlDim("ac",k)+' data-hlsrc="ac|'+esc(k)+'">'+
-      '<svg width="13" height="13" viewBox="0 0 13 13">'+
-        tsMark(shapeOf[k],6.5,6.5,5,"var(--ink-2)","")+"</svg>"+esc(k)+"</span>");
-  // Size is a legend of its own — without it the radii are decorative.
-  const sizeTicks=[nMax*0.05,nMax*0.3,nMax].map(v=>
-    '<span class="tslegi"><svg width="'+(rOf(v)*2+4).toFixed(0)+'" height="20" viewBox="0 0 '+
-      (rOf(v)*2+4).toFixed(0)+' 20">'+tsMark("circle",rOf(v)+2,10,rOf(v),"var(--ink-3)",'fill-opacity=".55"')+
-      "</svg>"+fmtM(v)+"</span>").join("");
-  legend+='<div class="tsleg"><span class="tslegh">Notional</span>'+sizeTicks+"</div>";
-
-  const kpis='<div class="kpis">'+
-    kpi("Deals in view",fmtNum(rows.length),spanDays+" days, rail-scoped","var(--agent)")+
-    kpi("Notional",fmtM(rows.reduce((a,t)=>a+t.notional,0)),"across the window","var(--run)")+
-    kpi("Traders",fmtNum(uniq(rows.map(t=>t.traderId)).length),"active in the window","var(--violet)")+
-    kpi("Largest ticket",fmtM(Math.max(0,...rows.map(t=>t.notional))),"single deal","var(--warn)")+
-    kpi("Outside desk hours",fmtNum(rows.filter(t=>t.execMin<420||t.execMin>=1170).length),
-      "deals booked early or late","var(--fail)")+
-    kpi("Weekend or holiday",fmtNum(rows.filter(t=>!isBiz(t.date)).length),"deals on a non-business day","var(--gold)")+
-    "</div>";
-
-  return kpis+panel("Trade activity time series",
-    "one dot per deal · size = notional · "+
-      (enc.length===1
-        ? "colour and shape by "+((TS_DIMS.find(x=>x[0]===enc[0])||[])[1]||"").toLowerCase()
-        : "shape by asset class, colour by "+((TS_DIMS.find(x=>x[0]===colorDim)||[])[1]||"").toLowerCase()),
-    strip+'<div class="panel-body tsbody">'+axis+chart+"</div>"+
-    '<div class="tslegs">'+legend+"</div>"+
-    (thinned?'<div class="tsnote">Showing '+fmtNum(shown.length)+" of "+fmtNum(rows.length)+
-      " deals — evenly thinned so the chart stays readable. Shorten the horizon or narrow the rail to plot every deal.</div>":""),
-    "Scroll the chart sideways to travel the window. Shaded columns are weekends and holidays; on the time-of-day axis the shaded bands are the hours outside every desk's window. "+
-    "<b>Hover a dot</b> for the ticket and to light that trader across the page, <b>double-click</b> to open the deal. "+
-    "A book has a shape — a cadence, a size range, a time of day. What is worth opening is the deal that does not share it.");
+  const leg=$("#ts-legend");
+  if(leg){
+    const legRow=(dim,keys,render)=>{
+      const cap=22, list=keys.slice(0,cap);
+      return '<div class="tsleg"><span class="tslegh">'+
+        esc((TS_DIMS.find(x=>x[0]===dim)||[])[1]||dim)+"</span>"+list.map(render).join("")+
+        (keys.length>cap?'<span class="tslegmore">+'+(keys.length-cap)+" more — narrow the picker to name them</span>":"")+"</div>";
+    };
+    const swatch=k=>shapeDim===colorDim
+      ? '<svg width="13" height="13" viewBox="0 0 13 13">'+tsMark(shapeOf[k]||"circle",6.5,6.5,5,colorOf[k],'fill-opacity=".85"')+"</svg>"
+      : '<i style="background:'+colorOf[k]+'"></i>';
+    let html=legRow(colorDim,colorKeys,k=>
+      '<span class="tslegi" '+hlDim(colorDim==="ac"?"ac":colorDim,k)+' data-hlsrc="'+
+        esc(colorDim+"|"+k)+'">'+swatch(k)+esc(tsLabel(colorDim,k))+"</span>");
+    if(shapeDim!==colorDim)
+      html+=legRow(shapeDim,shapeKeys,k=>'<span class="tslegi" '+hlDim("ac",k)+' data-hlsrc="ac|'+esc(k)+'">'+
+        '<svg width="13" height="13" viewBox="0 0 13 13">'+tsMark(shapeOf[k],6.5,6.5,5,"var(--ink-2)","")+"</svg>"+esc(k)+"</span>");
+    html+='<div class="tsleg"><span class="tslegh">Notional</span>'+
+      [nMax*0.05,nMax*0.3,nMax].map(v=>'<span class="tslegi"><svg width="'+(rOf(v)*2+4).toFixed(0)+
+        '" height="20" viewBox="0 0 '+(rOf(v)*2+4).toFixed(0)+' 20">'+
+        tsMark("circle",rOf(v)+2,10,rOf(v),"var(--ink-3)",'fill-opacity=".55"')+"</svg>"+fmtM(v)+"</span>").join("")+"</div>";
+    leg.innerHTML=html;
+  }
+  hlRefresh();
 }
+/* Redraws are coalesced to one per frame: a wheel gesture fires dozens of events
+   and each one would otherwise rebuild the slab. */
+let tsRAF=null;
+function tsSchedule(){ if(tsRAF) return; tsRAF=requestAnimationFrame(()=>{ tsRAF=null; tsDraw(); }); }
+function tsZoom(factor,clientX){
+  const wrap=$("#ts-wrap"); if(!wrap) return;
+  const S=state.ts;
+  const r=wrap.getBoundingClientRect();
+  const ax=(clientX==null?r.width/2:clientX-r.left);       // anchor within the viewport
+  const before=(wrap.scrollLeft+ax)/(S.px/1440);           // minutes under the cursor
+  S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),S.px*factor));
+  tsDraw();
+  wrap.scrollLeft=Math.max(0,before*(S.px/1440)-ax);       // hold that minute still
+  tsSchedule();
+}
+function tsFit(){
+  const wrap=$("#ts-wrap"); if(!wrap) return;
+  const S=state.ts;
+  const spanDays=tsSpanDays();
+  S.px=Math.max(TS_PXMIN,Math.min(tsMaxPx(),(wrap.clientWidth-4)/spanDays));
+  wrap.scrollLeft=0; tsDraw();
+}
+/* Bound once, delegated, because the pane's nodes are replaced on every render. */
+(function tsBind(){
+  document.addEventListener("wheel",e=>{
+    const w=e.target.closest&&e.target.closest("#ts-wrap");
+    if(!w) return;
+    e.preventDefault();
+    tsZoom(Math.pow(0.998,e.deltaY),e.clientX);
+  },{passive:false,capture:true});
+  document.addEventListener("scroll",e=>{
+    if(e.target&&e.target.id==="ts-wrap") tsSchedule();
+  },true);
+  window.addEventListener("resize",()=>{ if(state.tab==="timeseries") tsSchedule(); });
+  // The grip resizes the plot live; the height is state, so it survives a render.
+  let drag=null;
+  document.addEventListener("pointerdown",e=>{
+    const g=e.target.closest&&e.target.closest("#ts-grip");
+    if(!g) return;
+    const host=$("#ts-host");
+    drag={y:e.clientY,h:host.clientHeight};
+    g.setPointerCapture&&g.setPointerCapture(e.pointerId);
+    document.body.style.userSelect="none";
+    e.preventDefault();
+  });
+  document.addEventListener("pointermove",e=>{
+    if(!drag) return;
+    const host=$("#ts-host"); if(!host) return;
+    state.ts.h=Math.max(240,Math.min(1400,Math.round(drag.h+(e.clientY-drag.y))));
+    host.style.height=state.ts.h+"px";
+    tsSchedule();
+  });
+  document.addEventListener("pointerup",()=>{ if(drag){ drag=null; document.body.style.userSelect=""; tsDraw(); } });
+})();
 
 /* ============================================================
    Pane — Detections queue
@@ -6346,6 +6536,7 @@ function render(){
   // The pane is rebuilt from scratch, so a pinned selection has to be
   // re-attached to the new nodes and its aggregate cache re-cut to the rail.
   hlRefresh();
+  if(state.tab==="timeseries") tsDraw();
 }
 /* One place to move the review period. A drill that widens the window and leaves
    the rail's select behind makes the sidebar lie about what the numbers cover, so
@@ -6381,7 +6572,9 @@ $("#reset-reviews").addEventListener("click",()=>{
    form) always acts on the first click, because a control is not a data point.
 ============================================================ */
 function handleChrome(t,e){
-  const mbtn=t.closest(".msel-btn");
+  /* Guarded on its own attribute: the chart's member pickers borrow this class
+     for styling, and an unguarded match here swallowed their clicks. */
+  const mbtn=t.closest(".msel-btn[data-msel]");
   if(mbtn){ const k=mbtn.dataset.msel; if(openMsel===k) closeMsel(); else buildMsel(k); return true; }
   const mall=t.closest("[data-mselall]"); if(mall){ const k=mall.dataset.mselall; state.filters[k]=new Set(MSEL_OPTS[k]); buildMsel(k); render(); return true; }
   const mclr=t.closest("[data-mselclear]"); if(mclr){ const k=mclr.dataset.mselclear; state.filters[k]=new Set(); buildMsel(k); render(); return true; }
@@ -6430,14 +6623,26 @@ function handleChrome(t,e){
   const te=t.closest("[data-tsenc]");
   if(te){
     const d=te.dataset.tsenc, cur=state.ts.enc.slice(), i=cur.indexOf(d);
-    if(i>=0){ if(cur.length>1) cur.splice(i,1); }
-    else { if(d==="trader"||d==="desk"){ const j=cur.indexOf(d==="trader"?"desk":"trader"); if(j>=0) cur.splice(j,1); }
+    /* A dimension that leaves the encoding takes its member selection with it.
+       Leaving the picks behind hid a live filter: the picker disappeared from the
+       strip while the deals it excluded stayed excluded. */
+    const drop=k=>{ const j=cur.indexOf(k); if(j>=0){ cur.splice(j,1); state.ts.pick[k]=[]; } };
+    if(i>=0){ if(cur.length>1) drop(d); }
+    else { if(d==="trader"||d==="desk") drop(d==="trader"?"desk":"trader");
            cur.push(d); }
     state.ts.enc=cur; render(); return true;
   }
   const tu=t.closest("[data-tsunit]"); if(tu){ state.ts.unit=tu.dataset.tsunit; render(); return true; }
   const ty=t.closest("[data-tsy]");    if(ty){ state.ts.y=ty.dataset.tsy; render(); return true; }
-  const tz=t.closest("[data-tszoom]"); if(tz){ state.ts.zoom=+tz.dataset.tszoom; render(); return true; }
+  const tzs=t.closest("[data-tszoomstep]");
+  if(tzs){ tsZoom(+tzs.dataset.tszoomstep>0?1.6:1/1.6,null); return true; }
+  if(t.closest("[data-tsfit]")){ tsFit(); return true; }
+  const tpb=t.closest("[data-tspick]");
+  if(tpb){ if(tsPickOpen===tpb.dataset.tspick) closeTsPick(); else openTsPick(tpb); return true; }
+  if(t.closest("[data-tspickall]")){ const d=t.closest("[data-tspickall]").dataset.tspickall;
+    state.ts.pick[d]=TS_PICK_OPTS[d]().map(o=>o[0]); closeTsPick(); render(); return true; }
+  if(t.closest("[data-tspickclear]")){ const d=t.closest("[data-tspickclear]").dataset.tspickclear;
+    state.ts.pick[d]=[]; closeTsPick(); render(); return true; }
   const am=t.closest("[data-actmetric]"); if(am){ state.act.metric=am.dataset.actmetric; render(); return true; }
   const asc=t.closest("[data-actscale]"); if(asc){ state.act.scale=asc.dataset.actscale; render(); return true; }
   const aun=t.closest("[data-actunit]"); if(aun){ state.act.unit=aun.dataset.actunit; state.act.range=""; render(); return true; }
@@ -6516,6 +6721,7 @@ document.addEventListener("click",e=>{
   if(handleDrill(t,e)) return;
   if(openMsel&&!t.closest(".msel-panel")&&!t.closest(".msel-btn")) closeMsel();
   if(infoOpen&&!t.closest("#infopop")&&!t.closest("[data-infopop]")) closeInfo();
+  if(tsPickOpen&&!t.closest("#tspick-panel")&&!t.closest("[data-tspick]")) closeTsPick();
 });
 document.addEventListener("dblclick",e=>{
   clearTimeout(_clickTimer);
@@ -6527,6 +6733,10 @@ document.addEventListener("dblclick",e=>{
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.id==="hl-toggle"){ state.highlight=t.checked; hlPinned=null; hlApply(null); return; }
+  const tv=t.dataset.tspickv;
+  if(tv){ const i=tv.indexOf("|"), d=tv.slice(0,i), v=tv.slice(i+1), a=state.ts.pick[d], j=a.indexOf(v);
+    if(t.checked){ if(j<0) a.push(v); } else if(j>=0) a.splice(j,1);
+    render(); return; }
   const mv=t.dataset.mselv;
   if(mv){ const p=mv.split("|"); const set=state.filters[p[0]];
     if(t.checked) set.add(p[1]); else set.delete(p[1]);
@@ -6563,7 +6773,7 @@ document.addEventListener("input",e=>{
               "l-search":v=>{state.log.search=v;state.log.page=0;}};
   if(live[id]){ clearTimeout(_typing); _typing=setTimeout(()=>liveInput(id,live[id]),160); }
 });
-document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); closeInfo(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); closeInfo(); closeTsPick(); } });
 
 /* ============================================================
    Boot
