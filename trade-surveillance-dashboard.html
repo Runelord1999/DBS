@@ -642,7 +642,7 @@ tr.clickable:hover .expandhint{opacity:1}
       </div>
       <div class="tabs-right">
         <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option></select>
-        <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="4" step="1" value="2" aria-label="Font size"><span class="fA big">A</span></div>
+        <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="6" step="1" value="2" aria-label="Font size"><span class="fA big">A</span></div>
       </div>
     </div>
     <div id="chiprow" class="chiprow"></div>
@@ -717,7 +717,10 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
    Theme + font-size engines — same contract as the sibling dashboards.
 ============================================================ */
 const THEME_KEY="ts-dash-theme", FS_KEY="ts-dash-fontsize";
-const FS_LEVELS=[12,14,16,18,20];
+/* Two extra steps on the large end for high-resolution monitors and for anyone
+   reading the page from a distance. Nothing added below 12px: the smallest step
+   is already at the floor of what the dense tables stay legible at. */
+const FS_LEVELS=[12,14,16,18,20,22,24];
 const THEMES=["light","dark","dbs"], DEFAULT_THEME="light";
 function normTheme(t){return THEMES.includes(t)?t:DEFAULT_THEME;}
 function applyTheme(t){t=normTheme(t);document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem(THEME_KEY,t);}catch(e){}return t;}
@@ -739,6 +742,7 @@ function applyFontSize(i){
   const tsel=$("#theme-sel");
   if(tsel){tsel.value=t;tsel.addEventListener("change",e=>applyTheme(e.target.value));}
   let fi=2;try{const v=localStorage.getItem(FS_KEY);if(v!==null)fi=+v;}catch(e){}
+  if(!(fi>=0&&fi<FS_LEVELS.length)) fi=2;   // a stored index from an older scale
   applyFontSize(fi);
   const fsel=$("#fs-sel");
   /* Redrawn on change, not inside applyFontSize: this runs before the book is
