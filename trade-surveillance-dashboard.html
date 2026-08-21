@@ -3598,9 +3598,9 @@ const state={
   rules:{cat:"",sort:{key:"hits",dir:-1}},
   act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
   // enc holds at most one of trader/desk, enforced where it is toggled.
-  // px is pixels per day and runs continuously from months down to seconds;
-  // pick holds the chart's own member selection, separate from the rail.
-  ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{ac:[],trader:[],desk:[]}},
+  // px is pixels per day and runs continuously from months down to seconds.
+  // Only trader has a chart-level picker; desk and asset class come from the rail.
+  ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{trader:[]}},
   heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
@@ -5441,12 +5441,14 @@ function tsTier(px){
 let TS_CACHE={sig:null,rows:null};
 function tsRows(){
   const S=state.ts;
+  /* The trader picks only bite while trader is an encoded dimension. Enforcing
+     that here rather than only where the dimension is switched means no other
+     path can leave a filter applied with no control on screen to show it. */
+  const pk=tsEncOf().indexOf("trader")>=0?S.pick.trader:[];
   const sig=JSON.stringify([[...state.filters.trader],[...state.filters.desk],
-    [...state.filters.assetClass],S.pick.ac,S.pick.trader,S.pick.desk]);
+    [...state.filters.assetClass],pk]);
   if(TS_CACHE.sig===sig) return TS_CACHE.rows;
-  const pk=S.pick, has=(a,v)=>!a.length||a.indexOf(v)>=0;
-  const rows=TRADES.filter(t=>tradeMatchesRail(t)&&has(pk.ac,t.ac)&&
-      has(pk.trader,t.traderId)&&has(pk.desk,t.deskId))
+  const rows=TRADES.filter(t=>tradeMatchesRail(t)&&(!pk.length||pk.indexOf(t.traderId)>=0))
     .map(t=>{ t.tmin=t.dayIdx*1440+t.execMin; return t; })
     .sort((a,b)=>a.tmin-b.tmin);
   TS_CACHE={sig,rows};
@@ -5457,13 +5459,16 @@ const tsLower=(rows,v)=>{ let lo=0,hi=rows.length;
 
 /* A multi-select bound to the chart rather than to the rail: the rail scopes the
    whole page, this picks what belongs on this one plot. */
+/* Desk and asset class are scoped by the rail, which governs every pane, so the
+   chart does not offer its own list of them — two controls for one filter is a
+   question about which one is winning. Trader keeps a picker because choosing the
+   handful of names to plot is this chart's own act, not a page-wide scope. */
 const TS_PICK_OPTS={
-  ac:()=>ASSET_CLASSES.map(a=>[a,a]),
   trader:()=>TRADERS.slice().sort((a,b)=>a.name.localeCompare(b.name))
     .map(t=>[t.id,t.name+" · "+DESK_BY_ID[t.deskId].short]),
-  desk:()=>DESKS.map(d=>[d.id,d.name]),
 };
-const TS_PICK_NOUN={ac:"asset classes",trader:"traders",desk:"desks"};
+const TS_PICK_NOUN={trader:"traders"};
+const tsHasPick=dim=>!!TS_PICK_OPTS[dim];
 function tsPickBtn(dim){
   const sel=state.ts.pick[dim], opts=TS_PICK_OPTS[dim]();
   const lab=!sel.length?"All "+TS_PICK_NOUN[dim]
@@ -5525,7 +5530,7 @@ function paneTimeseries(){
         '">'+d[1]+"</button>").join("")+
     "</div></label>"+
     // One picker per active dimension: choose the dimension, then choose its members.
-    enc.map(tsPickBtn).join("")+
+    enc.filter(tsHasPick).map(tsPickBtn).join("")+
     '<label><span>Horizon</span><input type="text" id="ts-n" class="wkin" style="width:44px" value="'+esc(String(S.n))+'"></label>'+
     '<label><span>&nbsp;</span><div class="segbtns">'+
       [["day","Days"],["week","Weeks"],["month","Months"]].map(u=>
@@ -5749,7 +5754,8 @@ function tsDraw(){
       const cap=22, list=keys.slice(0,cap);
       return '<div class="tsleg"><span class="tslegh">'+
         esc((TS_DIMS.find(x=>x[0]===dim)||[])[1]||dim)+"</span>"+list.map(render).join("")+
-        (keys.length>cap?'<span class="tslegmore">+'+(keys.length-cap)+" more — narrow the picker to name them</span>":"")+"</div>";
+        (keys.length>cap?'<span class="tslegmore">+'+(keys.length-cap)+" more — narrow the "+
+          (tsHasPick(dim)?"picker":"rail")+" to name them</span>":"")+"</div>";
     };
     const swatch=k=>shapeDim===colorDim
       ? '<svg width="13" height="13" viewBox="0 0 13 13">'+tsMark(shapeOf[k]||"circle",6.5,6.5,5,colorOf[k],'fill-opacity=".85"')+"</svg>"
@@ -6682,7 +6688,7 @@ function handleChrome(t,e){
     /* A dimension that leaves the encoding takes its member selection with it.
        Leaving the picks behind hid a live filter: the picker disappeared from the
        strip while the deals it excluded stayed excluded. */
-    const drop=k=>{ const j=cur.indexOf(k); if(j>=0){ cur.splice(j,1); state.ts.pick[k]=[]; } };
+    const drop=k=>{ const j=cur.indexOf(k); if(j>=0){ cur.splice(j,1); if(state.ts.pick[k]) state.ts.pick[k]=[]; } };
     if(i>=0){ if(cur.length>1) drop(d); }
     else { if(d==="trader"||d==="desk") drop(d==="trader"?"desk":"trader");
            cur.push(d); }
