@@ -6211,8 +6211,13 @@ function paneDetections(){
     "</tr></thead><tbody>"+page.map(a=>{
       const age=ageOf(a), breach=isOpen(a)&&SEV_RANK[a.sev]>=3&&age>3;
       const isOpenRow=state.det.open===a.id;
-      return '<tr class="clickable hlmember'+(isOpenRow?" rowopen":"")+" "+(a.sev==="Critical"?"sev-crit":a.sev==="High"?"sev-high":"")+'" data-alert="'+a.id+
-        '" data-detexpand="'+a.id+'" data-hlsrc="trader|'+a.traderId+'" '+hlAttrs(a)+">"+
+      /* Deliberately outside the highlight system — no source, no member. This is
+         a worklist read top to bottom, and re-scoping the page on every row the
+         cursor crosses, dimming the twenty-four rows either side of it, fought
+         the one thing the queue is for. The rail already filters it, so the
+         dimming was largely redundant on top. */
+      return '<tr class="clickable'+(isOpenRow?" rowopen":"")+" "+(a.sev==="Critical"?"sev-crit":a.sev==="High"?"sev-high":"")+'" data-alert="'+a.id+
+        '" data-detexpand="'+a.id+'">'+
         '<td class="mono">'+a.id+'<div class="sub2">'+fmtDateShort(a.date)+" "+a.date.getFullYear()+"</div></td>"+
         "<td><b>"+a.ruleId+'</b><div class="sub2">'+esc(a.rule)+"</div></td>"+
         "<td>"+sevTag(a.sev)+"</td>"+
@@ -6253,9 +6258,10 @@ function paneRules(){
     const dec=hits.filter(a=>!isOpen(a));
     const passed=dec.filter(a=>a.status==="Passed").length;
     const months=MONTH_KEYS.map((mk,i)=>hits.filter(a=>monthIdxOf(a.date)===i).length);
-    return '<div class="rulecard" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+
-      '" data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'" data-hl-cat="'+esc(r.cat)+'" data-hl-sev="'+r.sev+
-      '" '+hlAgg("rule",r.id,hits.length)+">"+
+    /* Also outside the highlight system. The library is a reference document —
+       fifty cards read for their wording — and having forty-nine of them fade
+       out under the cursor made it unreadable as one. */
+    return '<div class="rulecard" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+'">'+
       '<div class="rhd"><span class="rid">'+r.id+"</span><h4>"+esc(r.name)+"</h4>"+sevTag(r.sev)+"</div>"+
       "<p>"+esc(r.desc)+"</p>"+
       '<div class="logic"><b>Test:</b> '+esc(r.logic)+"</div>"+
@@ -6582,7 +6588,8 @@ function paneLog(){
     sortTh("log","reviewDay","Decided")+sortTh("log","day","Alert")+sortTh("log","rule","Rule")+sortTh("log","sev","Sev")+
     sortTh("log","trader","Trader")+"<th>Outcome</th><th>Reason recorded</th><th>Reviewer</th>"+sortTh("log","notional","Notional","r")+
     "</tr></thead><tbody>"+page.map(a=>
-      '<tr class="clickable hlmember" data-alert="'+a.id+'" data-hlsrc="trader|'+a.traderId+'" '+hlAttrs(a)+">"+
+      // Same reasoning as the detection queue: a decision log is read as a list.
+      '<tr class="clickable" data-alert="'+a.id+'">'+
       '<td class="mono">'+(a.reviewDay!=null?fmtDateShort(dateForIdx(a.reviewDay)):"—")+
         '<div class="sub2">'+(a.reviewDay!=null?(a.reviewDay-a.day)+"d after alert":"")+"</div></td>"+
       '<td class="mono">'+a.id+'<div class="sub2">'+fmtDateShort(a.date)+"</div></td>"+
