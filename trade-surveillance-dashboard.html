@@ -431,14 +431,25 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
 .toast b{color:var(--brand)}
 
 /* ---- Tooltip ---- */
-.tt{position:fixed;z-index:900;max-width:300px;background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:0.8125rem;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
+/* Sized in rem, not px: the font-size control drives the root size from 12px to
+   24px, so a box fixed at 300px held text at twice its design size at the top of
+   the scale and the values ran straight out of the right edge. The viewport term
+   keeps it on screen on a narrow window. */
+.tt{position:fixed;z-index:900;max-width:min(19rem,calc(100vw - 24px));background:var(--panel-3);border:1px solid var(--hair);color:var(--ink);font-family:var(--sans);font-size:0.8125rem;line-height:1.5;padding:9px 12px;border-radius:8px;box-shadow:0 10px 28px color-mix(in srgb,var(--ink) 24%,transparent);pointer-events:none;opacity:0;white-space:normal;overflow-wrap:break-word;transition:opacity .08s ease;left:-9999px;top:-9999px}
 .tt.show{opacity:1}
-.tt.rich{max-width:340px;padding:11px 13px}
-.tt .tt-t{font-weight:700;line-height:1.3}
-.tt .tt-s{font-size:0.75rem;color:var(--ink-3);margin-top:2px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--hair)}
-.tt .tt-g{display:grid;grid-template-columns:1fr auto;gap:4px 20px;align-items:baseline}
-.tt .tt-k{font-size:0.75rem;color:var(--ink-2);white-space:nowrap}
-.tt .tt-v{font-size:0.75rem;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right;white-space:nowrap}
+.tt.rich{max-width:min(23rem,calc(100vw - 24px));padding:11px 13px}
+.tt .tt-t{font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.tt .tt-s{font-size:0.75rem;color:var(--ink-3);margin-top:2px;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--hair);overflow-wrap:anywhere}
+/* The value track takes the space and the key track gives it up. A grid item
+   defaults to min-width:auto and will push its own track wider than the box
+   rather than wrap, so both tracks are floored at zero — but the value needs a
+   real minimum as well, or it collapses to a few characters per line and a long
+   comma list becomes a column of text metres tall. */
+.tt .tt-g{display:grid;grid-template-columns:minmax(0,auto) minmax(7em,1fr);gap:4px 16px;align-items:baseline}
+.tt .tt-k{font-size:0.75rem;color:var(--ink-2);min-width:0;overflow-wrap:break-word}
+/* Values wrap rather than run out of the box, at spaces first — break-word, not
+   anywhere, so a list breaks between its items and not mid-word. */
+.tt .tt-v{font-size:0.75rem;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right;min-width:0;overflow-wrap:break-word}
 
 .chiprow{margin-bottom:6px}
 .filterchip{display:inline-flex;align-items:center;gap:7px;font-size:0.6875rem;color:var(--ink-2);background:var(--panel-2);border:1px solid var(--hair);border-radius:20px;padding:4px 12px;margin:0 6px 6px 0}
@@ -684,7 +695,11 @@ const TIPGEN={};
     let left=x+pad, top=y-el.offsetHeight-pad;
     if(left+el.offsetWidth>window.innerWidth-8) left=Math.max(8,x-el.offsetWidth-pad);
     if(top<8) top=y+pad;
-    el.style.left=left+"px"; el.style.top=top+"px";
+    /* Flipping below the cursor can push a tall box off the bottom, which at the
+       largest font setting a ten-row table will do on a short window. Clamp both
+       edges, preferring the top when the box is taller than the viewport. */
+    top=Math.min(top,window.innerHeight-el.offsetHeight-8);
+    el.style.left=Math.max(8,left)+"px"; el.style.top=Math.max(8,top)+"px";
   }
   document.addEventListener("mousemove",e=>{
     const t=e.target.closest("[data-tip],[data-tipgen]");
