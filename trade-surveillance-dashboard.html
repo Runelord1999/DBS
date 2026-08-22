@@ -226,8 +226,11 @@ tbody tr.sev-high td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 .hlmark{position:absolute;left:0;top:0;height:100%;width:0;border-radius:3px;display:none;
   background:var(--ink);opacity:.62;box-shadow:0 0 0 1px color-mix(in srgb,var(--panel) 70%,transparent)}
 .hl-active .hl-has .hlmark{display:block}
-rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease}
+rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease;pointer-events:none}
 .hl-active rect.hlmark-svg,.hl-active rect.hlshare{opacity:.72}
+/* Hoverable only while it is actually drawn, so it never sits invisibly in front
+   of the column segment behind it. */
+.hl-active rect.hlshare{pointer-events:auto;cursor:crosshair}
 [data-hlsrc]{cursor:pointer}
 [data-hlsrc]{cursor:crosshair}
 /* Toggle in the rail + the pinned-selection badge. */
@@ -687,8 +690,13 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
    the cursor. Generators are registered later, once the data they read exists.
 ============================================================ */
 const TIPGEN={};
+/* Bumped whenever something a generator reads has changed. A generated tooltip
+   is cached against the element it came from, and the share overlay is the same
+   element from one selection to the next — without this it would keep showing
+   the previous selection's numbers while the cursor rested on it. */
+let TIPGEN_EPOCH=0;
 (function(){
-  let box=null,lastEl=null;
+  let box=null,lastEl=null,lastEpoch=-1;
   function ensure(){ if(!box){box=document.createElement("div");box.className="tt";document.body.appendChild(box);} return box; }
   function place(x,y){
     const el=ensure(),pad=14;
@@ -705,11 +713,12 @@ const TIPGEN={};
     const t=e.target.closest("[data-tip],[data-tipgen]");
     const el=ensure();
     if(!t){el.classList.remove("show");lastEl=null;return;}
-    if(t!==lastEl){
+    const gen=t.getAttribute("data-tipgen");
+    if(t!==lastEl||(gen&&lastEpoch!==TIPGEN_EPOCH)){
+      lastEpoch=TIPGEN_EPOCH;
       let title=t.getAttribute("data-tip")||"";
       let sub=t.getAttribute("data-tipsub");
       let rows=t.getAttribute("data-tiptable");
-      const gen=t.getAttribute("data-tipgen");
       if(gen&&TIPGEN[gen]){
         const d=TIPGEN[gen](t)||{};
         if(d.title!=null) title=d.title;
@@ -3897,8 +3906,15 @@ function hlPaintAggregates(aggs,sel){
   });
 }
 let hlStyleEl=null, hlPinned=null;
+/* The selection in force right now, pinned or merely hovered. hlPinned only
+   knows about the locked one. */
+let hlCurrent=null;
 function hlStyle(){ if(!hlStyleEl){ hlStyleEl=document.createElement("style"); document.head.appendChild(hlStyleEl); } return hlStyleEl; }
 function hlApply(spec){
+  // Every path that changes the selection passes through here, so this is the
+  // one place that can tell a tooltip what is currently selected.
+  hlCurrent=spec||null;
+  TIPGEN_EPOCH++;
   // Esc, a second click on the dot, or a pin from anywhere else all land here, so
   // the menu is synced from the one place every path passes through.
   const hlSel=$("#ts-hltrader");
@@ -3927,8 +3943,15 @@ function hlApply(spec){
        one a path — so a selector naming only rect and circle outlined a trader
        whose asset classes happened to land on a circle or a square and silently
        skipped everyone else. */
-    ".hl-active rect"+sel+",.hl-active circle"+sel+",.hl-active ellipse"+sel+
-      ",.hl-active polygon"+sel+",.hl-active path"+sel+"{stroke:var(--ink);stroke-width:1.6}";
+    /* Outlines go on filled marks only. A stroke-drawn mark — a donut arc is a
+       circle with fill="none" whose colour and 19px thickness are both carried
+       by its stroke — would have that stroke rewritten to a 1.6px dark line,
+       which is how selecting Critical turned the red arc into a thin dark
+       thread. Those marks already read as selected: the aggregate machinery
+       holds them at full opacity while everything else fades. */
+    ".hl-active rect"+sel+':not([fill="none"]),.hl-active circle'+sel+':not([fill="none"])'+
+      ',.hl-active ellipse'+sel+':not([fill="none"]),.hl-active polygon'+sel+':not([fill="none"])'+
+      ',.hl-active path'+sel+':not([fill="none"]){stroke:var(--ink);stroke-width:1.6}';
   document.body.classList.add("hl-active");
   const aggs={a:hlAggregate(spec),t:hlTradeAggregate(spec)};
   hlPaintAggregates(aggs,spec);
@@ -3962,12 +3985,24 @@ function hlLock(spec){ hlPinned=spec||null; hlApply(hlPinned); }
 function hlRefresh(){ HL_AGG=new Map(); HL_TAGG=new Map(); hlApply(hlPinned); }
 document.addEventListener("mouseover",e=>{
   if(!state.highlight) return;
+  /* Marks that exist only because something is selected must not be able to
+     clear that selection. The share overlay inside a column is drawn by the
+     highlight and grows under the cursor: letting it clear on hover set up a
+     loop — overlay appears, takes the pointer, clears the selection, vanishes,
+     the segment behind is hovered again, and the chart flickers. It reports the
+     selection rather than setting one, so it leaves it alone. */
+  if(e.target.closest("[data-hlkeep]")) return;
   const src=e.target.closest("[data-hlsrc]");
   if(src) hlSet(src.getAttribute("data-hlsrc")); else hlClear();
 });
 document.addEventListener("mouseout",e=>{
   if(!state.highlight) return;
-  if(!e.relatedTarget||!e.relatedTarget.closest||!e.relatedTarget.closest("[data-hlsrc]")) hlClear();
+  const to=e.relatedTarget;
+  if(!to||!to.closest) { hlClear(); return; }
+  // Leaving a source for a mark that only exists because of the selection is not
+  // leaving the selection — see the note on the mouseover handler.
+  if(to.closest("[data-hlkeep]")||to.closest("[data-hlsrc]")) return;
+  hlClear();
 });
 /* Attribute bundle every alert-bearing element carries, so one selector lights
    them all whichever dimension is hovered. */
@@ -4064,8 +4099,15 @@ function stackedBars(cats,series,opts){
     });
     // The selection's own count for this month, drawn from the baseline up: the
     // month a trader's pattern started is visible as a step in this overlay.
+    /* Carries enough to describe itself on hover: which month it belongs to, the
+       month's own total, and the scale it was drawn at, so the tooltip can read
+       the count back out of the height rather than recomputing it. Hit-testing is
+       switched on in CSS only while a selection is live — with none, the bar has
+       no height and nothing to say. */
     if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="'+(opts.cut||"")+'month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
-      '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
+      '" data-tipgen="hlshare" data-hlkeep="1" data-hl-mtot="'+tot+'" data-hl-mlabel="'+esc(c.label+(c.sub?" "+c.sub:""))+
+      '" data-hl-unit="'+esc(opts.unitLabel||"alerts")+
+      '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)"/>';
     if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="'+cf(8.5)+'" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
     g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">'+esc(c.label)+"</text>";
     if(c.sub) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+23)+'" text-anchor="middle" font-size="'+cf(7.5)+'" fill="var(--ink-3)" opacity=".8">'+esc(c.sub)+"</text>";
@@ -5720,6 +5762,35 @@ function tsCaseLabel(spec){
   if(k==="st") return v.toLowerCase()+" cases";
   return v.toLowerCase()+" severity";
 }
+
+/* The dark overlay inside a monthly column is the current selection's own count
+   for that month, drawn from the zero line so twelve months can be compared
+   against a common baseline instead of at whatever height the stack leaves each
+   segment. It had no tooltip of its own and had to be guessed at, which is a
+   poor showing for the one mark on the chart that answers "did this start here".
+   Generated rather than written in, because what it means changes with the
+   selection and the bar is redrawn on every highlight. */
+TIPGEN.hlshare=el=>{
+  if(!hlCurrent) return null;
+  const px=+el.getAttribute("data-hl-px")||0;
+  if(px<=0) return null;
+  const n=Math.round((+el.getAttribute("height")||0)/px);
+  const tot=+el.getAttribute("data-hl-mtot")||0;
+  const unit=el.getAttribute("data-hl-unit")||"alerts";
+  const month=el.getAttribute("data-hl-mlabel")||"";
+  const [k,v]=hlCurrent.split("|");
+  const who=k==="trader"?(TRADER_BY_ID[v]||{}).name||v
+    :k==="desk"?(DESK_BY_ID[v]||{}).name||v
+    :k==="rule"?v+" "+((RULE_BY_ID[v]||{}).name||"")
+    :k==="hour"?pad2(v)+":00–"+pad2((+v+1)%24)+":00"
+    :k==="month"?(MONTH_KEYS[+v]||{}).full||v:v;
+  return {title:who+" · "+month,
+    sub:fmtNum(n)+" of "+fmtNum(tot)+" "+unit+" that month",
+    rows:["Share of the month|"+(tot?(n/tot*100).toFixed(1):"0.0")+"%",
+          (HL_NOUN[k]||k)+"|"+who,
+          "Reading|"+"the bar is drawn from zero at the column's own scale, so its height is comparable across months"
+         ].join("§")};
+};
 
 /* Dot tooltips are generated on hover rather than written into every mark.
    Embedding them cost roughly 250 characters per dot — at the cap that is over
