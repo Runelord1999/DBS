@@ -3594,25 +3594,6 @@ ALERTS.forEach(a=>{
 const TRADER_STATS={};
 TRADERS.forEach(t=>TRADER_STATS[t.id]={id:t.id,name:t.name,deskId:t.deskId,cohort:t.cohort,
   trades:0,notional:0,pnl:0,alerts:0,crit:0,susp:0,score:0,rules:{}});
-TRADES.forEach(t=>{ const s=TRADER_STATS[t.traderId]; s.trades++; s.notional+=t.notional; s.pnl+=t.pnl; });
-ALERTS.forEach(a=>{
-  const s=TRADER_STATS[a.traderId]; s.alerts++;
-  if(a.sev==="Critical") s.crit++;
-  if(a.status==="Suspicious"||a.status==="Escalated") s.susp++;
-  s.score+=SEV_RANK[a.sev];
-  s.rules[a.ruleId]=(s.rules[a.ruleId]||0)+1;
-});
-/* Risk index: severity-weighted alerts per 100 of the trader's own deals, so a
-   busy name is not flagged for being busy and a quiet one cannot hide inside a
-   desk's turnover. The peer multiple restates the same number against the
-   cohort median — the comparison a desk head will ask for first. */
-Object.values(TRADER_STATS).forEach(s=>{ s.idx=s.trades?+(s.score/s.trades*100).toFixed(1):0; s.ruleCount=Object.keys(s.rules).length; });
-TRADERS.forEach(t=>{
-  const med=Math.max(0.1,median(t.peers.map(x=>TRADER_STATS[x.id].idx)));
-  TRADER_STATS[t.id].peer=+(TRADER_STATS[t.id].idx/med).toFixed(1);
-  TRADER_STATS[t.id].cohortMedian=med;
-  TRADER_STATS[t.id].cohortN=t.peers.length;
-});
 const RULE_STATS={};
 RULES.forEach(r=>RULE_STATS[r.id]={id:r.id,hits:0,open:0,passed:0,susp:0,notional:0,months:Array(12).fill(0),days:Array(DAYS).fill(0)});
 ALERTS.forEach(a=>{
@@ -3689,6 +3670,73 @@ function tradeMatchesRail(t){
   if(f.assetClass.size&&!f.assetClass.has(t.ac)) return false;
   return true;
 }
+
+/* Risk index: severity-weighted alerts per 100 of the trader's own deals, so a
+   busy name is not flagged for being busy and a quiet one cannot hide inside a
+   desk's turnover. The peer multiple restates the same number against the
+   cohort median — the comparison a desk head will ask for first.
+
+   Built against the rail rather than once at load. It used to be a single
+   all-time, whole-floor figure: filtering to one asset class changed which
+   names were listed but never their scores, so the panel answered a question
+   nobody had asked. It stays on the full twelve months deliberately — a score
+   computed over a week has denominators too small to rank anything — so the
+   window is stated on every panel that shows it.
+
+   Recomputed only when the rail actually changes; a pass over 59k deals on
+   every render would be paid for on scroll and zoom as well. */
+/* A ratio needs a denominator. Scoped to one asset class, a trader with a
+   single deal that happened to alert scores 300–400 and buries names with a
+   thousand deals and a real pattern — the top of the list becomes an artefact
+   of dividing by one. A name has to have booked at least this many deals in
+   the current scope before it can be ranked; those below it keep their stats
+   and are reported as set aside rather than silently dropped. */
+const RANK_MIN_DEALS=25;
+const rankable=s=>s.trades>=RANK_MIN_DEALS;
+/* The peer multiple compares a trader with the median of their cohort. Scoped
+   to a thin asset class the cohort can collapse to the trader alone, and the
+   multiple then reads ×1 — a comparison with oneself, dressed as a comparison
+   with peers. Below this many rankable peers it is not shown at all. */
+const PEER_MIN_COHORT=3;
+const peerText=s=>(s.cohortN>=PEER_MIN_COHORT?"\u00d7"+s.peer:"\u2014");
+const peerTip=s=>s.cohortN>=PEER_MIN_COHORT
+  ? "Versus the median of "+s.cohortN+" cohort peers"
+  : "Not shown: only "+s.cohortN+" peer"+(s.cohortN===1?"":"s")+" left in this scope, too few to compare against";
+let TRADER_STATS_SIG=null;
+function buildTraderStats(){
+  const f=state.filters;
+  const sig=JSON.stringify([[...f.trader],[...f.desk],[...f.assetClass],[...f.severity]]);
+  if(TRADER_STATS_SIG===sig) return;
+  TRADER_STATS_SIG=sig;
+  Object.values(TRADER_STATS).forEach(s=>{
+    s.trades=0; s.notional=0; s.pnl=0; s.alerts=0; s.crit=0; s.susp=0; s.score=0; s.rules={};
+  });
+  TRADES.forEach(t=>{ if(!tradeMatchesRail(t)) return;
+    const s=TRADER_STATS[t.traderId]; s.trades++; s.notional+=t.notional; s.pnl+=t.pnl; });
+  ALERTS.forEach(a=>{ if(!matchRail(a)) return;
+    const s=TRADER_STATS[a.traderId]; s.alerts++;
+    if(a.sev==="Critical") s.crit++;
+    if(a.status==="Suspicious"||a.status==="Escalated") s.susp++;
+    s.score+=SEV_RANK[a.sev];
+    s.rules[a.ruleId]=(s.rules[a.ruleId]||0)+1;
+  });
+  Object.values(TRADER_STATS).forEach(s=>{
+    s.idx=s.trades?+(s.score/s.trades*100).toFixed(1):0;
+    s.ruleCount=Object.keys(s.rules).length;
+  });
+  TRADERS.forEach(t=>{
+    /* A cohort peer with no deals left in scope scores zero, and enough of those
+       drag the median to the floor and inflate everyone's multiple. Only peers
+       still trading inside the rail anchor it. */
+    const live=t.peers.filter(x=>rankable(TRADER_STATS[x.id]));
+    const base=live.length?live:t.peers.filter(x=>TRADER_STATS[x.id].trades>0);
+    const med=Math.max(0.1,median((base.length?base:t.peers).map(x=>TRADER_STATS[x.id].idx)));
+    TRADER_STATS[t.id].peer=+(TRADER_STATS[t.id].idx/med).toFixed(1);
+    TRADER_STATS[t.id].cohortMedian=med;
+    TRADER_STATS[t.id].cohortN=(base.length?base:t.peers).length;
+  });
+}
+buildTraderStats();
 
 /* ============================================================
    Data Highlight (brushing & linking)
@@ -4971,16 +5019,16 @@ function paneOverview(){
      being readable, so it takes double. Density is the point, but a chart
      nobody can read is not density. */
   const rowB='<div class="gridw2 tight">'+
-    panel("Detection volume — daily","daily · dark fill = selection",
+    panel("Detection volume — daily","12 months · daily · dark fill = selection",
       '<div class="panel-body" style="padding-bottom:2px"><div class="chart-well">'+dailyTrend(daily,{w:900,h:236})+"</div></div>"+
       '<div class="trendkey"><span><i class="lk" style="background:var(--run)"></i>Per day</span>'+
       '<span><i class="lk" style="background:var(--violet)"></i>7-day mean</span>'+
       '<span><i class="lk" style="background:var(--ink)"></i>Selection</span></div>',
       "Hovering a name elsewhere fills in that trader's own daily series against the floor's — which is where a pattern that starts on a date separates from one that was always there.")+
-    panel("Typology fingerprint","by rule category · red = upheld",
+    panel("Typology fingerprint","12 months · by rule category · red = upheld",
       '<div class="panel-body"><div class="chart-well">'+hbars(catRows,{w:520,rowH:23,labW:150})+"</div></div>"+upheldKey,
       "The floor's mix is unremarkable; one person's is not. Hover a trader and the dark markers show how much of each category is theirs.")+
-    panel("Booking-hour profile","by execution hour · desk-local",
+    panel("Booking-hour profile","12 months · by execution hour · desk-local",
       '<div class="panel-body"><div class="chart-well">'+hourChart(hourCounts,{w:560,h:212})+"</div></div>",
       "A selection sitting outside the trading day — before the open, after the close, through the night — is the shape concealment makes.")+
     "</div>";
@@ -5004,7 +5052,7 @@ function paneOverview(){
       .sort((a,b)=>b.n-a.n||b.st.idx-a.st.idx);
     heatCols=(H.top?ranked.slice(0,H.top):ranked).map(x=>({key:x.st.id,label:x.st.name,
       tip:x.st.name,sub:DESK_BY_ID[x.st.deskId].name,
-      extra:"Risk index|"+x.st.idx.toFixed(1)+"§Versus cohort|×"+x.st.peer+"§Alerts|"+x.n,
+      extra:"Risk index|"+x.st.idx.toFixed(1)+"§Versus cohort|"+peerText(x.st)+"§Alerts|"+x.n,
       hl:"trader|"+x.st.id}));
   }else{
     heatCols=DESKS.filter(d=>!state.filters.desk.size||state.filters.desk.has(d.id))
@@ -5100,8 +5148,9 @@ function paneOverview(){
       hl:'data-hlsrc="rule|'+r.id+'" data-hl-rule="'+r.id+'"'};
   }).sort((a,b)=>b.v-a.v).slice(0,10);
 
-  const tstats=Object.values(TRADER_STATS).filter(traderInRail)
-    .sort((a,b)=>b.idx-a.idx).slice(0,10);
+  const inRail=Object.values(TRADER_STATS).filter(traderInRail);
+  const thin=inRail.filter(s=>s.trades>0&&!rankable(s)).length;
+  const tstats=inRail.filter(rankable).sort((a,b)=>b.idx-a.idx).slice(0,10);
   const maxIdx=Math.max(1,...tstats.map(s=>s.idx));
 
   const rowC='<div class="grid3 tight">'+
@@ -5112,14 +5161,15 @@ function paneOverview(){
     panel("Open queue by age","against the disposition target",
       '<div class="panel-body"><div class="chart-well">'+hbars(ageItems,{w:420,rowH:26,labW:110})+"</div></div>",
       "Critical and High alerts older than <b>3 business days</b> breach the surveillance SLA.")+
-    panel("Highest-risk traders","severity-weighted alerts per 100 of the trader's own deals",
+    panel("Highest-risk traders","12 months · severity-weighted alerts per 100 of the trader's own deals"+
+      (thin?" · "+thin+" name"+(thin===1?"":"s")+" below "+RANK_MIN_DEALS+" deals not ranked":""),
       '<div class="panel-body"><div class="rank-list">'+tstats.map(s=>{
         const t=TRADER_BY_ID[s.id];
         return '<div class="rrow2" data-trader="'+s.id+'" data-hlsrc="trader|'+s.id+'" data-hl-trader="'+s.id+
           '" data-hl-desk="'+s.deskId+'" '+hlAgg("trader",s.id,s.alerts)+
           '><div class="rl"><b>'+esc(s.name)+"</b>"+
           '<div class="sub2">'+esc(DESK_BY_ID[s.deskId].short)+(t.arc?" · "+esc(t.arc):"")+"</div></div>"+
-          '<div class="rv">'+s.idx.toFixed(1)+'<span class="sub2" style="margin-left:5px">×'+s.peer+"</span></div>"+
+          '<div class="rv">'+s.idx.toFixed(1)+'<span class="sub2" style="margin-left:5px" data-tip="'+esc(peerTip(s))+'">'+peerText(s)+"</span></div>"+
           '<div class="rfull"><span class="bar-mini"><i style="width:'+(s.idx/maxIdx*100).toFixed(0)+"%;background:"+
           (s.idx>maxIdx*0.6?"var(--fail)":s.idx>maxIdx*0.3?"var(--warn)":"var(--run)")+'"></i></span>'+
           '<span class="sub2">'+s.alerts+" alerts · "+s.susp+" upheld · "+s.ruleCount+" of "+RULES.length+" rules</span></div></div>";
@@ -6402,7 +6452,7 @@ function paneBlotter(){
 ============================================================ */
 function paneTraders(){
   const scoped=allScopedAlerts();
-  const rows=TRADERS.filter(traderInRail).map(t=>{
+  const rows=TRADERS.filter(traderInRail).filter(t=>rankable(TRADER_STATS[t.id])).map(t=>{
     const s=TRADER_STATS[t.id];
     const mine=scoped.filter(a=>a.traderId===t.id);
     return {t,s,alerts:mine.length,crit:mine.filter(a=>a.sev==="Critical").length,
@@ -6416,7 +6466,7 @@ function paneTraders(){
       '" data-hl-trader="'+r.t.id+'" data-hl-desk="'+r.t.deskId+'" '+hlAgg("trader",r.t.id,r.s.alerts)+">"+
       '<div><div class="tn">'+esc(r.t.name)+'</div><div class="td">'+esc(DESK_BY_ID[r.t.deskId].name)+" · "+esc(r.t.grade)+"</div></div>"+
       '<div class="trow"><span>Risk index</span><b style="color:'+c+'">'+r.s.idx.toFixed(1)+"</b></div>"+
-      '<div class="trow"><span>Versus cohort</span><b style="color:'+(r.s.peer>=2?c:"inherit")+'">×'+r.s.peer+"</b></div>"+
+      '<div class="trow"><span>Versus cohort</span><b style="color:'+(r.s.cohortN>=PEER_MIN_COHORT&&r.s.peer>=2?c:"inherit")+'" data-tip="'+esc(peerTip(r.s))+'">'+peerText(r.s)+"</b></div>"+
       '<div class="trow"><span>Alerts / critical</span><b>'+r.alerts+" / "+r.crit+"</b></div>"+
       '<div class="trow"><span>Upheld</span><b class="'+(r.susp?"failc":"")+'">'+r.susp+"</b></div>"+
       '<div class="trow"><span>Ticket limit</span><b>'+fmtM(r.t.ticketLimit)+"</b></div>"+
@@ -6431,7 +6481,7 @@ function paneTraders(){
     color:r.s.idx>maxIdx*0.6?"var(--fail)":r.s.idx>maxIdx*0.3?"var(--warn)":"var(--run)",
     label:r.t.name, sub:DESK_BY_ID[r.t.deskId].name,
     tip:["Deals booked|"+fmtNum(r.s.trades),"Alerts|"+r.alerts,"Critical|"+r.crit,"Upheld|"+r.susp,
-         "Risk index|"+r.s.idx.toFixed(1),"Versus cohort|×"+r.s.peer,"Cohort|"+r.t.cohort,
+         "Risk index|"+r.s.idx.toFixed(1),"Versus cohort|"+peerText(r.s),"Cohort|"+r.t.cohort,
          "Rules triggered|"+r.s.ruleCount+" of "+RULES.length].join("§"),
   }));
 
@@ -6492,7 +6542,7 @@ function paneTraders(){
         '<td class="r mono'+(g.hot.length?" failc":"")+'">'+g.hot.length+"</td>"+
         '<td><span class="clickable" data-trader="'+w.t.id+'" data-hlsrc="trader|'+w.t.id+'"><b>'+esc(w.t.name)+"</b> "+
           '<span class="mono" style="color:'+c+'">'+w.s.idx.toFixed(1)+"</span> "+
-          '<span class="sub2">×'+w.s.peer+" vs cohort</span></span></td>"+
+          '<span class="sub2">'+peerText(w.s)+" vs cohort</span></span></td>"+
         '<td class="r mono">'+g.med.toFixed(1)+"</td>"+
         '<td class="r mono">'+g.alerts+'</td><td class="r mono failc">'+g.crit+"</td>"+
         '<td class="r mono warnc">'+g.open+'</td><td class="r mono">'+g.susp+"</td></tr>";
@@ -6502,7 +6552,7 @@ function paneTraders(){
     "<b>Click a group</b> to scope the dashboard to it, or a name to open the trader file.");
 
   return rowA+'<div class="mt14">'+panel("Trader risk index",
-    "severity-weighted alerts per 100 of the trader's own deals · "+rows.length+" traders",
+    "12 months · severity-weighted alerts per 100 of the trader's own deals · "+rows.length+" traders",
     '<div class="tgrid">'+cards+"</div>",
     "The index weights each alert by severity and divides by the trader's own deal count, so it ranks behaviour rather than busyness. "+
     "<b>Versus cohort</b> restates it against the median of the same grade doing the same kind of work — the comparison a desk head asks for first.")+"</div>"+
@@ -6727,7 +6777,7 @@ function alertDrawer(a){
         '<span class="kv">Upheld <b class="failc">'+other.filter(x=>x.status==="Suspicious"||x.status==="Escalated").length+"</b></span>"+
         '<span class="kv">Deals booked <b>'+fmtNum(TRADER_STATS[tr.id].trades)+"</b></span>"+
         '<span class="kv">Risk index <b>'+TRADER_STATS[tr.id].idx.toFixed(1)+"</b></span>"+
-        '<span class="kv">Versus cohort <b class="'+(TRADER_STATS[tr.id].peer>=2?"failc":"")+'">×'+TRADER_STATS[tr.id].peer+"</b></span>"+
+        '<span class="kv">Versus cohort <b class="'+(TRADER_STATS[tr.id].cohortN>=PEER_MIN_COHORT&&TRADER_STATS[tr.id].peer>=2?"failc":"")+'">'+peerText(TRADER_STATS[tr.id])+"</b></span>"+
         '<span class="kv">Block leave <b>'+fmtDateShort(dateForIdx(tr.leave[0]))+"–"+fmtDateShort(dateForIdx(tr.leave[1]))+"</b></span></div>"+
       '<div class="lbl" style="margin-top:12px">This trader\'s control profile</div><div class="evgrid">'+
         [["Ticket authorisation",fmtM(tr.ticketLimit)],
@@ -6930,6 +6980,9 @@ function closeMsel(){
 ============================================================ */
 const PANES={overview:paneOverview,activity:paneActivity,timeseries:paneTimeseries,detections:paneDetections,rules:paneRules,blotter:paneBlotter,traders:paneTraders,log:paneLog};
 function render(){
+  // Before anything reads them: the trader scores are cut to the rail, and the
+  // rail may have moved since the last render.
+  buildTraderStats();
   renderRail(); renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
   $$(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
