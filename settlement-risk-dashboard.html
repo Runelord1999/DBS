@@ -516,7 +516,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
       </div>
       <div class="tabs-right">
         <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option></select>
-        <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="4" step="1" value="2"><span class="fA big">A</span></div>
+        <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="6" step="1" value="2" aria-label="Font size"><span class="fA big">A</span></div>
       </div>
     </div>
     <div id="chiprow" class="chiprow"></div>
@@ -751,7 +751,7 @@ function closeConfirm(){
 /* Key is versioned: bumping it lets the new light default take effect for people
    who already have an older theme choice stored in this browser. */
 const THEME_KEY="sr-dash-theme-v2", FS_KEY="sr-dash-fontsize";
-const FS_LEVELS=[12,14,16,18,20];
+const FS_LEVELS=[12,14,16,18,20,22,24];   // two extra steps up; the smallest stays where it was
 const THEMES=["light","dark","dbs"], DEFAULT_THEME="light";
 function normTheme(t){return THEMES.includes(t)?t:DEFAULT_THEME;}
 function applyTheme(t){t=normTheme(t);document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem(THEME_KEY,t);}catch(e){}return t;}
@@ -762,6 +762,7 @@ function applyFontSize(i){document.documentElement.style.fontSize=FS_LEVELS[i]+"
   const tsel=document.getElementById("theme-sel");
   if(tsel){tsel.value=t;tsel.addEventListener("change",e=>applyTheme(e.target.value));}
   let fi=2;try{const v=localStorage.getItem(FS_KEY);if(v!==null)fi=+v;}catch(e){}
+  if(!(fi>=0&&fi<FS_LEVELS.length)) fi=2;   // guard a stored index from an older scale
   applyFontSize(fi);
   const fsel=document.getElementById("fs-sel");
   if(fsel){fsel.value=fi;fsel.addEventListener("input",e=>applyFontSize(+e.target.value));}
