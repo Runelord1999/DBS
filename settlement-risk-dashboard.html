@@ -56,6 +56,46 @@ a{color:var(--brand)}
 .shell{display:grid;grid-template-columns:262px 1fr;min-height:100vh}
 .rail{background:linear-gradient(180deg,var(--panel),var(--panel-2));border-right:1px solid var(--hair);padding:20px 16px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;max-height:100vh;position:sticky;top:0}
 .brand{display:flex;align-items:center;gap:10px}
+/* ---- Documentation tab: topic tree + long-form spec ---- */
+.docwrap{display:grid;grid-template-columns:264px minmax(0,1fr);gap:18px;align-items:start}
+.docnav{position:sticky;top:14px;max-height:calc(100vh - 28px);overflow-y:auto;background:var(--panel);
+  border:1px solid var(--hair);border-radius:12px;padding:14px 10px}
+.docnav .eyebrow{padding:0 9px 8px;border-bottom:1px solid var(--hair);margin-bottom:8px}
+.docnav a{display:block;padding:5px 9px;border-radius:6px;color:var(--ink-2);font-size:0.71875rem;
+  text-decoration:none;line-height:1.35;margin-bottom:1px}
+.docnav a:hover{background:var(--panel-2);color:var(--ink)}
+.docnav a.on{background:color-mix(in srgb,var(--brand) 15%,transparent);color:var(--brand);font-weight:700}
+.docnav a.l2{margin-left:11px;font-size:0.6875rem;border-left:1px solid var(--hair);border-radius:0 6px 6px 0;padding-left:10px}
+.docnav a.l2.on{border-left-color:var(--brand)}
+.doc{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:8px 28px 28px;
+  font-size:0.8125rem;line-height:1.7;color:var(--ink-2);min-width:0}
+.doc h2{font-size:1.125rem;color:var(--ink);margin:34px 0 4px;padding-top:14px;border-top:1px solid var(--hair);letter-spacing:-.01em}
+.doc h2:first-child{border-top:0;margin-top:14px;padding-top:0}
+.doc h3{font-size:0.9375rem;color:var(--ink);margin:24px 0 4px;letter-spacing:-.01em}
+.doc h4{font-size:0.8125rem;color:var(--ink);margin:16px 0 2px;font-weight:700}
+.doc p{margin:8px 0}
+.doc ul,.doc ol{margin:8px 0;padding-left:20px}
+.doc li{margin:3px 0}
+.doc b,.doc strong{color:var(--ink)}
+.doc code{font-family:var(--mono);background:var(--panel-3);padding:1px 5px;border-radius:4px;
+  font-size:0.9em;color:var(--ink);white-space:nowrap}
+.doc pre{background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:12px 14px;
+  overflow-x:auto;font-family:var(--mono);font-size:0.6875rem;line-height:1.55;color:var(--ink);margin:10px 0}
+.doc pre code{background:none;padding:0;white-space:pre}
+.doc table{width:100%;border-collapse:collapse;margin:12px 0;font-size:0.75rem}
+.doc th{text-align:left;font-size:0.625rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
+  font-weight:700;padding:7px 10px;border-bottom:1px solid var(--hair);background:color-mix(in srgb,var(--panel-3) 45%,transparent)}
+.doc td{padding:7px 10px;border-bottom:1px solid color-mix(in srgb,var(--hair) 60%,transparent);vertical-align:top}
+.doc tr:last-child td{border-bottom:0}
+.doc .note{border-left:3px solid var(--brand);background:color-mix(in srgb,var(--brand) 7%,transparent);
+  padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+.doc .note.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 9%,transparent)}
+.doc .note.why{border-left-color:var(--violet);background:color-mix(in srgb,var(--violet) 8%,transparent)}
+.doc .note b:first-child{display:block;font-size:0.6875rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.doc .lede{font-size:0.875rem;color:var(--ink-2);margin:4px 0 0}
+.doc .meta{font-size:0.6875rem;color:var(--ink-3);margin:2px 0 0}
+@media (max-width:1100px){.docwrap{grid-template-columns:1fr}.docnav{position:static;max-height:none}}
+
 /* Explanatory tooltips live on a deliberate info affordance at the end of a
    title, rather than firing whenever the pointer crosses a whole panel. */
 .info{display:inline-flex;align-items:center;justify-content:center;width:1.05em;height:1.05em;
@@ -513,6 +553,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
         <button class="tab" role="tab" data-tab="rankings" aria-selected="false">Rankings &amp; Alerts</button>
         <button class="tab" role="tab" data-tab="carveouts" aria-selected="false">SR Carve-Outs</button>
         <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
+        <button class="tab" role="tab" data-tab="docs" aria-selected="false">Documentation</button>
       </div>
       <div class="tabs-right">
         <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option></select>
@@ -2641,10 +2682,594 @@ function custDrawer(c){
      <div class="mt14" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn-ghost" id="drawer-viewcust" data-viewcust="${c.id}">Open in Overview customer view →</button><button type="button" class="btn-ghost" data-carvecust="${c.id}">Manage carve-outs →</button></div>`);
 }
 
+
+/* ============================================================
+   Documentation tab — the spec for this dashboard.
+   DOC_SECTIONS drives the topic tree; every id here must exist as a
+   heading id in paneDocs(), which wireDocs() asserts in the console.
+============================================================ */
+const DOC_SECTIONS=[
+  {id:"d-about", t:"1 · About this document"},
+  {id:"d-purpose", t:"2 · Purpose & scope", kids:[
+    {id:"d-purpose-what", t:"2.1 What it is"},
+    {id:"d-purpose-who", t:"2.2 Intended readers"},
+    {id:"d-purpose-not", t:"2.3 What it is not"}]},
+  {id:"d-arch", t:"3 · Architecture", kids:[
+    {id:"d-arch-file", t:"3.1 Single-file design"},
+    {id:"d-arch-render", t:"3.2 Render model"},
+    {id:"d-arch-state", t:"3.3 Application state"},
+    {id:"d-arch-storage", t:"3.4 Persistence"}]},
+  {id:"d-shell", t:"4 · Page shell", kids:[
+    {id:"d-shell-layout", t:"4.1 Layout"},
+    {id:"d-shell-theme", t:"4.2 Themes"},
+    {id:"d-shell-font", t:"4.3 Font size"},
+    {id:"d-shell-tips", t:"4.4 Tooltips & info icons"}]},
+  {id:"d-data", t:"5 · Data model", kids:[
+    {id:"d-data-cust", t:"5.1 Customer"},
+    {id:"d-data-book", t:"5.2 Book composition"},
+    {id:"d-data-series", t:"5.3 Utilization series"},
+    {id:"d-data-txn", t:"5.4 Transactions"},
+    {id:"d-data-carve", t:"5.5 Carve-outs"},
+    {id:"d-data-req", t:"5.6 Limit increase requests"},
+    {id:"d-data-derived", t:"5.7 Derived measures"}]},
+  {id:"d-controls", t:"6 · Global controls", kids:[
+    {id:"d-controls-filters", t:"6.1 Filters"},
+    {id:"d-controls-range", t:"6.2 Date range"},
+    {id:"d-controls-rail", t:"6.3 Rail statistics"}]},
+  {id:"d-tabs", t:"7 · Tabs", kids:[
+    {id:"d-tab-overview", t:"7.1 Overview"},
+    {id:"d-tab-customers", t:"7.2 Customers"},
+    {id:"d-tab-blotter", t:"7.3 Transaction Blotter"},
+    {id:"d-tab-rankings", t:"7.4 Rankings & Alerts"},
+    {id:"d-tab-carveouts", t:"7.5 SR Carve-Outs"},
+    {id:"d-tab-requests", t:"7.6 Limit Increase Requests"},
+    {id:"d-tab-docs", t:"7.7 Documentation"}]},
+  {id:"d-viz", t:"8 · Visual system", kids:[
+    {id:"d-viz-tokens", t:"8.1 Colour tokens"},
+    {id:"d-viz-heat", t:"8.2 Utilization ramp"},
+    {id:"d-viz-charts", t:"8.3 Chart inventory"}]},
+  {id:"d-interact", t:"9 · Interaction patterns", kids:[
+    {id:"d-int-highlight", t:"9.1 Data Highlight"},
+    {id:"d-int-sort", t:"9.2 Sorting"},
+    {id:"d-int-drawer", t:"9.3 Customer drawer"},
+    {id:"d-int-drill", t:"9.4 Drill-down & pivot"}]},
+  {id:"d-algo", t:"10 · Algorithm reference", kids:[
+    {id:"d-algo-rng", t:"10.1 Deterministic RNG"},
+    {id:"d-algo-runoff", t:"10.2 Settlement run-off"},
+    {id:"d-algo-tree", t:"10.3 Squarified treemap"},
+    {id:"d-algo-water", t:"10.4 Limit-type water-fill"}]},
+  {id:"d-invariants", t:"11 · Invariants & acceptance tests"},
+  {id:"d-rebuild", t:"12 · Rebuild checklist"},
+  {id:"d-limits", t:"13 · Known limitations"},
+];
+function docNav(){
+  return `<nav class="docnav"><div class="eyebrow">Contents</div>${
+    DOC_SECTIONS.map(sec=>`<a href="#${sec.id}" data-doclink="${sec.id}">${sec.t}</a>`
+      +(sec.kids||[]).map(k=>`<a class="l2" href="#${k.id}" data-doclink="${k.id}">${k.t}</a>`).join("")
+    ).join("")}</nav>`;
+}
+/* Scroll-spy: the active topic is the last heading whose top has passed a line
+   just below the viewport top. An IntersectionObserver band was tried first and
+   is wrong for this — inside a long section no heading is in the band at all,
+   so nothing stays highlighted. */
+let docScrollHandler=null;
+function wireDocs(){
+  if(docScrollHandler){ window.removeEventListener("scroll",docScrollHandler); docScrollHandler=null; }
+  const nav=document.querySelector(".docnav"); if(!nav) return;
+  const ids=[]; DOC_SECTIONS.forEach(s=>{ids.push(s.id);(s.kids||[]).forEach(k=>ids.push(k.id));});
+  const missing=ids.filter(id=>!document.getElementById(id));
+  if(missing.length) console.warn("Documentation: topic tree points at missing headings:",missing);
+  const links=new Map(ids.map(id=>[id,nav.querySelector(`[data-doclink="${id}"]`)]));
+  const heads=ids.map(id=>document.getElementById(id)).filter(Boolean);
+  let queued=0, last=null;
+  const update=()=>{
+    queued=0;
+    if(!document.body.contains(nav)){ window.removeEventListener("scroll",docScrollHandler); docScrollHandler=null; return; }
+    const line=150;
+    let active=heads.length?heads[0].id:null;
+    for(const h of heads){ if(h.getBoundingClientRect().top<=line) active=h.id; else break; }
+    if(active===last) return;
+    last=active;
+    links.forEach((el,id)=>{ if(el) el.classList.toggle("on", id===active); });
+    // keep the active entry inside the tree's own scroll area
+    const el=links.get(active);
+    if(el){
+      const t=el.offsetTop, h=el.offsetHeight;
+      if(t < nav.scrollTop) nav.scrollTop = Math.max(0, t - 8);
+      else if(t + h > nav.scrollTop + nav.clientHeight) nav.scrollTop = t + h - nav.clientHeight + 8;
+    }
+  };
+  docScrollHandler=()=>{ if(!queued) queued=requestAnimationFrame(update); };
+  window.addEventListener("scroll",docScrollHandler,{passive:true});
+  update();
+}
+function paneDocs(){
+  const nf=n=>n.toLocaleString();
+  return `<div class="docwrap">${docNav()}<article class="doc">
+
+  <h2 id="d-about">1 · About this document</h2>
+  <p class="lede">This is the working specification for the Settlement Risk Dashboard. It describes every screen, every control, every derived number and every generated data structure in enough detail to rebuild the site from scratch without reading the source.</p>
+  <p class="meta">Lives inside the dashboard itself, so it cannot drift away from the build it documents. Figures marked <i>live</i> are read from the running dataset at page load.</p>
+  <div class="note"><b>How to read this</b>Sections 2–4 cover what the site is and how it is put together. Section 5 is the data model — the part that matters most for a rebuild. Sections 6–9 describe behaviour screen by screen. Section 10 gives the algorithms in full, and sections 11–12 are the checklist you would test a rebuild against.</div>
+
+  <h2 id="d-purpose">2 · Purpose &amp; scope</h2>
+  <h3 id="d-purpose-what">2.1 What it is</h3>
+  <p>A demonstration front end for managing <b>Settlement Risk (SR) limits</b> across a wholesale banking book. Settlement risk is the exposure taken between striking a trade and its value date: the counterparty may fail before delivering. An SR limit caps how much of that exposure the bank will carry against one name at one time, and the limit is released as trades settle.</p>
+  <p>The dashboard answers five questions:</p>
+  <ol>
+    <li><b>How much capacity exists and how much is drawn</b> — pool composition, utilization rate, headroom.</li>
+    <li><b>Who is close to their limit</b> — utilization heatmap, rankings, breach alerts.</li>
+    <li><b>Where exposure is concentrated</b> — by customer, country, product limit type and segment.</li>
+    <li><b>What capacity comes back and when</b> — forward settlement run-off from the live trade book.</li>
+    <li><b>How the limit is carved up and changed</b> — carve-outs by country and limit type, and the limit increase workflow.</li>
+  </ol>
+
+  <h3 id="d-purpose-who">2.2 Intended readers</h3>
+  <table><thead><tr><th>Reader</th><th>Start at</th></tr></thead><tbody>
+    <tr><td>Someone rebuilding the site</td><td>Section 3 (architecture), then 5 (data model), then 12 (checklist)</td></tr>
+    <tr><td>A risk or sales user learning the screens</td><td>Section 7 (tabs) and 9 (interactions)</td></tr>
+    <tr><td>A designer changing the look</td><td>Section 4 (shell) and 8 (visual system)</td></tr>
+    <tr><td>Anyone questioning a number</td><td>Section 5.7 (derived measures) and 11 (invariants)</td></tr>
+  </tbody></table>
+
+  <h3 id="d-purpose-not">2.3 What it is not</h3>
+  <div class="note warn"><b>All data is fabricated</b>Every customer, trade, limit, carve-out, request, requester and approver name in this build is generated from a seeded random number generator. No figure here reflects a real position, a real counterparty or a real institution. Bank and customer names are invented and any resemblance to a real firm is coincidental.</div>
+  <ul>
+    <li>There is <b>no back end</b>. Nothing is fetched, posted or authenticated.</li>
+    <li>There is <b>no persistence beyond the browser</b>. Edits live in <code>localStorage</code> on one device.</li>
+    <li>It is <b>not a limit system of record</b>. Approving a request here changes a local object, nothing else.</li>
+  </ul>
+
+  <h2 id="d-arch">3 · Architecture</h2>
+  <h3 id="d-arch-file">3.1 Single-file design</h3>
+  <p>The entire application is one HTML file — markup, CSS and JavaScript inline, no build step, no package manager, no external requests. Open it by double-click, email it as an attachment, or serve it as a static file; behaviour is identical.</p>
+  <table><thead><tr><th>Constraint</th><th>Reason</th></tr></thead><tbody>
+    <tr><td>No external scripts, fonts or images</td><td>Must work offline and from <code>file://</code>, and must survive strict content security policies.</td></tr>
+    <tr><td>No framework</td><td>Nothing to version, patch or install. The whole render path is string templates plus <code>innerHTML</code>.</td></tr>
+    <tr><td>Charts hand-drawn as inline SVG</td><td>Avoids a charting dependency and keeps every mark theme-aware through CSS custom properties.</td></tr>
+    <tr><td>Modern CSS assumed</td><td>Uses <code>color-mix()</code>, <code>:has()</code>, CSS grid and <code>aspect-ratio</code>. Targets current Chrome, Edge, Safari and Firefox; no legacy fallbacks.</td></tr>
+  </tbody></table>
+
+  <h3 id="d-arch-render">3.2 Render model</h3>
+  <p>There is one render function. It rebuilds the whole active pane from state on every change — no virtual DOM, no diffing, no component lifecycle.</p>
+  <pre><code>function render(){
+  renderSidebarStats();          // rail figures
+  renderChips();                 // active filter chips
+  $("#pane").innerHTML = PANES[state.tab]();   // whole pane, rebuilt
+  // mark the active tab, then re-attach anything that needs live wiring
+  if(state.tab==="requests")  wireRequestForm();
+  if(state.tab==="carveouts") wireCarveoutForm();
+  if(state.tab==="docs")      wireDocs();
+  hlApply(hlPinned); hlBadge();  // repaint a pinned highlight onto the new DOM
+}</code></pre>
+  <div class="note why"><b>Consequence worth knowing</b>Because the pane is replaced wholesale, anything holding a DOM reference must be re-attached <b>after</b> the <code>innerHTML</code> assignment, and any transient UI state (scroll position inside a list, an open native select, text selection) is lost on render. Controls that re-render on every keystroke therefore restore focus and caret position explicitly — see the search inputs in <a href="#d-tab-customers">7.2</a> and the request filters in <a href="#d-tab-requests">7.6</a>.</div>
+  <p>Event handling is delegated: a small number of listeners on <code>document</code> match <code>closest()</code> against data attributes, so handlers survive the pane being replaced. Ordering matters — the highlight-pin handler must run before the generic <code>[data-cust]</code> drawer handler, or clicking a tile would pin instead of opening the customer.</p>
+
+  <h3 id="d-arch-state">3.3 Application state</h3>
+  <p>One plain object holds everything the UI needs. It is never serialised as a whole; only the four keys in <a href="#d-arch-storage">3.4</a> persist.</p>
+  <table><thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><code>tab</code></td><td>string</td><td>Active pane: overview, customers, blotter, rankings, carveouts, requests, docs.</td></tr>
+    <tr><td><code>filters</code></td><td>{country, segment, limitType} of Set</td><td>Multi-select rail filters. An empty set means no restriction.</td></tr>
+    <tr><td><code>dateRangeDays</code></td><td>number</td><td>30, 90, 180, 365 or 548. Governs statistics and the blotter, not the trend chart.</td></tr>
+    <tr><td><code>custSort</code>, <code>custSearch</code></td><td>object, string</td><td>Customers tab sort key/direction and name search.</td></tr>
+    <tr><td><code>blotterFilter</code></td><td>{assetClass}</td><td>Asset-class chip filter on the blotter.</td></tr>
+    <tr><td><code>overviewSegClick</code></td><td>string</td><td>Segment drilled into from the coverage chart.</td></tr>
+    <tr><td><code>customerView</code></td><td>customer id or null</td><td>Pivots the whole Overview tab to one customer.</td></tr>
+    <tr><td><code>carveCustomer</code>, <code>carveScope</code></td><td>id, "country" | "limitType"</td><td>Carve-out tab selection.</td></tr>
+    <tr><td><code>showMA</code></td><td>boolean</td><td>3-month moving average on the trend chart.</td></tr>
+    <tr><td><code>heatView</code>, <code>heatTop</code>, <code>heatSize</code>, <code>heatSort</code>, <code>heatHideNoSR</code></td><td>—</td><td>Heatmap/treemap controls. See <a href="#d-tab-overview">7.1</a>.</td></tr>
+    <tr><td><code>highlight</code></td><td>boolean</td><td>Data Highlight master switch.</td></tr>
+    <tr><td><code>expo</code></td><td>{dir, n, seg}</td><td>Exposure ranking: top/bottom, count, segment.</td></tr>
+    <tr><td><code>reqFilters</code></td><td>object</td><td>Requests table column filters.</td></tr>
+  </tbody></table>
+
+  <h3 id="d-arch-storage">3.4 Persistence</h3>
+  <table><thead><tr><th>Key</th><th>Holds</th><th>Notes</th></tr></thead><tbody>
+    <tr><td><code>sr-dash-theme-v2</code></td><td>"light" | "dark" | "dbs"</td><td>Suffix bumped when light became the default, so an older stored choice does not override it.</td></tr>
+    <tr><td><code>sr-dash-fontsize</code></td><td>index into the size scale</td><td>An index outside the current scale falls back to the default rather than leaving the root font unset.</td></tr>
+    <tr><td><code>sr-dash-carveouts-v3</code></td><td>full carve-out array</td><td>Written on add and remove. Suffix bumped when customer ids were regenerated — a stored set from an older book cannot map onto this one.</td></tr>
+    <tr><td><code>sr-dash-requests-v2</code></td><td>full request array</td><td>Written on submit, approve and reject.</td></tr>
+  </tbody></table>
+  <div class="note"><b>Rule</b>Every read and write is wrapped in <code>try/catch</code>. Private-browsing modes and blocked site data must degrade to defaults, never throw. Bump the key suffix whenever the shape or the id space of the stored value changes.</div>
+
+  <h2 id="d-shell">4 · Page shell</h2>
+  <h3 id="d-shell-layout">4.1 Layout</h3>
+  <p>A two-column app frame: a fixed <b>rail</b> on the left carrying brand, filters, date range and summary statistics; a <b>main</b> column carrying the tab bar and the active pane. The rail is sticky and scrolls independently.</p>
+  <p>The brand mark links to <code>index.html</code> — relative, so it resolves to the site root when published and still works from a local copy.</p>
+
+  <h3 id="d-shell-theme">4.2 Themes</h3>
+  <p>Three themes, selected from a compact dropdown at the top right: <b>Light</b> (default), <b>Dark</b> and <b>DBS</b>. All colour is expressed as CSS custom properties on <code>:root</code> and overridden per theme by a <code>[data-theme]</code> block, so no component knows which theme is active.</p>
+  <table><thead><tr><th>Token</th><th>Role</th></tr></thead><tbody>
+    <tr><td><code>--ground</code>, <code>--panel</code>, <code>--panel-2</code>, <code>--panel-3</code></td><td>Page and surface backgrounds, lightest to deepest.</td></tr>
+    <tr><td><code>--hair</code></td><td>Borders and rules.</td></tr>
+    <tr><td><code>--ink</code>, <code>--ink-2</code>, <code>--ink-3</code></td><td>Primary, secondary and tertiary text.</td></tr>
+    <tr><td><code>--brand</code></td><td>Chrome accent: brand mark, active tab, primary buttons, focus rings.</td></tr>
+    <tr><td><code>--pass</code>, <code>--warn</code>, <code>--fail</code></td><td>Status semantics: healthy, watch, breach.</td></tr>
+    <tr><td><code>--run</code>, <code>--agent</code>, <code>--violet</code>, <code>--cyan</code>, <code>--gold</code>, <code>--pink</code></td><td>Categorical series colours.</td></tr>
+    <tr><td><code>--heat-1</code> … <code>--heat-4</code></td><td>Utilization ramp anchors. See <a href="#d-viz-heat">8.2</a>.</td></tr>
+  </tbody></table>
+  <div class="note why"><b>Why --brand is separate from --agent</b>The DBS theme puts the brand red on the chrome. If chrome and data series shared one token, the "Watch" status marker and every mid-range chart series would turn red too — and red already means breach. Splitting the token lets the DBS skin go red without destroying the status semantics.</div>
+  <p>The DBS theme adds structural rules beyond tokens: a red band across the top of the page, a red rail edge, a solid red brand mark, red section labels in the rail and red-tinted panel headers.</p>
+
+  <h3 id="d-shell-font">4.3 Font size</h3>
+  <p>A slider beside the theme picker sets the root font size. All type is declared in <code>rem</code>, so one root change scales the entire interface — including chart labels, which are sized in <code>em</code> within their SVG.</p>
+  <p>Scale: <b>${FS_LEVELS.join(" · ")}px</b>, default <b>${FS_LEVELS[2]}px</b> (index 2).</p>
+  <div class="note"><b>Layout rule</b>Nothing may be pinned in <code>px</code> where it must track the type. Fixed-width table columns, tooltip column widths and grid minimums are expressed in <code>em</code> for exactly this reason; a <code>px</code> column stays put while the text inside it grows and clips.</div>
+
+  <h3 id="d-shell-tips">4.4 Tooltips &amp; info icons</h3>
+  <p>One tooltip engine serves the whole page. A single <code>mousemove</code> listener on <code>document</code> looks for the nearest ancestor carrying <code>data-tip</code>, fills a floating box and positions it so the cursor sits at its bottom-left, keeping the pointer clear of the text.</p>
+  <p>Two content forms:</p>
+  <ul>
+    <li><b>Plain</b> — <code>data-tip</code> alone, rendered as a sentence.</li>
+    <li><b>Structured</b> — <code>data-tip</code> is the title, <code>data-tipsub</code> a subtitle, and <code>data-tiptable</code> a list of label/value rows rendered as a two-column grid. Rows are separated by <code>§</code> and fields by <code>¦</code>; the renderer builds them with <code>textContent</code>, so nothing in the data can inject markup.</li>
+  </ul>
+  <p>Explanations of <b>what a chart or widget is</b> hang off a small circled <b>ⓘ</b> at the end of the title, not off the whole panel — so they appear when asked for rather than every time the pointer crosses a header. Tooltips on <b>data</b> — a tile, a row, a bar — remain on hover, because there the pointer is the pointer.</p>
+
+  <h2 id="d-data">5 · Data model</h2>
+  <p>Everything is generated in the browser at load from a seeded RNG, so the same build always produces the same book. Figures below marked <i>live</i> come from the running dataset.</p>
+
+  <h3 id="d-data-cust">5.1 Customer</h3>
+  <pre><code>{
+  id:        "C0123",          // stable, generation order
+  name:      "Meridian Global Bank",
+  segment:   "Banks",          // one of six
+  country:   "London",         // booking centre
+  rank:      1 | null,         // global bank ranking, top 35 only
+  hasLimit:  true | false,
+  limitM:    5160,             // approved SR limit, S$ millions
+  profile:   "mid" | "hot" | "cold" | "dormant" | "breach",
+  typeAlloc: { eFX:0.24, REPO:0.19, ... },   // notional split, sums to 1
+  series:    Float32Array(548)                // daily utilization, oldest first
+}</code></pre>
+  <p><code>series</code> is a <code>Float32Array</code>: roughly 2,000 limit holders × 548 days is a few megabytes typed, versus tens of megabytes as plain arrays.</p>
+  <table><thead><tr><th>Segment</th><th>Code</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td>Banks</td><td><code>Banks</code></td><td>Bank counterparties, including the ranked global names.</td></tr>
+    <tr><td>Non-bank FI</td><td><code>Non-bank FI</code></td><td>Funds, insurers, non-bank lenders.</td></tr>
+    <tr><td>Large Corps</td><td><code>Large Corps</code></td><td>Large corporates.</td></tr>
+    <tr><td>SME</td><td><code>SME</code></td><td>Small and medium enterprises — the long tail.</td></tr>
+    <tr><td>II (Insti. Investors)</td><td><code>II</code></td><td>Institutional investors: pensions, sovereign wealth, asset managers.</td></tr>
+    <tr><td>CWM</td><td><code>CWM</code></td><td>Consumer &amp; wealth management: family offices, private trusts.</td></tr>
+  </tbody></table>
+  <p><b>Booking countries:</b> ${COUNTRIES.join(", ")}. <b>Product limit types:</b> ${LIMIT_TYPES.join(", ")} — electronic FX, repo, securities borrowing and lending, FX derivatives, and securities.</p>
+
+  <h3 id="d-data-book">5.2 Book composition</h3>
+  <p>The book is built in two passes: a small hand-shaped roster that gives the top of the book recognisable structure, then a bulk population that gives it realistic scale.</p>
+  <h4>Pass 1 — roster</h4>
+  <ul>
+    <li><b>35 ranked banks.</b> Limit falls linearly from S$5B at rank 1 to S$1B at rank 35, jittered ±6%. Rank 1–6 draw a hot or mid profile; every ninth is forced to breach and every eleventh to dormant, so the risk bands are never empty.</li>
+    <li><b>6 banks with no limit</b>, as onboarding whitespace.</li>
+    <li><b>Per-segment seeds</b> for the other five segments, each with a fixed with/without split and its own limit range.</li>
+  </ul>
+  <h4>Pass 2 — bulk population</h4>
+  <p>Roughly 4,000 further names so the interface is exercised at realistic scale:</p>
+  <table><thead><tr><th>Segment</th><th>Count</th><th>Hold a limit</th><th>Limit range</th><th>Distribution</th></tr></thead><tbody>
+    ${BULK_PLAN.map(b=>`<tr><td>${SEGMENT_LABEL[b.segment]}</td><td>${nf(b.count)}</td><td>${Math.round(b.withRate*100)}%</td><td>S$${b.limit[0]}M – S$${b.limit[1]}${b.limit[1]>=1000?"M":"M"}</td><td>${b.bell?"Bell curve, range spans ±3σ":"Uniform"}</td></tr>`).join("")}
+  </tbody></table>
+  <p><b>Live totals:</b> ${nf(CUSTOMERS.length)} customers, ${nf(WITH_LIMIT.length)} holding a limit, ${nf(CUSTOMERS.length-WITH_LIMIT.length)} without. Approved limits total <b>${fmtM(WITH_LIMIT.reduce((a,c)=>a+c.limitM,0))}</b>, plus an unallocated reserved buffer of <b>${fmtM(RESERVED_M)}</b> (12% of approved limits) for a pool of <b>${fmtM(WITH_LIMIT.reduce((a,c)=>a+c.limitM,0)+RESERVED_M)}</b>.</p>
+  <h4>Names</h4>
+  <p>Generated from a word list plus a per-segment suffix set, falling back to a three-part form once the two-part space is exhausted, then to a numbered variant. Every name in the book is unique, and the fixed bank roster seeds the uniqueness set so bulk names cannot collide with it.</p>
+
+  <h3 id="d-data-series">5.3 Utilization series</h3>
+  <p>Each limit holder carries <b>${HIST_DAYS} days</b> (18 months) of daily utilization. The series is not a smoothed random walk — it is simulated as an actual book of tickets, because that is what gives it the right shape.</p>
+  <h4>The mechanism</h4>
+  <ol>
+    <li>A difference array spans the window plus a ${SERIES_WARM}-day warm-up (so day 0 already has a live book) and a tail long enough to absorb maturities past the end.</li>
+    <li>Each day, a Poisson draw decides how many tickets are booked. Each ticket adds its size on the booking day and subtracts it on its maturity day.</li>
+    <li>Ticket size is fat-tailed: <code>rng()^shape × 100 + 2</code>, with <code>shape</code> between 1.6 and 3.2 per customer.</li>
+    <li>Tenor is drawn from a weighted ladder: ${SERIES_TENORS.map(t=>t[0]+"d ("+t[1]+"%)").join(", ")}.</li>
+    <li>A prefix sum turns the difference array into daily outstanding exposure.</li>
+    <li>The result is scaled so its <b>mean</b> equals the profile's target utilization, then clipped.</li>
+  </ol>
+  <h4>Block trades</h4>
+  <p>On top of normal flow, each day carries a small chance of a <b>block trade</b> — one ticket several times the size of the whole day's normal flow, on a repo-ish tenor (14 / 30 / 93 / 186 days). This is what produces the visible rectangular steps: SR chalked up in one go and released whole on the value date.</p>
+  <h4>The market driver</h4>
+  <div class="note why"><b>Why a shared driver exists</b>If every customer's book were independent, the portfolio line would average flat across ~2,000 names — diversification would erase every spike. In reality month-end and quarter-end rolls, and volatility bursts, hit every desk on the same day. A single <code>MARKET_DRIVE</code> array multiplies every customer's arrival intensity, so bookings correlate and the aggregate moves too.</div>
+  <p>The driver combines a slow multi-week activity regime (mean-reverting, clamped to 0.30–2.70), a decaying shock that fires about 2% of days, a month-end multiplier on days 0–1 of each 30-day cycle, and a quarter-end multiplier on days 0–2 of each 91-day cycle.</p>
+  <h4>Profiles</h4>
+  <table><thead><tr><th>Profile</th><th>Mean utilization target</th><th>Tail treatment</th></tr></thead><tbody>
+    <tr><td><code>breach</code></td><td>0.58 – 0.72</td><td>Recent tail ramped to 104–130%; ceiling 138%.</td></tr>
+    <tr><td><code>hot</code></td><td>0.50 – 0.64</td><td>Recent tail ramped to 86–97.5%.</td></tr>
+    <tr><td><code>mid</code></td><td>0.22 – 0.48</td><td>None.</td></tr>
+    <tr><td><code>cold</code></td><td>0.04 – 0.15</td><td>None.</td></tr>
+    <tr><td><code>dormant</code></td><td>0.20 – 0.42</td><td>Last 90–380 days forced to zero.</td></tr>
+  </tbody></table>
+  <p>The tail ramp <b>scales</b> the existing path over the last 25–70 days rather than overwriting it, so the shape survives and only the level moves. Non-breach names are clipped at 100%, which lets a name touch its limit mid-history; today's status still comes from the ramp, so the risk bands are driven by profile rather than by a lucky draw.</p>
+  <h4>Country bias</h4>
+  <p>A per-country multiplier is applied to the target before generation, so booking centres genuinely run at different rates and the heatmap agrees with the country concentration bar: ${Object.entries(COUNTRY_UTIL_BIAS).map(([k,v])=>k+" ×"+v).join(", ")}.</p>
+
+  <h3 id="d-data-txn">5.4 Transactions</h3>
+  <p><b>${nf(TXNS.length)}</b> tickets spread across the full 18-month history, weighted towards customers with larger limits.</p>
+  <pre><code>{
+  id:"T-10001", date:Date, customer:&lt;ref&gt;,
+  assetClass:"FX", product:"FX Forward", limitType:"eFX",
+  notionalM:63, srConsumedM:4.1,       // SR is 2–9% of notional
+  settleLag:32, maturity:Date, daysToMaturity:11,
+  status:"Pending" | "Settled" | "Failed"
+}</code></pre>
+  <table><thead><tr><th>Asset class</th><th>Products</th><th>Limit types</th></tr></thead><tbody>
+    ${ASSET_CLASSES.map(ac=>`<tr><td>${ac}</td><td>${PRODUCTS[ac].join(", ")}</td><td>${CLASS_TYPE_WEIGHTS[ac].map(x=>x[0]+" "+Math.round(x[1]*100)+"%").join(", ")}</td></tr>`).join("")}
+  </tbody></table>
+  <h4>Tenor and maturity</h4>
+  <p>Tenor is drawn per trade from the product's own distribution, not a single fixed lag. Cash products settle T+2; forwards, swaps and options run from a month out to a year.</p>
+  <div class="note why"><b>Month-end rolling</b>Any tenor of 30 days or more snaps its maturity to <b>month-end</b>, the way forwards, swaps and term repo actually settle. Without this the forward run-off is a smooth curve because 12,000 maturities scattered across 365 days average out. With it, maturities cluster and capacity returns in monthly lumps — which is what makes the run-off a staircase.</div>
+  <p><b>Status follows maturity.</b> A trade cannot settle before its value date, so anything short of maturity is <code>Pending</code> and its SR is still consumed; past maturity it is <code>Settled</code>. About 3% are <code>Failed</code> regardless. Roughly 2.5% of tickets are blocks — term repo, large bond or equity settlements — sized S$900M–4,200M against a normal S$2–450M.</p>
+
+  <h3 id="d-data-carve">5.5 Carve-outs</h3>
+  <p>A carve-out allocates part of a customer's limit to <b>one label</b>, which is either a country entity or a product limit type. The two are <b>separate ladders</b>: each is an alternative cut of the same limit, and neither may exceed it. They are not additive.</p>
+  <pre><code>{
+  id:"CO-0001", customerId:"C0123",
+  scope:"country" | "limitType",
+  label:"Hong Kong Branch",     // from the scope's option list
+  amountM:102,                  // allocated slice of the limit
+  drawBias:1.23,                // per-carve-out draw rate, normalised
+  thMode:"pct" | "amt", thValue:85,   // alert threshold
+  created:"03 Aug 2026"
+}</code></pre>
+  <p><b>Carve-out country list</b> is wider than the booking-country list because a country can hold more than one entity: ${CARVEOUT_COUNTRIES.join(", ")}.</p>
+  <p>Drawn against a carve-out is the customer's current utilization scaled by that carve-out's <code>drawBias</code> and capped at the allocation. Biases are normalised per customer so the weighted total still equals the customer's own drawn amount — without that, every carve-out on a name would show the identical rate and the visual cue would carry no information.</p>
+  <p><b>Live:</b> ${nf(CARVEOUTS.length)} carve-outs seeded across ${nf(WITH_LIMIT.length)} limit holders.</p>
+
+  <h3 id="d-data-req">5.6 Limit increase requests</h3>
+  <p><b>${nf(REQUESTS.length)}</b> seeded requests, weighted towards names already running above 55% utilization.</p>
+  <pre><code>{
+  id:"REQ-0001", customerId:"C0123",
+  type:"Temporary" | "Time-bound" | "Permanent",
+  current:920, newLimit:1240,          // S$M
+  start:"02 Aug 2026", end:"17 Sept 2026",   // blank for Permanent
+  requester:"Amanda Chok", requesterDesk:"GFM Sales",
+  approver:"Gerald Ma",   approverRole:"Senior Credit Officer",
+  notes:"...", status:"Pending" | "Approved" | "Rejected",
+  created:"29 Jul 2026", createdTs:…, decided:"30 Jul 2026", decidedTs:…
+}</code></pre>
+  <p>${REQUESTERS.length} relationship managers across six desks; ${APPROVERS.length} credit officers across four roles. Uplift is 1.15× to 2.30× the current limit. Status splits roughly 52% approved, 31% pending, 17% rejected.</p>
+  <div class="note"><b>Integrity rules</b>A pending request has neither an approver nor a decision date. A decided request always has both, and no decision predates its submission. Effective windows run forward from just after submission, 21–180 days.</div>
+
+  <h3 id="d-data-derived">5.7 Derived measures</h3>
+  <table><thead><tr><th>Measure</th><th>Definition</th></tr></thead><tbody>
+    <tr><td>Current utilization</td><td>Last value of the customer's series. May exceed 100%.</td></tr>
+    <tr><td>Drawn</td><td><code>min(1, utilization) × limit</code>. Capped, so drawn never exceeds the approved limit.</td></tr>
+    <tr><td>Unutilized / headroom</td><td><code>limit − drawn</code>, floored at zero.</td></tr>
+    <tr><td>Excess exposure</td><td><code>max(0, utilization − 1) × limit</code>. Reported separately as unapproved risk, and excluded from the pool.</td></tr>
+    <tr><td>Utilization rate</td><td>Limit-weighted: <code>Σ drawn ÷ Σ limit</code> over the customers in scope.</td></tr>
+    <tr><td>Average utilization 3M / 6M / 12M</td><td>Mean of the trailing 91 / 182 / 365 days, cached per window.</td></tr>
+    <tr><td>Peak utilization</td><td>Highest limit-weighted rate within the selected date range.</td></tr>
+    <tr><td>Dormant capital</td><td>Sum of limits where current utilization is zero.</td></tr>
+    <tr><td>Top-5 / top-10 concentration</td><td>Share of total drawn held by the five or ten largest names.</td></tr>
+  </tbody></table>
+  <h4>One denominator</h4>
+  <div class="note"><b>Deliberate rule</b>Every utilization rate on the site uses <b>approved limits</b> as the denominator. The reserved buffer is unallocated capacity; folding it in would understate how hard the book is working. The pool donut is the single exception — it is a composition of the whole pool and must total 100%, which is why its slices are labelled <i>share of pool</i> rather than utilization.</div>
+  <h4>Split by limit type</h4>
+  <p>Utilization is not uniform across products. A per-product bias (${Object.entries(TYPE_UTIL_BIAS).map(([k,v])=>k+" ×"+v).join(", ")}) is applied and then <b>water-filled</b> so the five types still sum to exactly the customer's drawn amount — see <a href="#d-algo-water">10.4</a>. Pool totals and every utilization KPI are therefore untouched; only the split across types moves.</p>
+
+  <h2 id="d-controls">6 · Global controls</h2>
+  <h3 id="d-controls-filters">6.1 Filters</h3>
+  <p>Three multi-select filters in the rail — <b>Country</b>, <b>Customer Segment</b>, <b>Limit Type</b>. Each is a button that opens a checkbox panel with Select all / Clear. An empty selection means no restriction, and the trigger reads "All countries" and so on.</p>
+  <p>A customer matches when: country is in the country set (or the set is empty); segment likewise; and for limit type, the customer holds a limit with a non-trivial allocation to at least one selected type. Active filters also render as removable chips above the pane.</p>
+  <div class="note"><b>Implementation note</b>All three panels share one positioned element. Three separately positioned panels overlapped one another's trigger buttons, making the lower two unclickable.</div>
+
+  <h3 id="d-controls-range">6.2 Date range</h3>
+  <p>30, 90, 180, 365 days or 18 months. It governs statistics (average, min, max, peak) and the blotter's trade window. It deliberately does <b>not</b> govern the trend chart, which always shows 18 months back and 12 months forward; the chart's own labels say so, and the drawer's stat chips are tagged with the window they cover to keep the distinction visible.</p>
+
+  <h3 id="d-controls-rail">6.3 Rail statistics</h3>
+  <p><b>SR pool snapshot</b> — total pool, utilized, available, reserved, and the count of customers holding a limit. <b>Risk posture</b> — counts of breach (&gt;100%), critical (90–100%), watch (75–90%) and dormant (0%). Both respond to the active filters.</p>
+
+  <h2 id="d-tabs">7 · Tabs</h2>
+  <h3 id="d-tab-overview">7.1 Overview</h3>
+  <p>The portfolio view, and the densest screen. Top to bottom:</p>
+  <h4>Customer view search</h4>
+  <p>A type-ahead over every limit holder, listed alphabetically. Selecting a name pivots the whole tab to that customer — its own KPIs, limit composition, limit-type breakdown, trend and transactions — independently of the rail filters. A back button returns to the portfolio.</p>
+  <h4>KPI strip — 8 across</h4>
+  <p>Total SR pool · Utilized · Available · Reserved · Peak utilization · Excess exposure · Dormant capital · Top-5 concentration. Each carries an ⓘ explaining how it is derived. Labels wrap rather than truncate; below 1400px the strip falls back to four across.</p>
+  <h4>Row 1 — three panels</h4>
+  <ul>
+    <li><b>SR pool composition</b> — donut of utilized / available / reserved as share of pool, with an excess line when drawn exceeds approved limits.</li>
+    <li><b>Utilization distribution</b> — histogram of customer counts by band: 0%, 0–50%, 50–75%, 75–90%, 90–100%, &gt;100%.</li>
+    <li><b>Customers with vs without SR limits</b> — grouped bars by segment with a coverage percentage. Clicking a bar drills the page into that segment.</li>
+  </ul>
+  <h4>Row 2 — three panels</h4>
+  <ul>
+    <li><b>Exposure ranking</b> — Top or Bottom N by drawn exposure, count selectable (${EXPO_COUNTS.join(" / ")}), filterable by segment, scrolling inside a fixed-height tile so the row stays level. Ties at zero drawn break on the largest approved limit, so a Bottom ranking surfaces the biggest idle limits rather than an alphabetical list.</li>
+    <li><b>Concentration by country</b> — approved limit, drawn and rate per booking centre.</li>
+    <li><b>Concentration by limit type</b> — the same per product limit type, using the biased split from 5.7.</li>
+  </ul>
+  <h4>Customer heatmap / treemap</h4>
+  <p>One tile per customer, covering every name in view. Controls:</p>
+  <table><thead><tr><th>Control</th><th>Options</th><th>Behaviour</th></tr></thead><tbody>
+    <tr><td>View</td><td>Heatmap · Treemap</td><td>Heatmap gives every customer an equal tile and compares rates. Treemap sizes tiles by the sort criterion and shows where exposure sits.</td></tr>
+    <tr><td>Show</td><td>${HEAT_TOPS.map(t=>t[1]).join(" · ")}</td><td>Top-N by the sort criterion.</td></tr>
+    <tr><td>Sort by</td><td>Total SR · Total utilized · Total unutilized · Avg utilization 3M / 6M / 12M</td><td>Drives the cut, the display order and, in treemap, the tile area.</td></tr>
+    <tr><td>Hide names without SR</td><td>on / off</td><td>Heatmap only — a treemap cannot draw a name with no area, so the control is replaced there by a note.</td></tr>
+    <tr><td>Tile size / Height</td><td>XS · S · M · L</td><td>Heatmap tiles shed detail as they shrink: full card → name + rate → rate only → colour and a bare number. In treemap the same control sets the height (${Object.values(TREE_H).join(" / ")}px).</td></tr>
+  </tbody></table>
+  <p>Tiles are grouped by segment, coloured by the utilization ramp, and carry their own treatments for the two non-numeric states: <b>no SR limit</b> is hatched with a dashed border, <b>dormant at 0%</b> is a pale violet dashed tile. Over-limit names get a solid red border on top of the ramp colour. Clicking any tile opens the customer drawer.</p>
+  <div class="note why"><b>One ranking, not two</b>The Top-N cut and the display order use the same criterion, with the customer name as a tie-break. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of appending to it.</div>
+  <h4>Utilization trend &amp; capacity run-off</h4>
+  <p>Full width at the foot of the tab. 18 months of daily actual utilization, a 3-month trailing moving average with an on/off checkbox, and 12 months of forward settlement run-off. The x-axis is calendar-driven: a minor tick every Monday, a taller tick and gridline on the 1st of each month, month names beneath and a year band under each January. Month labels thin out automatically when they would collide.</p>
+  <div class="note"><b>The forward line can only fall</b>It is not a forecast. It is the run-off of exposure <b>already on the book</b>, computed from each live trade's remaining tenor. Future trades are unknowable, so the line steps down as today's book matures and never rises. It is a staircase because settlement happens on value dates, in lumps.</div>
+
+  <h3 id="d-tab-customers">7.2 Customers</h3>
+  <p>The full sortable list: customer, segment, country, SR limit, average / max / min utilization over the selected range, current utilization and a status tag. A name search filters as you type, restoring focus and caret after the re-render.</p>
+  <p>Sort keys are precomputed once per row before sorting rather than recomputed inside the comparator — a comparator calls its key function O(n log n) times, and the statistics scan 548 points each. The table renders at most 300 rows with a "showing N of M" note; the search and the rail filters are how you reach the rest.</p>
+
+  <h3 id="d-tab-blotter">7.3 Transaction Blotter</h3>
+  <p>SR consumption by asset class, then the ticket list itself for the selected date range: trade id, date, customer, asset class, product, notional, SR consumed, limit type and status. Asset-class chips filter the list; every column sorts. Shows 120 rows at a time in the current sort order.</p>
+
+  <h3 id="d-tab-rankings">7.4 Rankings &amp; Alerts</h3>
+  <ul>
+    <li><b>Nearest to 100% utilization</b> — the top 25, the front of the queue for a pre-emptive limit review.</li>
+    <li><b>Longest period with zero utilization</b> — the top 25 dormant limits by consecutive days at zero.</li>
+    <li><b>Limit breach alerts</b> — every customer currently over 100%, with the excess amount.</li>
+    <li><b>Carve-out threshold alerts</b> — carve-outs whose drawn amount has crossed the percentage or amount threshold set for them.</li>
+  </ul>
+
+  <h3 id="d-tab-carveouts">7.5 SR Carve-Outs</h3>
+  <p>Customer-first: pick a name, then manage its carve-outs. The panel shows an allocation bar per scope — a stacked bar of the carve-outs against the full limit, each segment carrying a solid sub-fill for the drawn portion and a red hatch when it reaches 100%, with the unallocated remainder in a pale tail.</p>
+  <p>Adding a carve-out takes a scope (country or limit type), a label from that scope's list, an amount as either a percentage of the limit or an absolute figure, and an alert threshold in the same two forms. Labels already carved out remain listed but disabled and annotated, so the dropdown always shows the full available set rather than a mysteriously short one.</p>
+  <p>Removal is an <b>✕</b> with a confirmation modal naming the carve-out. Tables scroll horizontally rather than clipping when the type is large.</p>
+
+  <h3 id="d-tab-requests">7.6 Limit Increase Requests</h3>
+  <p>A submission form and the full request book. The form takes customer, request type, effective window (hidden for Permanent), current limit (read-only, filled from the customer), requested limit and a justification.</p>
+  <p>The table carries request id, customer with segment and country, type, current and requested limit, uplift percentage, effective window, requester with desk, approver with role, submitted and decision dates, and status. Every column sorts; dates sort on timestamps rather than display strings. A filter row beneath the headers gives free text over id and customer name, and dropdowns for type, requester, approver and status, with a Clear filters button and a matched-of-total count.</p>
+  <p>Approve and Reject act on a pending request, stamp the deciding officer and the decision date, and persist. They key off the request <b>id</b>, not the row index — an index-based handler approves the wrong request as soon as the table can be sorted or filtered.</p>
+
+  <h3 id="d-tab-docs">7.7 Documentation</h3>
+  <p>This tab. A topic tree on the left tracks the reader's position with an IntersectionObserver; the tree is generated from a single <code>DOC_SECTIONS</code> structure and the wiring warns in the console if any entry points at a heading that no longer exists.</p>
+
+  <h2 id="d-viz">8 · Visual system</h2>
+  <h3 id="d-viz-tokens">8.1 Colour tokens</h3>
+  <p>No component hard-codes a colour. Everything resolves through the tokens in <a href="#d-shell-theme">4.2</a>, and tints are built with <code>color-mix()</code> against the current surface, so a tint stays legible in every theme without a per-theme override.</p>
+
+  <h3 id="d-viz-heat">8.2 Utilization ramp</h3>
+  <p>A continuous scale used by the heatmap, the treemap and the carve-out fills. Both hue and tint depth move with utilization, so the shade alone answers "how close to the limit is this".</p>
+  <pre><code>0.00 → --heat-1  green
+0.50 → --heat-2  yellow
+0.80 → --heat-3  orange
+1.00 → --heat-4  red
+tint strength = 14% + utilization × 58%</code></pre>
+  <div class="note why"><b>Why dedicated ramp tokens</b>The status palette is wrong for a continuous scale. <code>--gold</code> is a dark ochre chosen for status text, and using it as the mid-scale anchor turned everything between 20% and 55% utilization into the same shade of tan — exactly where most of the book sits.</div>
+  <p>Two states sit deliberately <b>off</b> the scale, because they are different problems rather than points on it: <b>no SR limit</b> (hatched, dashed) and <b>dormant at 0%</b> (pale violet, dashed).</p>
+
+  <h3 id="d-viz-charts">8.3 Chart inventory</h3>
+  <table><thead><tr><th>Chart</th><th>Drawn as</th><th>Notes</th></tr></thead><tbody>
+    <tr><td>Donut</td><td>SVG circle with <code>stroke-dasharray</code></td><td>One arc per slice, offset accumulated around the circumference.</td></tr>
+    <tr><td>Histogram</td><td>SVG rects</td><td>Headroom reserved above the bars so count labels never clip.</td></tr>
+    <tr><td>Grouped bar</td><td>SVG rects</td><td>Two bars per segment plus a coverage figure; bars are clickable to drill.</td></tr>
+    <tr><td>Trend + forecast</td><td>SVG polylines</td><td>Actual, moving average and run-off, over a calendar axis.</td></tr>
+    <tr><td>Heatmap</td><td>CSS grid of buttons</td><td>Auto-fill columns with a per-size minimum; detail is shed via CSS at each size.</td></tr>
+    <tr><td>Treemap</td><td>Absolutely positioned buttons</td><td>Squarified layout, two levels: segments then customers.</td></tr>
+    <tr><td>Mini bars</td><td>Nested divs</td><td>Concentration rows, carve-out fills, allocation bars.</td></tr>
+  </tbody></table>
+
+  <h2 id="d-interact">9 · Interaction patterns</h2>
+  <h3 id="d-int-highlight">9.1 Data Highlight</h3>
+  <p>Brushing and linking. Hovering any aggregate — a country row, a limit-type row, a segment bar, a utilization band, a ranked customer — dims everything that does not belong to it and lifts everything that does, simultaneously across every panel.</p>
+  <h4>How it works</h4>
+  <p>Every customer-bearing element carries <code>data-hl-country</code>, <code>data-hl-seg</code>, <code>data-hl-type</code> (the types with a meaningful allocation), <code>data-hl-band</code> and <code>data-hl-cust</code>. On hover, <b>one CSS rule is rewritten</b> into a dedicated style element and the browser does the matching.</p>
+  <div class="note why"><b>Why a style rule rather than class toggling</b>Toggling classes on up to 4,149 tiles per hover is far too slow. Rewriting a single selector is O(1) work in JavaScript, so the cost is the same at 100 tiles or 4,000.</div>
+  <h4>Cross-dimension linking</h4>
+  <p>Country and limit-type rows carry no segment attribute — they are a different cut of the same book, not members of it. So hovering a segment computes what the selection <b>contributes</b> to every other dimension in one pass over the customer list (memoised per selection), leaves a row lit wherever the selection is present, and draws a marker inside its bar showing how much of that bar is the selection.</p>
+  <h4>Pinning</h4>
+  <p>Clicking an aggregate row pins the selection so it survives scrolling and re-renders, with a badge naming what is pinned. Click again or press <kbd>Esc</kbd> to release. Elements that already have a click action — a segment bar that drills down, a tile that opens a drawer — keep it; hover still highlights them. A checkbox in the heatmap toolbar disables the whole effect.</p>
+
+  <h3 id="d-int-sort">9.2 Sorting</h3>
+  <p>One engine serves every table. A registry holds the current key and direction per table; <code>sortTh()</code> renders a header with its caret, <code>applySort()</code> applies an accessor map, and <code>toggleSort()</code> flips direction or switches key. Text keys default to ascending, numeric to descending.</p>
+
+  <h3 id="d-int-drawer">9.3 Customer drawer</h3>
+  <p>Opens from any customer tile, row or ranking entry. Contains: identity and status; utilization and capacity outlook (18 months plus 12-month run-off with the same moving-average toggle); carve-out allocation bars when present; a carve-out breakdown table of total versus utilized SR that matches those bars exactly; and a transaction blotter with maturity dates and days to maturity.</p>
+  <div class="note"><b>Consistency rule</b>The drawer breakdown is sourced from the same carve-outs that drive the bars above it. An earlier version built it from the notional limit-type split, which is a different data source — so it showed five limit types and no countries while the bars showed two of each.</div>
+  <p>A customer with no limit gets a short panel pointing at the Limit Increase Requests tab instead.</p>
+
+  <h3 id="d-int-drill">9.4 Drill-down &amp; pivot</h3>
+  <ul>
+    <li><b>Segment drill</b> — clicking a coverage bar restricts the heatmap and its counts to that segment, with a removable chip.</li>
+    <li><b>Customer pivot</b> — selecting a name in the Overview search replaces the whole tab with that customer's view.</li>
+    <li><b>Cross-tab jumps</b> — the drawer links to the Overview customer view and to carve-out management for that name.</li>
+  </ul>
+
+  <h2 id="d-algo">10 · Algorithm reference</h2>
+  <h3 id="d-algo-rng">10.1 Deterministic RNG</h3>
+  <p>A <code>mulberry32</code> generator seeded with a fixed constant. Every draw in the build — names, limits, tenors, series, carve-outs, requests — comes from this one stream, so the same file always produces the same book. Helpers layered on it:</p>
+  <table><thead><tr><th>Helper</th><th>Purpose</th></tr></thead><tbody>
+    <tr><td><code>rand(lo,hi)</code>, <code>randInt(lo,hi)</code>, <code>choice(arr)</code></td><td>Uniform draws.</td></tr>
+    <tr><td><code>weightedChoice(pairs)</code></td><td>Weighted pick. Weights are <b>normalised by their total</b>, so tables can be written as readable percentages.</td></tr>
+    <tr><td><code>poissonRand(λ)</code></td><td>Knuth's method. Daily ticket arrivals.</td></tr>
+    <tr><td><code>gaussian()</code></td><td>Box–Muller standard normal.</td></tr>
+    <tr><td><code>bellBetween(lo,hi)</code></td><td>Bell curve centred in the range, ±3σ spanning it, resampled rather than clamped so the tails do not pile up on the bounds.</td></tr>
+  </tbody></table>
+  <div class="note warn"><b>Bug worth avoiding</b><code>weightedChoice</code> originally assumed weights summed to 1. Tenor tables written as percentages (0–100) therefore collapsed onto their first entry: every trade got the shortest tenor, the forward curve hit zero in days, and daily utilization swung 30 points. Normalising by the total fixed all three at once.</div>
+
+  <h3 id="d-algo-runoff">10.2 Settlement run-off</h3>
+  <p>The forward line. Not a trend extrapolation — the run-off of exposure already booked.</p>
+  <ol>
+    <li><b>Bucket by remaining life</b>, not original tenor. A one-year forward booked eleven months ago runs off next month, not next year.</li>
+    <li><b>Blend with a house profile</b> weighted by how many live trades the customer has. Below 30 live trades the house profile carries more of the shape; with none it carries all of it. Without this, a customer with three short-dated tickets falls to zero in a month.</li>
+    <li><b>Step down on value dates.</b> Each bucket falls off on its own day, producing a staircase.</li>
+    <li><b>Scale by current utilization</b> so the line starts where the actual line ends.</li>
+  </ol>
+  <p>The house fallback profile is spread across many distinct days rather than five round tenors, so a thin book steps down like a real one instead of falling off five cliffs.</p>
+
+  <h3 id="d-algo-tree">10.3 Squarified treemap</h3>
+  <p>Bruls, Huizing &amp; van Wijk. Items are sorted descending by area and accumulated into a row while doing so improves the worst aspect ratio in that row; when it would worsen, the row is laid out along the shorter side of the remaining rectangle and a new row starts.</p>
+  <p>Applied twice: once to lay out segments in the panel, then to lay out customers inside each segment rectangle, minus a header strip. Coordinates are computed in a nominal space and emitted as percentages so the layout is resolution-independent. Labels appear only when the cell is large enough — name above roughly 52×26, rate above 26×15, amount above 62×40.</p>
+
+  <h3 id="d-algo-water">10.4 Limit-type water-fill</h3>
+  <p>Splitting a customer's drawn amount across the five limit types, biased by product, without changing the total.</p>
+  <pre><code>weights[t] = typeAlloc[t] × TYPE_UTIL_BIAS[t]
+cap[t]     = limit × typeAlloc[t]
+remaining  = drawn
+repeat up to 6 times while remaining &gt; 0:
+    share out the remainder across the still-open types, pro rata by weight
+    a type that reaches its cap takes what it can, then closes
+    whatever it could not take returns to the remainder for the next pass</code></pre>
+  <p>Because total capacity equals the limit and drawn never exceeds it, the loop always places everything. Cached per customer.</p>
+  <div class="note why"><b>Why not just scale and clip</b>Clipping at the cap and discarding the overflow loses exposure: the five types then sum to less than the customer's drawn amount, and the concentration chart understates the book. Redistribution keeps the identity exact.</div>
+
+  <h2 id="d-invariants">11 · Invariants &amp; acceptance tests</h2>
+  <p>These hold for any generated book and are the checks a rebuild should be tested against.</p>
+  <table><thead><tr><th>#</th><th>Invariant</th></tr></thead><tbody>
+    <tr><td>1</td><td>Utilized + Available = total approved limits.</td></tr>
+    <tr><td>2</td><td>Donut slices sum to 100% of the pool.</td></tr>
+    <tr><td>3</td><td>Concentration by country: limits sum to the pool, drawn sums to utilized.</td></tr>
+    <tr><td>4</td><td>Concentration by limit type: the same two identities, after the water-fill.</td></tr>
+    <tr><td>5</td><td>The six utilization bands partition the limit holders exactly once.</td></tr>
+    <tr><td>6</td><td>Segment coverage counts sum to the full customer list.</td></tr>
+    <tr><td>7</td><td>No limit type is drawn beyond its allocation.</td></tr>
+    <tr><td>8</td><td>A customer's five type-drawn figures sum to that customer's drawn amount.</td></tr>
+    <tr><td>9</td><td>No carve-out scope over-allocates its customer's limit.</td></tr>
+    <tr><td>10</td><td>The forward run-off is monotonically non-increasing, for every customer and for the portfolio.</td></tr>
+    <tr><td>11</td><td>The run-off starts at or below current utilization.</td></tr>
+    <tr><td>12</td><td>Every Data Highlight source resolves to at least one customer.</td></tr>
+    <tr><td>13</td><td>Every histogram band maps to tiles carrying that band.</td></tr>
+    <tr><td>14</td><td>Raising the heatmap Top-N only appends: each smaller list is an exact prefix of each larger one, for all six sort criteria.</td></tr>
+    <tr><td>15</td><td>Customer names are unique across the whole book.</td></tr>
+    <tr><td>16</td><td>Pending requests carry no approver and no decision date; decided requests carry both, and no decision predates its submission.</td></tr>
+    <tr><td>17</td><td>Every trade's status agrees with its maturity: nothing settled before its value date.</td></tr>
+    <tr><td>18</td><td>The blotter honours the selected date range.</td></tr>
+  </tbody></table>
+  <h4>Rendering checks</h4>
+  <ul>
+    <li>No horizontal page overflow at any width from 1280px up, at any font size, on any tab, in any theme.</li>
+    <li>Panels within a row are equal height.</li>
+    <li>No label or figure clipped inside a KPI tile or a donut legend.</li>
+    <li>The console is clean on load and on every tab switch.</li>
+  </ul>
+
+  <h2 id="d-rebuild">12 · Rebuild checklist</h2>
+  <p>Working order for reconstructing the site. Each stage is testable before the next.</p>
+  <ol>
+    <li><b>Shell</b> — rail + main layout, tab bar, theme tokens and the three themes, the rem font scale, the tooltip engine.</li>
+    <li><b>RNG and helpers</b> — seeded generator, weighted choice with normalisation, Poisson, Gaussian, bell.</li>
+    <li><b>Customers</b> — roster then bulk population; assert uniqueness and the segment splits.</li>
+    <li><b>Series engine</b> — market driver first, then the per-customer ticket book, blocks, normalisation, profile ramps. Assert the risk bands are populated.</li>
+    <li><b>Transactions</b> — product tenor distributions, month-end rolling, status from maturity. Assert invariant 17.</li>
+    <li><b>Derived measures</b> — drawn, headroom, averages, the water-filled type split. Assert invariants 1–8.</li>
+    <li><b>Filters and rail</b> — multi-selects sharing one panel, date range, rail statistics.</li>
+    <li><b>Overview</b> — KPI strip, the two three-panel rows, then the heatmap, then the treemap, then the trend chart.</li>
+    <li><b>Remaining tabs</b> — Customers, Blotter, Rankings, Carve-outs, Requests.</li>
+    <li><b>Interactions</b> — sorting engine, drawer, drill-down, then Data Highlight last, since it depends on attributes emitted by every panel.</li>
+    <li><b>Persistence</b> — the four storage keys, each read and written inside <code>try/catch</code>.</li>
+    <li><b>This document</b> — update it in the same change as the behaviour it describes.</li>
+  </ol>
+
+  <h2 id="d-limits">13 · Known limitations</h2>
+  <table><thead><tr><th>Limitation</th><th>Detail</th></tr></thead><tbody>
+    <tr><td>Rendering cost at full scale</td><td>The heatmap at "All" draws ${nf(CUSTOMERS.length)} DOM nodes and takes roughly a second to paint. A production build over a book this size wants virtualised rendering or server-side aggregation. Top-N is the mitigation here.</td></tr>
+    <tr><td>Portfolio line is smoother than a single name</td><td>Genuine diversification, not a modelling shortcut. Averaging ~2,000 books damps the block-trade spikes that are obvious on one customer.</td></tr>
+    <tr><td>Treemap excludes zero-area names</td><td>A name with no limit — or no drawn amount when sizing by utilized — cannot be given area. The heatmap is where those are visible.</td></tr>
+    <tr><td>Carve-out storage size</td><td>Roughly ${nf(CARVEOUTS.length)} seeded carve-outs serialise to about a megabyte. Writes are wrapped in <code>try/catch</code>, so a quota failure degrades silently rather than breaking the page.</td></tr>
+    <tr><td>Single-device persistence</td><td>Everything lives in one browser's <code>localStorage</code>. Nothing is shared, synced or recoverable.</td></tr>
+    <tr><td>No accessibility audit</td><td>Semantic roles and keyboard focus are handled in places, but the build has not been tested against a screen reader, and the heatmap in particular is colour-carried.</td></tr>
+    <tr><td>Fixed "today"</td><td>The dataset is anchored to ${TODAY.toDateString()} so figures stay reproducible. A live build would move this and regenerate.</td></tr>
+  </tbody></table>
+  <p class="meta" style="margin-top:22px;padding-top:14px;border-top:1px solid var(--hair)">End of specification. Figures marked live were read from the running dataset when this page loaded.</p>
+
+  </article></div>`;
+}
+
 /* ============================================================
    Top-level render
 ============================================================ */
-const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests};
+const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests,docs:paneDocs};
 function render(){
   renderSidebarStats();
   renderChips();
@@ -2652,6 +3277,7 @@ function render(){
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
   if(state.tab==="requests") wireRequestForm();
   if(state.tab==="carveouts") wireCarveoutForm();
+  if(state.tab==="docs") wireDocs();
   // Repaint the pinned selection AFTER the pane is rebuilt — the rows it marks
   // are brand new elements, so painting first would mark the DOM being replaced.
   if(typeof hlApply==="function"){ hlApply(hlPinned); hlBadge(); }
