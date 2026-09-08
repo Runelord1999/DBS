@@ -1304,6 +1304,35 @@ function runoffFractions(mix,horizon){
 function runoffProjection(txns,currentUtil,horizon){
   return runoffFractions(settlementMix(txns),horizon).map(f=>currentUtil*f);
 }
+/* Limit-weighted portfolio utilization history and forward run-off for a set of
+   customers. The history scan is ~1M reads at full book, and the Overview trend
+   panel and the Limit Reserve Requests tab draw the IDENTICAL series, so it is
+   computed once per filter combination and cached. Looping customer-outer /
+   day-inner also beats the reverse: the series array stays hot. */
+const TREND_CACHE=new Map();
+function portfolioTrend(list){
+  const f=state.filters;
+  const key=list.length+"|"+[...f.country].sort().join()+"|"+[...f.segment].sort().join()+"|"+[...f.limitType].sort().join();
+  const hit=TREND_CACHE.get(key);
+  if(hit) return hit;
+  const hist=new Array(HIST_DAYS).fill(0);
+  let den=0;
+  list.forEach(c=>{
+    den+=c.limitM;
+    const sr=c.series, n=sr.length;
+    for(let off=HIST_DAYS-1, i=0; off>=0; off--, i++){
+      const idx=n-1-off;
+      if(idx>=0) hist[i]+=sr[idx]*c.limitM;
+    }
+  });
+  if(den>0) for(let i=0;i<HIST_DAYS;i++) hist[i]/=den;
+  const cur=hist[HIST_DAYS-1]||0;
+  const ids=new Set(list.map(x=>x.id));
+  const fcast=runoffProjection(TXNS.filter(t=>ids.has(t.customer.id)),cur,FWD_DAYS);
+  const out={hist,cur,fcast,ids,total:den};
+  TREND_CACHE.set(key,out);
+  return out;
+}
 /* First day the projection falls below a target utilization, or null if it never does. */
 function daysUntilBelow(proj,target){
   for(let i=0;i<proj.length;i++) if(proj[i]<target) return i+1;
@@ -2226,24 +2255,13 @@ function paneOverviewPortfolio(){
   const availRate = total?available/total:0;
 
   // Limit-weighted portfolio utilization for the last `d` days.
-  const weightedHist=d=>{
-    const out=[];
-    for(let off=d-1; off>=0; off--){
-      let num=0,den=0;
-      list.forEach(c=>{ const idx=c.series.length-1-off; if(idx>=0){num+=c.series[idx]*c.limitM; den+=c.limitM;} });
-      out.push(den?num/den:0);
-    }
-    return out;
-  };
-  // Period high-water mark, so the current rate reads against how close the book has come.
+  /* Same series the Limit Reserve Requests tab draws — computed once, cached. */
+  const PT=portfolioTrend(list);
+  const trendHist=PT.hist, curUtil=PT.cur, fcast=PT.fcast, inScope=PT.ids;
+  // Period high-water mark, so the current rate reads against how close the book
+  // has come. It is just the tail of the 18-month series, not a second scan.
   const days=state.dateRangeDays;
-  const hist=[];
-  for(let off=days-1; off>=0; off--){
-    let num=0,den=0;
-    list.forEach(c=>{ const idx=c.series.length-1-off; if(idx>=0){num+=c.series[idx]*c.limitM; den+=c.limitM;} });
-    hist.push(den?num/den:0);
-  }
-  const peakUtil=hist.length?Math.max(...hist):0;
+  const peakUtil=Math.max(0,...trendHist.slice(-days));
 
   const kpis=[
     ["Total SR pool",fmtM(grand),fmtM(total)+" limits + "+fmtM(reserved)+" reserved","var(--run)","runc","Total settlement-risk capacity in scope: approved customer limits plus the unallocated reserved buffer."],
@@ -2267,10 +2285,6 @@ function paneOverviewPortfolio(){
      projected is how today's outstanding exposure matures away. The trend panel
      runs 18 months back and 12 months forward, independent of the sidebar range,
      so the seasonal shape and the full run-off of long-dated tenors both fit. */
-  const trendHist=weightedHist(HIST_DAYS);
-  const curUtil=trendHist[trendHist.length-1]||0;
-  const inScope=new Set(list.map(x=>x.id));
-  const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,FWD_DAYS);
   const projected30=fcast[29]||0;
   /* Approved reserves over the same forward window and the same denominator as
      every other utilization rate on this page: approved limits in scope. */
@@ -2759,11 +2773,23 @@ function paneReserves(){
   const schedM=schedList.reduce((a,r)=>a+r.amountM,0);
   const pendList=scoped.filter(r=>r.status==="Pending");
   const pendM=pendList.reduce((a,r)=>a+r.amountM,0);
-  const scopeIds=filtersActive()?new Set(filteredWithLimit().map(c=>c.id)):null;
-  const denom=filteredWithLimit().reduce((a,c)=>a+c.limitM,0);
+  /* The identical series the Overview trend panel draws — same helper, same
+     cache — so the two charts cannot disagree. */
+  const list=filteredWithLimit();
+  const PT=portfolioTrend(list);
+  const denom=PT.total;
+  const scopeIds=filtersActive()?PT.ids:null;
   const ov=reserveOverlay(scopeIds,FWD_DAYS,denom,scopeIds?"rsvtab|"+scopeIds.size:"rsvtab|all");
   const peakIdx=ov.reduce((bi,v,i,arr)=>v>arr[bi]?i:bi,0);
   const peakM=ov[peakIdx]*denom;
+  /* Horizon readout: at each mark, what has run off, what is still reserved and
+     what is genuinely free. This is the difference the chart is drawing. */
+  const HORIZONS=[30,90,180,365];
+  const horizonRows=HORIZONS.map(d=>{
+    const i=Math.min(FWD_DAYS-1,d-1);
+    const run=PT.fcast[i]||0, res=ov[i]||0;
+    return {d, run, res, free:Math.max(0,1-run-res), released:Math.max(0,PT.cur-run)};
+  });
   const kpis=[
     ["Active reserves",fmtM(activeM),activeN+" holding capacity today","var(--gold)","gold",
      "Approved reserves whose window is open right now. This capacity sits inside an approved carve-out but is spoken for, so it is not headroom the desk can use for anything else."],
@@ -2776,9 +2802,18 @@ function paneReserves(){
   ];
   return `<div class="kpis kpis-4">${kpis.map(([l,v,sub,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${sub}</small></div>`).join("")}</div>
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Reserved capacity over the next 12 months<i class="info" data-tip="Approved reserves only, summed by day and shown against the approved limits in view. Each block is one window opening and closing. This is the same series drawn as a band on the Overview run-off chart.">i</i></h3>
-    <span class="slo">${scoped.filter(r=>r.status==="Approved").length} approved reserves · peak ${fmtM(peakM)}</span></div>
-    <div class="panel-body"><div class="chart-well">${reserveProfileChart(ov,denom)}</div></div></div>
+  <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="The same chart as the Overview tab. Solid blue is 18 months of actual limit-weighted utilization. Dashed green is the settlement run-off — capacity coming back as trades already on the book reach their value dates. The gold band on top is approved limit reserves, capacity that is coming back but is already claimed. The gap between the top of the band and the 100% line is what a desk can genuinely still sell.">i</i></h3>
+    <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><label class="machk" data-tip="Show or hide approved limit reserves stacked on the forward run-off."><input type="checkbox" id="ov-resv"${state.showReserve?" checked":""}> Reserves</label><span class="slo">18 months actual + 12 months run-off${peakM>0?" · "+fmtM(peakM)+" reserved at peak":""}</span></span></div>
+    <div class="panel-body"><div class="chart-well tall">${trendChart(PT.hist,PT.fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46,showReserve:state.showReserve,fcastReserve:ov,reserveLabel:peakM>0?fmtM(peakM)+" reserved at peak":""})}</div></div>
+    ${trendLegend(state.showMA,state.showReserve&&peakM>0)}
+    <div class="table-wrap"><table><thead><tr><th>Looking ahead</th><th class="r">SR released by maturing trades</th><th class="r">Still on the book</th><th class="r">Held by reserves</th><th class="r">Free to trade</th></tr></thead>
+    <tbody>${horizonRows.map(r=>`<tr>
+      <td><b>${r.d} days</b><div class="sub2">${fmtDate(new Date(TODAY.getTime()+r.d*dayMs))}</div></td>
+      <td class="r num passc">${fmtM(r.released*denom)}<div class="sub2">${fmtPct(r.released)} of limits</div></td>
+      <td class="r num failc">${fmtM(r.run*denom)}<div class="sub2">${fmtPct(r.run)}</div></td>
+      <td class="r num gold">${r.res>0?fmtM(r.res*denom):"—"}<div class="sub2">${r.res>0?fmtPct(r.res,2):""}</div></td>
+      <td class="r num">${fmtM(r.free*denom)}<div class="sub2">${fmtPct(r.free)}</div></td></tr>`).join("")}</tbody></table></div>
+    <div class="foot">Released and Still on the book are the two halves of the run-off — what has matured away by that date, and what is left. Held by reserves is capacity that has come back but is already claimed, so it is subtracted from Free to trade rather than added to it.</div></div>
 
   <div class="panel mt14"><div class="panel-hd"><h3>Request a limit reserve</h3><span class="slo">hold part of a carve-out for an expected deal</span></div>
     <div class="panel-body">
@@ -2808,41 +2843,6 @@ function paneReserves(){
       </form>
     </div></div>
   ${reservesTable()}`;
-}
-/* Stacked forward profile of reserved capacity — one step per window opening
-   and closing, so the shape reads the same way the band on the trend chart does. */
-function reserveProfileChart(ov,denomM){
-  const w=1180,h=200,pad=44,botPad=40,topPad=14;
-  const baseline=h-botPad, plotW=w-pad-12;
-  const peak=Math.max(...ov,1e-9);
-  const X=i=>pad+i/(ov.length-1)*plotW;
-  const Y=v=>baseline-(v/(peak*1.12))*(baseline-topPad);
-  let grid="";
-  for(let g=1;g<=3;g++){
-    const v=peak*1.12*g/4;
-    grid+=`<line x1="${pad}" y1="${Y(v).toFixed(1)}" x2="${w-12}" y2="${Y(v).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/>`
-      +`<text x="${pad-6}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${fmtM(v*denomM)}</text>`;
-  }
-  const pts=ov.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
-  const area=`${X(0).toFixed(1)},${baseline} ${pts} ${X(ov.length-1).toFixed(1)},${baseline}`;
-  let monthLbls="",monthTicks="";
-  for(let k=0;k<ov.length;k++){
-    const d=new Date(TODAY.getTime()+(k+1)*dayMs);
-    if(d.getDate()===1){
-      const xx=X(k).toFixed(1);
-      monthTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+6).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".8"/>`;
-      monthLbls+=`<text x="${xx}" y="${(baseline+19).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" font-weight="600" text-anchor="middle">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
-    }
-  }
-  if(peak<=1e-9) return `<div class="empty">No approved reserves in the current view.</div>`;
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Reserved capacity by day over the next 12 months">
-    ${grid}
-    <polygon points="${area}" fill="var(--gold)" opacity=".22"/>
-    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.8" stroke-linejoin="round"/>
-    <line x1="${pad}" y1="${baseline}" x2="${w-12}" y2="${baseline}" stroke="var(--hair)"/>
-    ${monthTicks}${monthLbls}
-    <text x="${pad}" y="${topPad-2}" fill="var(--ink-3)" font-size="9">peak ${fmtM(peak*denomM)} · ${fmtPct(peak,2)} of approved limits in view</text>
-  </svg>`;
 }
 function rvOptions(field,sel){
   const vals=[...new Set(RESERVES.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -3685,7 +3685,7 @@ function paneDocs(){
   <div class="note why"><b>One ranking, not two</b>The same criterion decides both which names make the cut and what order they appear in, with the customer name breaking ties. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of appending to the end of it.</div>
   <h4>Utilization trend and capacity run-off</h4>
   <p>Full width at the foot of the tab. It shows eighteen months of actual daily utilization, an optional three-month moving average, and twelve months of forward settlement run-off, with a marked line at today and the forward half lightly shaded.</p>
-  <p>A gold band sits on top of the run-off wherever approved <b>limit reserves</b> are holding capacity, with its peak called out in words. A <b>Reserves</b> checkbox turns it off. At portfolio scale the band is only a few percent of the axis — that is the true proportion, so it is annotated rather than exaggerated. On a single customer it is usually much thicker. See <a href="#d-data-rsv">5.8</a>.
+  <p>A gold band sits on top of the run-off wherever approved <b>limit reserves</b> are holding capacity, with its peak called out in words. A <b>Reserves</b> checkbox turns it off. At portfolio scale the band is only a few percent of the axis — that is the true proportion, so it is annotated rather than exaggerated. On a single customer it is usually much thicker. The <a href="#d-tab-reserves">Limit Reserve Requests</a> tab repeats this exact chart, with a horizon readout underneath that separates capacity released by maturing trades from capacity held by reserves. See <a href="#d-data-rsv">5.8</a>.
   <p>The horizontal axis is a real calendar: a small tick every Monday, a taller tick and a gridline on the first of each month, month names underneath, and the year printed under each January. Month names thin themselves out automatically when they would otherwise collide.</p>
   <div class="note"><b>The forward line can only fall</b>It is not a forecast. It is the run-off of exposure <b>already on the book</b>, worked out from how long each live trade still has to run. Future trades cannot be known, so the line steps down as today's book matures and never rises. It is a staircase rather than a curve because settlement happens on value dates, in lumps.</div>
 
@@ -3718,8 +3718,16 @@ function paneDocs(){
   <p>Where a desk asks to hold part of a carve-out for a deal it expects to book. The workflow mirrors <a href="#d-tab-requests">7.6</a>, but the thing being asked for is different: an increase changes the limit, a reserve holds capacity that already exists. See <a href="#d-data-rsv">5.8</a> for the model.</p>
   <h4>Summary strip</h4>
   <p>Four figures, all answering to the rail filters: <b>Active reserves</b> holding capacity today, <b>Scheduled</b> windows that have not opened yet, <b>Awaiting approval</b>, and the <b>Peak forward hold</b> — the busiest single day over the next twelve months, which is the high-water mark of the band on the run-off chart.</p>
-  <h4>Reserved capacity over the next 12 months</h4>
-  <p>The same daily series the trend chart draws as a band, shown here at its own scale so the shape is readable. Each step is a window opening or closing. It decays because reserves are mostly near-dated; the long tail is the programme trades.</p>
+  <h4>Utilization trend &amp; capacity run-off</h4>
+  <p>The <b>same chart as the Overview tab</b>, not a variant of it. Both call one shared helper for the history and the run-off, so the two panels cannot drift apart — a verification check compares the drawn paths and fails if they differ by so much as a coordinate.</p>
+  <p>Beneath it sits a horizon readout at 30, 90, 180 and 365 days, which is where the two forward effects are separated:</p>
+  <table><thead><tr><th style="width:15em">Column</th><th>What it is</th></tr></thead><tbody>
+    <tr><td>SR released by maturing trades</td><td>How much exposure has run off by that date — capacity handed back because trades reached their value dates.</td></tr>
+    <tr><td>Still on the book</td><td>What is left of today's exposure at that date. With the column above it, the two halves of the run-off.</td></tr>
+    <tr><td>Held by reserves</td><td>Approved reserves whose window covers that day. Capacity that has come back but is already claimed.</td></tr>
+    <tr><td>Free to trade</td><td>What is genuinely available: everything not still drawn and not reserved.</td></tr>
+  </tbody></table>
+  <p>Reserves are <b>subtracted</b> from Free to trade rather than added to it. That is the whole point of the tab: run-off alone overstates what a desk can sell.</p>
   <h4>The request form</h4>
   <p>It cascades: pick a customer, pick a scope, and the carve-out list fills with that customer's carve-outs in that scope, each showing how much of it is free. Two things are refused before submission:</p>
   <ul>
@@ -3755,10 +3763,9 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
     <tr><td>Donut</td><td>One SVG circle with a dashed stroke</td><td>One arc per slice, each offset a little further around the circle.</td></tr>
     <tr><td>Histogram</td><td>SVG rectangles</td><td>Space is reserved above the bars so the count labels never clip.</td></tr>
     <tr><td>Grouped bar</td><td>SVG rectangles</td><td>Two bars per segment plus a coverage figure. The bars are clickable and drill down.</td></tr>
-    <tr><td>Trend and run-off</td><td>SVG polylines</td><td>Actual, moving average and run-off, over a real calendar axis.</td></tr>
+    <tr><td>Trend and run-off</td><td>SVG polylines plus a filled band</td><td>Actual, moving average, run-off and the reserve band, over a real calendar axis. Drawn by one function used by the Overview tab, the customer view, the drawer and the reserve tab.</td></tr>
     <tr><td>Heatmap</td><td>A CSS grid of buttons</td><td>Columns fill automatically to a minimum width per size, and detail is shed by CSS at each size.</td></tr>
     <tr><td>Treemap</td><td>Positioned buttons</td><td>Squarified layout in two levels: segments first, then customers inside each segment.</td></tr>
-    <tr><td>Reserve profile</td><td>SVG area plus polyline</td><td>Reserved capacity by forward day on the Limit Reserve Requests tab, at its own scale.</td></tr>
     <tr><td>Mini bars</td><td>Nested elements</td><td>Concentration rows, carve-out fills and allocation bars.</td></tr>
   </tbody></table>
 
@@ -3921,6 +3928,8 @@ repeat up to 6 times, while anything remains:
     <tr><td>20</td><td>Every reserve window ends after it starts, and no reserve is raised or decided in the future.</td></tr>
     <tr><td>21</td><td>Only approved reserves appear in the forward band; pending and rejected ones contribute nothing.</td></tr>
     <tr><td>22</td><td>Reserves change no pool figure: invariants 1 to 4 hold identically with reserves present or removed.</td></tr>
+    <tr><td>23</td><td>The Overview trend chart and the reserve tab's trend chart draw identical paths for the same filters.</td></tr>
+    <tr><td>24</td><td>On the horizon readout, released plus still-on-the-book equals current utilization, and still-on-the-book plus reserved plus free equals 100%.</td></tr>
   </tbody></table>
   <h4>Rendering checks</h4>
   <ul>
