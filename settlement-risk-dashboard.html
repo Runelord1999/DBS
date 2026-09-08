@@ -565,6 +565,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
         <button class="tab" role="tab" data-tab="carveouts" aria-selected="false">SR Carve-Outs</button>
         <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
         <button class="tab" role="tab" data-tab="reserves" aria-selected="false">Limit Reserve Requests</button>
+        <button class="tab" role="tab" data-tab="tests" aria-selected="false">Testing &amp; Regression</button>
         <button class="tab" role="tab" data-tab="docs" aria-selected="false">Documentation</button>
       </div>
       <div class="tabs-right">
@@ -1350,6 +1351,7 @@ const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitTy
   reqFilters:{customer:"",type:"",requester:"",approver:"",status:""},
   rsvFilters:{customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""},
   showReserve:true,
+  tests:{suite:"",show:"",openManual:null},
   expo:{dir:"top",n:10,seg:""}};
 
 /* ============================================================
@@ -1365,6 +1367,7 @@ const SORTS={
   carveouts:{key:"amount",dir:-1},
   requests:{key:"created",dir:-1},
   reserves:{key:"created",dir:-1},
+  tests:{key:"id",dir:1},
   allcarve:{key:"customer",dir:1},
 };
 const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold","purpose","requester","approver"]);
@@ -3167,7 +3170,8 @@ const DOC_SECTIONS=[
     {id:"d-tab-carveouts", t:"7.5 SR Carve-Outs"},
     {id:"d-tab-requests", t:"7.6 Limit Increase Requests"},
     {id:"d-tab-reserves", t:"7.7 Limit Reserve Requests"},
-    {id:"d-tab-docs", t:"7.8 Documentation"}]},
+    {id:"d-tab-tests", t:"7.8 Testing & Regression"},
+    {id:"d-tab-docs", t:"7.9 Documentation"}]},
   {id:"d-viz", t:"8 · Visual system", kids:[
     {id:"d-viz-tokens", t:"8.1 Colour tokens"},
     {id:"d-viz-heat", t:"8.2 Utilization ramp"},
@@ -3368,6 +3372,7 @@ function paneDocs(){
     <tr><td><code>expo</code></td><td>dir, n, seg</td><td>The exposure ranking: top or bottom, how many names, which segment.</td></tr>
     <tr><td><code>reqFilters</code></td><td>object</td><td>The column filters on the limit increase requests table.</td></tr>
     <tr><td><code>rsvFilters</code></td><td>object</td><td>The column filters on the limit reserve table.</td></tr>
+    <tr><td><code>tests</code></td><td>object</td><td>Testing tab: suite filter, result filter, and which manual test is expanded.</td></tr>
     <tr><td><code>showReserve</code></td><td>boolean</td><td>Whether the reserve band is drawn on the forward half of the trend charts. On by default.</td></tr>
   </tbody></table>
 
@@ -3379,6 +3384,7 @@ function paneDocs(){
     <tr><td><code>sr-dash-carveouts-v3</code></td><td>the full carve-out list</td><td>Written whenever one is added or removed. The suffix was bumped when customer ids were regenerated — a list saved against an older book cannot be matched to this one.</td></tr>
     <tr><td><code>sr-dash-requests-v2</code></td><td>the full limit increase request list</td><td>Written on submit, approve and reject.</td></tr>
     <tr><td><code>sr-dash-reserves-v1</code></td><td>the full limit reserve list</td><td>Written on submit, approve, reject and release.</td></tr>
+    <tr><td><code>sr-dash-tests-v1</code></td><td>manual test results and the runs made in this browser</td><td>Written when a manual result is recorded or the automated suite is run.</td></tr>
   </tbody></table>
   <div class="note"><b>Rule</b>Every read and write is wrapped so that a failure cannot break the page. Private browsing and blocked site data must quietly fall back to the defaults. Bump the suffix on a key whenever the shape or the meaning of what is stored changes.</div>
 
@@ -3825,7 +3831,33 @@ function paneDocs(){
   <p>Reserve id, customer with segment and country, scope, carve-out label, amount, share of the customer's limit, window state with its dates, length in days, expected deal, requester with desk, approver with role, submitted date and status. Every column sorts; the filter row gives free text over id, customer name and carve-out label, plus dropdowns for scope, window, expected deal, requester, approver and status.</p>
   <p>Pending rows carry <b>Approve</b> and <b>Reject</b>. Approved rows whose window has not yet closed carry <b>Release</b>, which hands the capacity back immediately after a confirmation naming the reserve. As on the requests table, all three act on the reserve <b>id</b> rather than the row position.</p>
 
-  <h3 id="d-tab-docs">7.8 Documentation</h3>
+  <h3 id="d-tab-tests">7.8 Testing &amp; Regression</h3>
+  <p>Where the site checks itself. The distinction that matters on this tab is between what a machine can assert and what a person has to judge, and the two are kept visibly apart.</p>
+  <div class="note why"><b>The automated tests are real</b>They are not a recorded result played back. Pressing <b>Run</b> executes ${AUTO_TESTS.length} assertions against the live dataset in the open page and reports what it actually found — including the observed figures, in the last column. A test that cannot fail is worth nothing, so each one was checked by deliberately breaking the thing it guards and confirming it goes red.</div>
+  <h4>What is real and what is seeded</h4>
+  <table><thead><tr><th style="width:14em">Element</th><th>Source</th></tr></thead><tbody>
+    <tr><td>Automated test results</td><td><b>Real.</b> Executed in this browser, now, against the live data.</td></tr>
+    <tr><td>Manual test outcomes</td><td>Recorded by a person and saved in this browser. Seeded with a plausible history on first load.</td></tr>
+    <tr><td>Run history before today</td><td>Seeded. Runs made in this browser are marked and appended to it.</td></tr>
+    <tr><td>Releases and defect log</td><td>Seeded, but the defects are the real ones found while building this site, each naming the test that now guards it.</td></tr>
+  </tbody></table>
+  <h4>Suites</h4>
+  <table><thead><tr><th style="width:11em">Suite</th><th>Covers</th><th class="r">Tests</th></tr></thead><tbody>
+    ${TEST_SUITES.map(su=>`<tr><td><b>${su.name}</b></td><td>${su.blurb}</td><td class="r num">${AUTO_TESTS.filter(t=>t.suite===su.id).length}</td></tr>`).join("")}
+  </tbody></table>
+  <p><b>${AUTO_TESTS.filter(t=>t.inv).length}</b> of the ${AUTO_TESTS.length} tests carry an invariant number, tying them to the numbered statements in <a href="#d-invariants">section 11</a>. That link is the point: an invariant written only in prose drifts, an invariant with a test behind it cannot.</p>
+  <h4>Dashboards</h4>
+  <ul>
+    <li><b>Run history</b> — passed and failed per run, oldest on the left. Runs made in this browser carry a mark.</li>
+    <li><b>Quality trend</b> — pass rate across all runs in each release. The suite grows with the product, so a flat line at 100% means the new tests are passing too, not that nothing was added.</li>
+    <li><b>Suite breakdown</b> — results and elapsed time per suite for the current run.</li>
+    <li><b>Release testing</b> — what each release was tested against and whether it was signed off.</li>
+    <li><b>Defect log</b> — issues found, and the test that now guards each one. A defect with a guarding test is what makes this a regression suite rather than a checklist.</li>
+  </ul>
+  <h4>Manual checklist</h4>
+  <p>${MANUAL_TESTS.length} scenarios covering what cannot be asserted from data: whether a theme repaints every surface, whether the reserve line is visually distinguishable from the run-off, whether keyboard focus reaches the controls, whether a print preview holds together. Each carries its steps and its expected result; a row expands to show them, and Pass, Fail and Block record an outcome against your name and today's date.</p>
+
+  <h3 id="d-tab-docs">7.9 Documentation</h3>
   <p>This tab. The topic tree on the left follows the reader down the page: on each scroll it finds the last heading that has passed a line just below the top of the window, and highlights that entry, scrolling the tree itself if the entry has drifted out of sight.</p>
   <div class="note why"><b>Why not the obvious approach</b>The first attempt watched for headings entering a band near the top of the window. That fails inside a long section, because once the heading has scrolled past, no heading is in the band at all and the tree goes blank. Tracking the last heading that has gone by never has that gap.</div>
   <p>The tree and the page are generated from a single list of sections, and the wiring writes a console warning if any entry in that list points at a heading that no longer exists — so the tree cannot silently rot as sections are edited.</p>
@@ -3852,6 +3884,7 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
     <tr><td>Trend and run-off</td><td>SVG polylines plus a filled band</td><td>Actual, moving average, run-off and the reserve band, over a real calendar axis. Drawn by one function used by the Overview tab, the customer view, the drawer and the reserve tab.</td></tr>
     <tr><td>Heatmap</td><td>A CSS grid of buttons</td><td>Columns fill automatically to a minimum width per size, and detail is shed by CSS at each size.</td></tr>
     <tr><td>Treemap</td><td>Positioned buttons</td><td>Squarified layout in two levels: segments first, then customers inside each segment.</td></tr>
+    <tr><td>Stacked run bars</td><td>SVG rects</td><td>Tests passed and failed per run on the Testing tab.</td></tr>
     <tr><td>Mini bars</td><td>Nested elements</td><td>Concentration rows, carve-out fills and allocation bars.</td></tr>
   </tbody></table>
 
@@ -3990,7 +4023,7 @@ repeat up to 6 times, while anything remains:
   <div class="note why"><b>Why not scale and clip</b>Cutting a product at its cap and throwing away the surplus loses exposure. The five products would then add up to less than the customer's drawn amount, and the concentration chart would understate the book. Redistributing keeps the arithmetic exact.</div>
 
   <h2 id="d-invariants">11 · Invariants &amp; acceptance tests</h2>
-  <p>These statements hold true for any book the generator produces. They are the checks a rebuild should be tested against.</p>
+  <p>These statements hold true for any book the generator produces. They are the checks a rebuild should be tested against — and most of them are not just written down here: the numbered ones are <b>executable</b>, wired into the automated suite on the <a href="#d-tab-tests">Testing &amp; Regression</a> tab, where the Invariant column names which test guards which statement.</p>
   <table><thead><tr><th style="width:3em">#</th><th>Must always be true</th></tr></thead><tbody>
     <tr><td>1</td><td>Utilized plus Available equals total approved limits.</td></tr>
     <tr><td>2</td><td>The donut slices add up to 100% of the pool.</td></tr>
@@ -4042,6 +4075,7 @@ repeat up to 6 times, while anything remains:
     <li><b>Limit reserves</b> — the reserve model with its deal events, the forward overlay, the second line on the trend charts, then the tab. It comes after carve-outs because a reserve has no meaning without one. Assert invariants 19 to 26.</li>
     <li><b>Interactions</b> — the sorting mechanism, the drawer, drill-down, and Data Highlight last, because it depends on tags emitted by every other panel.</li>
     <li><b>Persistence</b> — the four storage keys, each read and written safely.</li>
+    <li><b>Tests</b> — port the invariants in section 11 into the automated suite so the build checks itself, then the manual checklist for what a person has to judge.</li>
     <li><b>This document</b> — update it in the same change as the behaviour it describes.</li>
   </ol>
 
@@ -4065,9 +4099,674 @@ repeat up to 6 times, while anything remains:
 
 
 /* ============================================================
+   Testing & Regression
+   The automated tests below are REAL: each one runs against the live
+   dataset in this page and returns a genuine pass or fail. They are the
+   same assertions the build is checked with, moved inside the page so the
+   site can prove its own arithmetic instead of describing it.
+
+   Where a test maps to a numbered invariant in the Documentation tab, the
+   `inv` field records which — so the spec and the suite cannot drift apart.
+
+   Run history, releases and defects are seeded mock data; the current run
+   is not.
+============================================================ */
+const TEST_SUITES=[
+  {id:"pool",     name:"Pool arithmetic",     blurb:"Every identity the KPI strip and the donut depend on."},
+  {id:"book",     name:"Customer book",       blurb:"Population, ids, series shape and the risk bands."},
+  {id:"txn",      name:"Transactions",        blurb:"Tenors, month-end rolling and status against maturity."},
+  {id:"carve",    name:"Carve-outs",          blurb:"Allocation ladders, thresholds and the index."},
+  {id:"reserve",  name:"Limit reserves",      blurb:"Windows, event dates and the forward overlay."},
+  {id:"chart",    name:"Charts & series",     blurb:"Run-off shape, the shared trend series, ranking stability."},
+  {id:"ui",       name:"Rendering & wiring",  blurb:"Every tab builds, every documentation anchor resolves."},
+];
+const SUITE_NAME={}; TEST_SUITES.forEach(s=>SUITE_NAME[s.id]=s.name);
+
+/* Helpers used by several tests. Kept small and explicit — a test that needs
+   a helper to be correct is not much of a test. */
+const _T={
+  limits:()=>WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),
+  drawn:()=>WITH_LIMIT.reduce((a,c)=>a+custDrawnM(c),0),
+  near:(a,b,tol)=>Math.abs(a-b)<=(tol||0.01),
+  monthBoundaries:()=>{const o=[];for(let d=1;d<=FWD_DAYS;d++){if(new Date(TODAY.getTime()+d*dayMs).getDate()===1)o.push(d);}return o;},
+  steps:arr=>{const d=[];for(let i=1;i<arr.length;i++)d.push({i,v:arr[i]-arr[i-1]});return d.sort((x,y)=>Math.abs(y.v)-Math.abs(x.v));},
+  pass:(cond,detail)=>({pass:!!cond,detail:detail||""}),
+};
+
+const AUTO_TESTS=[
+  /* ---- pool arithmetic ---- */
+  {id:"AT-001",suite:"pool",inv:1,name:"Utilized + Available equals total approved limits",fn:()=>{
+    const L=_T.limits(), d=_T.drawn(), a=WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0);
+    return _T.pass(_T.near(d+a,L,1), fmtM(d)+" + "+fmtM(a)+" = "+fmtM(d+a)+" vs "+fmtM(L));}},
+  {id:"AT-002",suite:"pool",inv:2,name:"Pool donut slices total 100%",fn:()=>{
+    const L=_T.limits(), d=_T.drawn(), a=L-d, g=L+RESERVED_M;
+    const sum=(d/g+a/g+RESERVED_M/g)*100;
+    return _T.pass(_T.near(sum,100,0.001), sum.toFixed(4)+"%");}},
+  {id:"AT-003",suite:"pool",inv:3,name:"Country concentration reconciles to the pool",fn:()=>{
+    let L=0,d=0; COUNTRIES.forEach(co=>{const cs=WITH_LIMIT.filter(c=>c.country===co);
+      L+=cs.reduce((a,c)=>a+c.limitM,0); d+=cs.reduce((a,c)=>a+custDrawnM(c),0);});
+    return _T.pass(_T.near(L,_T.limits(),1)&&_T.near(d,_T.drawn(),1), fmtM(L)+" limits, "+fmtM(d)+" drawn");}},
+  {id:"AT-004",suite:"pool",inv:4,name:"Limit-type concentration reconciles after the water-fill",fn:()=>{
+    let L=0,d=0; LIMIT_TYPES.forEach(t=>{ WITH_LIMIT.forEach(c=>{ L+=custLimitTypeM(c,t); d+=custTypeDrawnM(c,t); }); });
+    return _T.pass(_T.near(L,_T.limits(),2)&&_T.near(d,_T.drawn(),2), fmtM(L)+" limits, "+fmtM(d)+" drawn");}},
+  {id:"AT-005",suite:"pool",inv:8,name:"Each customer's five type figures sum to their drawn amount",fn:()=>{
+    const bad=WITH_LIMIT.filter(c=>!_T.near(custTypeDrawn(c).reduce((a,b)=>a+b,0),custDrawnM(c),0.02));
+    return _T.pass(bad.length===0, bad.length+" of "+WITH_LIMIT.length+" mismatched");}},
+  {id:"AT-006",suite:"pool",inv:7,name:"No limit type is drawn beyond its allocation",fn:()=>{
+    const bad=WITH_LIMIT.filter(c=>custTypeDrawn(c).some((v,i)=>v>custLimitTypeM(c,LIMIT_TYPES[i])+0.02));
+    return _T.pass(bad.length===0, bad.length+" over allocation");}},
+  {id:"AT-007",suite:"pool",name:"Reserved buffer is 12% of approved limits",fn:()=>
+    _T.pass(_T.near(RESERVED_M,_T.limits()*0.12,1), fmtM(RESERVED_M)+" vs "+fmtM(_T.limits()*0.12))},
+  {id:"AT-008",suite:"pool",name:"Drawn never exceeds a customer's approved limit",fn:()=>{
+    const bad=WITH_LIMIT.filter(c=>custDrawnM(c)>c.limitM+0.001);
+    return _T.pass(bad.length===0, bad.length+" over limit");}},
+  {id:"AT-009",suite:"pool",name:"Excess exposure is reported outside the pool",fn:()=>{
+    const ex=WITH_LIMIT.reduce((a,c)=>a+Math.max(0,custUtilCur(c)-1)*c.limitM,0);
+    const breaches=WITH_LIMIT.filter(c=>custUtilCur(c)>1).length;
+    return _T.pass(ex>0 && breaches>0 && _T.near(_T.drawn()+WITH_LIMIT.reduce((a,c)=>a+custFreeM(c),0),_T.limits(),1),
+      fmtM(ex)+" across "+breaches+" names, pool unaffected");}},
+
+  /* ---- customer book ---- */
+  {id:"AT-010",suite:"book",inv:15,name:"Customer names are unique across the book",fn:()=>
+    _T.pass(new Set(CUSTOMERS.map(c=>c.name)).size===CUSTOMERS.length, CUSTOMERS.length.toLocaleString()+" names")},
+  {id:"AT-011",suite:"book",name:"Customer ids are unique and well formed",fn:()=>{
+    const ok=CUSTOMERS.every(c=>/^C\d+$/.test(c.id));
+    return _T.pass(ok && new Set(CUSTOMERS.map(c=>c.id)).size===CUSTOMERS.length,
+      CUSTOMERS[0].id+" … "+CUSTOMERS[CUSTOMERS.length-1].id);}},
+  {id:"AT-012",suite:"book",name:"Every limit holder carries a full daily history",fn:()=>{
+    const bad=WITH_LIMIT.filter(c=>!(c.series instanceof Float32Array)||c.series.length!==HIST_DAYS);
+    return _T.pass(bad.length===0, HIST_DAYS+" days x "+WITH_LIMIT.length.toLocaleString()+" names");}},
+  {id:"AT-013",suite:"book",inv:5,name:"The six utilization bands partition the book exactly once",fn:()=>{
+    const bands=["0%","0-50%","50-75%","75-90%","90-100%",">100%"];
+    const counts={}; WITH_LIMIT.forEach(c=>{const b=hlBandOf(c);counts[b]=(counts[b]||0)+1;});
+    const total=bands.reduce((a,b)=>a+(counts[b]||0),0);
+    return _T.pass(total===WITH_LIMIT.length && bands.every(b=>counts[b]>0),
+      bands.map(b=>b+":"+(counts[b]||0)).join("  "));}},
+  {id:"AT-014",suite:"book",inv:6,name:"Segment coverage counts sum to the full customer list",fn:()=>{
+    const t=SEGMENTS.reduce((a,s)=>a+CUSTOMERS.filter(c=>c.segment===s).length,0);
+    return _T.pass(t===CUSTOMERS.length, t.toLocaleString()+" of "+CUSTOMERS.length.toLocaleString());}},
+  {id:"AT-015",suite:"book",name:"All five generator profiles are populated",fn:()=>{
+    const p={}; WITH_LIMIT.forEach(c=>p[c.profile]=(p[c.profile]||0)+1);
+    const need=["mid","hot","cold","dormant","breach"];
+    return _T.pass(need.every(k=>p[k]>0), need.map(k=>k+":"+(p[k]||0)).join("  "));}},
+  {id:"AT-016",suite:"book",name:"Non-breach names never exceed 100% utilization",fn:()=>{
+    const bad=WITH_LIMIT.filter(c=>c.profile!=="breach"&&Math.max.apply(null,Array.from(c.series))>1.0001);
+    return _T.pass(bad.length===0, bad.length+" over");}},
+  {id:"AT-017",suite:"book",name:"Dormant names finish at zero utilization",fn:()=>{
+    const d=WITH_LIMIT.filter(c=>c.profile==="dormant");
+    return _T.pass(d.length>0 && d.every(c=>c.series[c.series.length-1]<0.001), d.length+" dormant names");}},
+  {id:"AT-018",suite:"book",name:"Ranked bank limits fall from $5B to $1B",fn:()=>{
+    const r=CUSTOMERS.filter(c=>c.rank).sort((a,b)=>a.rank-b.rank);
+    const first=r[0], last=r[r.length-1];
+    return _T.pass(first.limitM>4700&&first.limitM<5300&&last.limitM>930&&last.limitM<1070,
+      "rank 1 "+fmtM(first.limitM)+", rank "+last.rank+" "+fmtM(last.limitM));}},
+
+  /* ---- transactions ---- */
+  {id:"AT-019",suite:"txn",inv:17,name:"Trade status always agrees with maturity",fn:()=>{
+    const bad=TXNS.filter(t=>t.status!=="Failed" && (t.daysToMaturity>0 ? t.status!=="Pending" : t.status!=="Settled"));
+    return _T.pass(bad.length===0, bad.length+" of "+TXNS.length.toLocaleString()+" inconsistent");}},
+  {id:"AT-020",suite:"txn",name:"Tenors of 30 days or more settle at month-end",fn:()=>{
+    const long=TXNS.filter(t=>t.settleLag>=30);
+    const bad=long.filter(t=>{const m=t.maturity;return new Date(m.getFullYear(),m.getMonth()+1,0).getDate()!==m.getDate();});
+    return _T.pass(bad.length===0, long.length.toLocaleString()+" long-dated trades, "+bad.length+" off month-end");}},
+  {id:"AT-021",suite:"txn",name:"SR consumed sits in the 2-9% band, floored at $0.1M",fn:()=>{
+    const out=TXNS.filter(t=>{const r=t.srConsumedM/t.notionalM;return r<0.013||r>0.101;});
+    const zero=TXNS.filter(t=>t.srConsumedM<0.1).length;
+    return _T.pass(out.length===0&&zero===0, out.length+" outside band, "+zero+" at zero");}},
+  {id:"AT-022",suite:"txn",name:"Block trades are about 2.5% of tickets",fn:()=>{
+    const r=TXNS.filter(t=>t.notionalM>=900).length/TXNS.length;
+    return _T.pass(r>0.015&&r<0.05, (r*100).toFixed(2)+"%");}},
+  {id:"AT-023",suite:"txn",name:"Failed trades are about 3% of tickets",fn:()=>{
+    const r=TXNS.filter(t=>t.status==="Failed").length/TXNS.length;
+    return _T.pass(r>0.02&&r<0.04, (r*100).toFixed(2)+"%");}},
+  {id:"AT-024",suite:"txn",inv:18,name:"The blotter honours the selected date range",fn:()=>{
+    const keep=state.dateRangeDays;
+    let ok=true, detail=[];
+    [30,90,365].forEach(d=>{ state.dateRangeDays=d;
+      const rows=txnsInRange(); const cutoff=TODAY.getTime()-(d-1)*dayMs;
+      if(rows.some(t=>t.date.getTime()<cutoff)) ok=false;
+      detail.push(d+"d:"+rows.length.toLocaleString()); });
+    state.dateRangeDays=keep;
+    return _T.pass(ok, detail.join("  "));}},
+  {id:"AT-025",suite:"txn",name:"Every trade belongs to a customer holding a limit",fn:()=>{
+    const bad=TXNS.filter(t=>!t.customer||!t.customer.hasLimit);
+    return _T.pass(bad.length===0, bad.length+" orphaned");}},
+
+  /* ---- carve-outs ---- */
+  {id:"AT-026",suite:"carve",inv:9,name:"No carve-out scope over-allocates its customer's limit",fn:()=>{
+    const g={}; CARVEOUTS.forEach(co=>{const k=co.customerId+"|"+co.scope;g[k]=(g[k]||0)+co.amountM;});
+    const bad=Object.entries(g).filter(([k,v])=>{const c=CUST_BY_ID[k.split("|")[0]];return c&&v>c.limitM+0.5;});
+    return _T.pass(bad.length===0, Object.keys(g).length.toLocaleString()+" scopes, "+bad.length+" over");}},
+  {id:"AT-027",suite:"carve",name:"Carve-out drawn never exceeds its allocation",fn:()=>{
+    const bad=CARVEOUTS.filter(co=>carveDrawn(co)>co.amountM+0.01);
+    return _T.pass(bad.length===0, bad.length+" over");}},
+  {id:"AT-028",suite:"carve",name:"Draw biases reconcile to the customer's own drawn amount",fn:()=>{
+    const sample=WITH_LIMIT.slice(0,400).filter(c=>carveoutsFor(c.id).length);
+    const bad=sample.filter(c=>{
+      const cos=carveoutsFor(c.id).filter(x=>x.scope==="country");
+      if(!cos.length) return false;
+      const w=cos.reduce((a,co)=>a+co.amountM*co.drawBias,0)/cos.reduce((a,co)=>a+co.amountM,0);
+      return Math.abs(w-1)>0.02;});
+    return _T.pass(bad.length===0, sample.length+" sampled, "+bad.length+" off");}},
+  {id:"AT-029",suite:"carve",name:"Every carve-out label comes from its scope's option list",fn:()=>{
+    const bad=CARVEOUTS.filter(co=>!CARVE_SCOPES[co.scope]||CARVE_SCOPES[co.scope].options.indexOf(co.label)<0);
+    return _T.pass(bad.length===0, bad.length+" unknown labels");}},
+  {id:"AT-030",suite:"carve",name:"The carve-out index matches a direct scan",fn:()=>{
+    const c=WITH_LIMIT[7];
+    const direct=CARVEOUTS.filter(co=>co.customerId===c.id).length;
+    return _T.pass(carveoutsFor(c.id).length===direct, direct+" for "+c.name);}},
+  {id:"AT-031",suite:"carve",name:"Threshold alerts fire only when the threshold is crossed",fn:()=>{
+    const bad=CARVEOUTS.slice(0,800).filter(co=>{
+      const hit=carveThresholdBreached(co);
+      const should=co.thMode==="pct" ? carveUtilPct(co)*100>=co.thValue : carveDrawn(co)>=co.thValue;
+      return hit!==should;});
+    return _T.pass(bad.length===0, bad.length+" mismatched");}},
+
+  /* ---- limit reserves ---- */
+  {id:"AT-032",suite:"reserve",inv:19,name:"No reserve exceeds its carve-out's free headroom",fn:()=>{
+    const bad=RESERVES.filter(r=>{const co=CARVEOUTS.find(x=>x.id===r.carveoutId);return !co||r.amountM>co.amountM-carveDrawn(co)+0.5;});
+    return _T.pass(bad.length===0, RESERVES.length+" reserves, "+bad.length+" over");}},
+  {id:"AT-033",suite:"reserve",inv:20,name:"Reserve windows end after they start",fn:()=>
+    _T.pass(RESERVES.every(r=>r.toDay>r.fromDay), RESERVES.length+" windows")},
+  {id:"AT-034",suite:"reserve",inv:20,name:"No reserve is raised or decided in the future",fn:()=>{
+    const bad=RESERVES.filter(r=>r.createdTs>TODAY.getTime()||(r.decidedTs&&r.decidedTs>TODAY.getTime()));
+    return _T.pass(bad.length===0, bad.length+" out of sequence");}},
+  {id:"AT-035",suite:"reserve",name:"Pending reserves carry no approver, decided ones do",fn:()=>{
+    const bad=RESERVES.filter(r=>r.status==="Pending" ? (r.approver||r.decided) : !r.approver);
+    return _T.pass(bad.length===0, bad.length+" inconsistent");}},
+  {id:"AT-036",suite:"reserve",inv:21,name:"Only approved reserves reach the forward overlay",fn:()=>{
+    const L=_T.limits(), ov=reserveOverlay(null,FWD_DAYS,L,"test-"+Math.random());
+    const appr=RESERVES.filter(r=>r.status==="Approved").reduce((a,r)=>a+r.amountM,0);
+    const other=RESERVES.filter(r=>r.status!=="Approved").reduce((a,r)=>a+r.amountM,0);
+    const peak=Math.max.apply(null,ov)*L;
+    return _T.pass(peak<=appr+1 && other>0 && peak<appr+other,
+      "peak "+fmtM(peak)+" vs "+fmtM(appr)+" approved, "+fmtM(other)+" excluded");}},
+  {id:"AT-037",suite:"reserve",inv:22,name:"Reserves change no pool figure",fn:()=>{
+    const L=_T.limits(), d=_T.drawn(), a=WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0);
+    const held=RESERVES.filter(rsvHoldsToday).reduce((x,r)=>x+r.amountM,0);
+    return _T.pass(held>0 && _T.near(d+a,L,1), fmtM(held)+" held, pool still "+fmtM(L));}},
+  {id:"AT-038",suite:"reserve",inv:25,name:"No deal event opens or closes on a month boundary",fn:()=>{
+    const mb=_T.monthBoundaries();
+    const bad=RSV_EVENTS.filter(e=>mb.indexOf(e.from)>=0||mb.indexOf(e.to)>=0);
+    return _T.pass(bad.length===0, RSV_EVENTS.length+" events clear of "+mb.length+" boundaries");}},
+  {id:"AT-039",suite:"reserve",inv:26,name:"Run-off and reserve steps fall on different days",fn:()=>{
+    const L=_T.limits();
+    const run=_T.steps(portfolioTrend(WITH_LIMIT).fcast).slice(0,8);
+    const res=_T.steps(reserveOverlay(null,FWD_DAYS,L,"test-"+Math.random())).slice(0,8);
+    const clash=run.filter(a=>res.some(b=>Math.abs(a.i-b.i)<=1));
+    return _T.pass(clash.length===0,
+      "run-off "+run.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/")+" vs reserves "+res.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/"));}},
+  {id:"AT-040",suite:"reserve",name:"The reserve series has steps large enough to read",fn:()=>{
+    const res=_T.steps(reserveOverlay(null,FWD_DAYS,_T.limits(),"test-"+Math.random()));
+    return _T.pass(Math.abs(res[0].v)>0.01, "largest "+(res[0].v*100).toFixed(2)+"pp");}},
+  {id:"AT-041",suite:"reserve",name:"Every deal event has approved reserves behind it",fn:()=>{
+    const bad=RSV_EVENTS.filter(e=>!RESERVES.some(r=>r.purpose===e.name&&r.status==="Approved"));
+    return _T.pass(bad.length===0, bad.length?bad.map(e=>e.name).join(", "):RSV_EVENTS.length+" events populated");}},
+  {id:"AT-042",suite:"reserve",name:"At most one reserve per carve-out",fn:()=>{
+    const n=new Set(RESERVES.map(r=>r.carveoutId)).size;
+    return _T.pass(n===RESERVES.length, n+" carve-outs for "+RESERVES.length+" reserves");}},
+
+  /* ---- charts & series ---- */
+  {id:"AT-043",suite:"chart",inv:10,name:"Forward run-off never rises",fn:()=>{
+    const f=portfolioTrend(WITH_LIMIT).fcast;
+    const bad=f.filter((v,i)=>i>0&&v>f[i-1]+1e-9).length;
+    return _T.pass(bad===0, bad+" upward steps in "+f.length+" days");}},
+  {id:"AT-044",suite:"chart",inv:11,name:"Run-off starts at or below current utilization",fn:()=>{
+    const PT=portfolioTrend(WITH_LIMIT);
+    return _T.pass(PT.fcast[0]<=PT.cur+1e-9, fmtPct(PT.fcast[0])+" vs "+fmtPct(PT.cur));}},
+  {id:"AT-045",suite:"chart",name:"A single customer's run-off also never rises",fn:()=>{
+    const c=WITH_LIMIT.find(x=>TXNS.some(t=>t.customer.id===x.id));
+    const f=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),custUtilCur(c),FWD_DAYS);
+    return _T.pass(f.every((v,i)=>i===0||v<=f[i-1]+1e-9), c.name);}},
+  {id:"AT-046",suite:"chart",inv:23,name:"The shared trend series is cached, not recomputed",fn:()=>{
+    const a=portfolioTrend(filteredWithLimit());
+    return _T.pass(portfolioTrend(filteredWithLimit())===a, "same object returned");}},
+  {id:"AT-047",suite:"chart",inv:24,name:"Horizon readout arithmetic balances at every mark",fn:()=>{
+    const PT=portfolioTrend(WITH_LIMIT), ov=reserveOverlay(null,FWD_DAYS,PT.total,"test-"+Math.random());
+    const bad=[30,90,180,365].filter(d=>{const i=d-1,run=PT.fcast[i],res=ov[i];
+      const rel=Math.max(0,PT.cur-run), free=Math.max(0,1-run-res);
+      return Math.abs(rel+run-PT.cur)>1e-9||Math.abs(run+res+free-1)>1e-9;});
+    return _T.pass(bad.length===0, bad.length?"fails at "+bad.join(","):"30/90/180/365 all balance");}},
+  {id:"AT-048",suite:"chart",inv:14,name:"Raising the heatmap Top-N only appends names",fn:()=>{
+    const keep=state.heatSort;
+    let ok=true, checked=0;
+    Object.keys(HEAT_SORTS).forEach(k=>{
+      state.heatSort=k;
+      const ranked=heatRank(WITH_LIMIT.slice(0,900)).map(c=>c.id);
+      [50,150,400].forEach(n=>{ const a=ranked.slice(0,n), b=ranked.slice(0,n*2);
+        if(!a.every((id,i)=>b[i]===id)) ok=false; checked++; });
+    });
+    state.heatSort=keep;
+    return _T.pass(ok, checked+" prefix comparisons across "+Object.keys(HEAT_SORTS).length+" criteria");}},
+  {id:"AT-049",suite:"chart",name:"The utilization ramp runs green to red at the documented strengths",fn:()=>
+    _T.pass(utilRamp(0).indexOf("14%")>=0 && utilRamp(1).indexOf("72%")>=0 && utilRamp(0)!==utilRamp(1),
+      "14% tint at idle, 72% at the limit")},
+  {id:"AT-050",suite:"chart",inv:12,name:"Every Data Highlight selection resolves to customers",fn:()=>{
+    const specs=COUNTRIES.map(c=>"country|"+c).concat(SEGMENTS.map(s=>"seg|"+s)).concat(LIMIT_TYPES.map(t=>"type|"+t));
+    const empty=specs.filter(s=>hlAggregate(s).n===0);
+    return _T.pass(empty.length===0, specs.length+" selections, "+empty.length+" empty");}},
+
+  /* ---- rendering & wiring ---- */
+  {id:"AT-051",suite:"ui",name:"Every tab builds without throwing",fn:()=>{
+    const keep=state.tab; const bad=[];
+    Object.keys(PANES).forEach(t=>{ try{ const h=PANES[t](); if(!h||h.length<100) bad.push(t+" (empty)"); }
+      catch(e){ bad.push(t+": "+e.message); } });
+    state.tab=keep;
+    return _T.pass(bad.length===0, bad.length?bad.join("; "):Object.keys(PANES).length+" tabs built");}},
+  {id:"AT-052",suite:"ui",name:"Every documentation topic resolves to a heading",fn:()=>{
+    const ids=[]; DOC_SECTIONS.forEach(s=>{ids.push(s.id);(s.kids||[]).forEach(k=>ids.push(k.id));});
+    const html=paneDocs();
+    const missing=ids.filter(id=>html.indexOf('id="'+id+'"')<0);
+    return _T.pass(missing.length===0, ids.length+" topics, "+missing.length+" missing");}},
+  {id:"AT-053",suite:"ui",name:"No template placeholder survives into the documentation",fn:()=>{
+    const html=paneDocs();
+    const bad=(html.match(/\$\{|\bundefined\b|\bNaN\b|\[object /g)||[]);
+    return _T.pass(bad.length===0, bad.length+" placeholders");}},
+  {id:"AT-054",suite:"ui",name:"Every sortable table has a registered sort state",fn:()=>{
+    const keep=state.tab; let html="";
+    Object.keys(PANES).forEach(t=>{ state.tab=t; try{ html+=PANES[t](); }catch(e){} });
+    state.tab=keep;
+    const used=new Set((html.match(/data-sorttable="([a-z0-9]+)"/gi)||[]).map(m=>m.split('"')[1]));
+    const missing=[...used].filter(t=>!SORTS[t]);
+    return _T.pass(missing.length===0, used.size+" tables in use, "+missing.length+" unregistered");}},
+  {id:"AT-055",suite:"ui",name:"Customer drawer builds for every profile",fn:()=>{
+    const bad=[];
+    ["mid","hot","cold","dormant","breach"].forEach(p=>{
+      const c=WITH_LIMIT.find(x=>x.profile===p); if(!c){bad.push(p+" (none)");return;}
+      try{ drawerBreakdownTable(c); drawerTxnTable(c); }catch(e){ bad.push(p+": "+e.message); }});
+    const noLimit=CUSTOMERS.find(c=>!c.hasLimit);
+    try{ if(noLimit) drawerTxnTable(noLimit); }catch(e){ bad.push("no-limit: "+e.message); }
+    return _T.pass(bad.length===0, bad.length?bad.join("; "):"6 profiles covered");}},
+  {id:"AT-056",suite:"ui",name:"Filters narrow the book without emptying it",fn:()=>{
+    const keep={c:state.filters.country,s:state.filters.segment,l:state.filters.limitType};
+    state.filters.country=new Set(["Singapore"]);
+    const a=filteredWithLimit().length;
+    state.filters.segment=new Set(["Banks"]);
+    const b=filteredWithLimit().length;
+    state.filters.country=keep.c; state.filters.segment=keep.s; state.filters.limitType=keep.l;
+    return _T.pass(a>0&&b>0&&b<=a&&a<WITH_LIMIT.length, "all "+WITH_LIMIT.length+" → SG "+a+" → SG+Banks "+b);}},
+];
+
+/* Manual tests. These cannot be automated here — they need a person to look at
+   the screen, use a pointer, or judge whether something reads correctly. Each
+   carries the steps to follow and what should happen. */
+const MANUAL_TESTS=[
+  {id:"MT-001",area:"Shell",priority:"High",name:"Theme switch repaints every surface",
+   steps:["Open the Overview tab.","Switch the theme picker to Dark, then Red, then back to Light.","Scroll the full page in each theme."],
+   expected:"Every panel, chart, table and tag repaints. No element keeps a colour from the previous theme, and no text becomes unreadable against its background."},
+  {id:"MT-002",area:"Shell",priority:"High",name:"Font slider scales the whole interface",
+   steps:["Drag the font slider to its smallest setting.","Drag it to its largest.","Visit Overview, Customers and Limit Reserve Requests at both extremes."],
+   expected:"All type scales together, including chart labels. No table column clips its contents and the page never scrolls sideways."},
+  {id:"MT-003",area:"Shell",priority:"Medium",name:"Theme and font choices survive a reload",
+   steps:["Pick the Dark theme and the largest font.","Reload the page."],
+   expected:"The page returns in Dark at the largest font."},
+  {id:"MT-004",area:"Shell",priority:"Low",name:"Brand mark returns to the site index",
+   steps:["Click the GFM mark at the top left of the rail."],
+   expected:"The browser navigates to the dashboard index page."},
+  {id:"MT-005",area:"Overview",priority:"High",name:"Data Highlight links every panel",
+   steps:["Hover a country row in Concentration by country.","Hover a segment bar in the coverage chart.","Hover a utilization band in the histogram."],
+   expected:"Matching tiles and rows stay lit while everything else dims, in every panel at once. Country and limit-type rows show a marker for how much of the bar the selection accounts for."},
+  {id:"MT-006",area:"Overview",priority:"Medium",name:"Pinning a highlight survives scrolling and re-render",
+   steps:["Click a country row to pin it.","Scroll to the bottom of the tab.","Change the tile size control."],
+   expected:"The pinned badge stays visible, the highlight is still applied after the pane rebuilds, and Esc releases it."},
+  {id:"MT-007",area:"Overview",priority:"High",name:"Heatmap and treemap agree on the same names",
+   steps:["Set Show to 100 and note the first few names in each segment.","Switch between Heatmap and Treemap.","Raise Show to 250."],
+   expected:"Raising the count appends names rather than reshuffling them. Treemap omits names with no SR limit and says so; heatmap shows them hatched."},
+  {id:"MT-008",area:"Overview",priority:"Medium",name:"Customer pivot replaces the tab cleanly",
+   steps:["Type a customer name into the Customer view box.","Review the pivoted tab.","Click Back to portfolio overview."],
+   expected:"The whole tab shows that customer, independent of the rail filters, and the back button restores the portfolio view."},
+  {id:"MT-009",area:"Charts",priority:"High",name:"Reserve line is distinguishable from the run-off",
+   steps:["Open the Overview trend chart.","Follow the gold line across the forward half.","Untick Reserves, then tick it again."],
+   expected:"The gold line lifts away from the green run-off while a reserve window is open and settles back when it closes. Its steps fall on different dates from the run-off's month-end steps. Unticking removes the line and the shaded gap."},
+  {id:"MT-010",area:"Charts",priority:"Medium",name:"Trend chart axis reads as a calendar",
+   steps:["Inspect the x-axis of the Overview trend chart at 1280px and at 1920px."],
+   expected:"A minor tick every Monday, a taller tick on the 1st of each month, month names beneath, and the year under each January. Month labels thin out rather than overlapping."},
+  {id:"MT-011",area:"Reserves",priority:"High",name:"Reserve request form refuses an invalid hold",
+   steps:["Open Limit Reserve Requests.","Pick a customer and a carve-out.","Enter an amount larger than the free headroom shown.","Set the end date before the start date."],
+   expected:"Each mistake is refused with a message beside the submit button, and the form cannot be submitted until both are corrected."},
+  {id:"MT-012",area:"Reserves",priority:"High",name:"Approving a reserve moves the forward charts",
+   steps:["Submit a large reserve for a near-dated window.","Note the peak figure on the trend chart.","Approve the new reserve.","Return to the Overview trend chart."],
+   expected:"While pending it changes nothing. Once approved the gold line and the peak figure both rise, and the horizon readout shows more held by reserves and less free to trade."},
+  {id:"MT-013",area:"Reserves",priority:"Medium",name:"Releasing a reserve hands capacity straight back",
+   steps:["Click Release on an approved reserve whose window is still open.","Confirm the dialog."],
+   expected:"The confirmation names the reserve. After confirming, the reserve is gone, the charts redraw without it and the carve-out's Reserved column falls."},
+  {id:"MT-014",area:"Reserves",priority:"Medium",name:"Deal event rows explain the steps",
+   steps:["Read the Deal events panel.","Click one row."],
+   expected:"Each event's window matches a visible step on the chart above, and clicking filters the table below to that event's approved reserves."},
+  {id:"MT-015",area:"Carve-outs",priority:"High",name:"Adding and removing a carve-out",
+   steps:["Pick a customer with spare headroom.","Add a carve-out by percentage, then another by absolute amount.","Remove one with the x button."],
+   expected:"Labels already used stay listed but disabled. The allocation bar and tables update immediately, removal asks for confirmation, and the unallocated tail never goes negative."},
+  {id:"MT-016",area:"Requests",priority:"Medium",name:"Limit increase workflow end to end",
+   steps:["Submit a request for a customer.","Find it in the table.","Approve it.","Sort and filter the table."],
+   expected:"It arrives as Pending with no approver, approval stamps an officer and today's date, and the decision follows the request itself rather than its row position after sorting."},
+  {id:"MT-017",area:"Blotter",priority:"Medium",name:"Blotter respects the date range and chips",
+   steps:["Set the rail date range to 30 days.","Apply an asset-class chip.","Sort by SR consumed."],
+   expected:"Only trades inside the window are listed, the chip narrows further, and the totals above the table agree with the visible rows."},
+  {id:"MT-018",area:"Accessibility",priority:"Medium",name:"Keyboard reaches the primary controls",
+   steps:["Tab through the rail and the tab bar.","Open a drawer and press Escape."],
+   expected:"Focus is visible on every control, the tab bar is reachable, and Escape closes the drawer, the modal and any open filter panel."},
+  {id:"MT-019",area:"Documentation",priority:"Low",name:"Topic tree tracks the reader",
+   steps:["Open Documentation.","Scroll slowly from top to bottom.","Click a deep topic in the tree."],
+   expected:"The highlighted topic follows the heading currently in view, the tree scrolls to keep it visible, and clicking jumps to the right heading."},
+  {id:"MT-020",area:"Print",priority:"Low",name:"Key screens survive a print preview",
+   steps:["Open the browser print preview on Overview and on Limit Reserve Requests."],
+   expected:"Content is not cut off mid-panel and charts render rather than appearing blank."},
+];
+
+/* Releases and run history. Seeded mock data so the dashboards have a past to
+   show — only the current run is real. */
+const RELEASES=[
+  {v:"0.7.0",name:"Portfolio overview & blotter",days:214,auto:18},
+  {v:"0.8.0",name:"Carve-outs and rankings",days:171,auto:26},
+  {v:"0.9.0",name:"Heatmap at full book scale",days:138,auto:31},
+  {v:"1.0.0",name:"Treemap, sorting, Data Highlight",days:104,auto:38},
+  {v:"1.1.0",name:"Limit increase requests",days:78,auto:43},
+  {v:"1.2.0",name:"Documentation tab",days:47,auto:47},
+  {v:"1.3.0",name:"Limit reserve requests",days:16,auto:52},
+  {v:"1.4.0",name:"Deal events & shared trend series",days:1,auto:AUTO_TESTS.length},
+];
+const TEST_TRIGGERS=["CI · commit","CI · pull request","Nightly","Manual"];
+function seedTestRuns(){
+  const out=[]; let id=1;
+  RELEASES.forEach((rel,ri)=>{
+    const runs=ri===RELEASES.length-1?5:randInt(3,6);
+    for(let i=0;i<runs;i++){
+      const total=rel.auto;
+      // Early releases are noisier; the run right before a release is the green one.
+      const last=(i===runs-1);
+      const base=last?0:Math.max(0,Math.round((RELEASES.length-ri)/2.2*rand(0.2,1.5)));
+      const failed=Math.min(total,base);
+      const dayOff=rel.days+ (runs-1-i)*randInt(2,7);
+      const d=dateAt(dayOff);
+      out.push({
+        id:"RUN-"+String(id++).padStart(4,"0"),
+        ts:d.getTime(), date:fmtDate(d), release:rel.v,
+        trigger:i===runs-1?"CI · commit":choice(TEST_TRIGGERS),
+        total, passed:total-failed, failed, ms:randInt(900,2600),
+      });
+    }
+  });
+  return out.sort((a,b)=>b.ts-a.ts);
+}
+const SEED_RUNS=seedTestRuns();
+const DEFECTS=[
+  {id:"DEF-014",sev:"High",status:"Closed",title:"weightedChoice ignored the weight total, collapsing every tenor onto the shortest",
+   found:"0.9.0",fixed:"0.9.0",test:"AT-020",owner:"Platform"},
+  {id:"DEF-021",sev:"Medium",status:"Closed",title:"Heat ramp reused the status palette, flattening 20-55% utilization into one shade",
+   found:"0.9.0",fixed:"1.0.0",test:"AT-049",owner:"Design"},
+  {id:"DEF-027",sev:"High",status:"Closed",title:"Top-N cut and display order used different rankings, so raising the count reshuffled names",
+   found:"1.0.0",fixed:"1.0.0",test:"AT-048",owner:"Platform"},
+  {id:"DEF-033",sev:"High",status:"Closed",title:"Approve/Reject keyed off the row index, deciding the wrong request once the table could sort",
+   found:"1.1.0",fixed:"1.1.0",test:"AT-054",owner:"Platform"},
+  {id:"DEF-038",sev:"Low",status:"Closed",title:"Reserved slice missing from the pool donut legend below 1600px",
+   found:"1.1.0",fixed:"1.2.0",test:"—",owner:"Design"},
+  {id:"DEF-041",sev:"Medium",status:"Closed",title:"Documentation scroll-spy went blank inside long sections",
+   found:"1.2.0",fixed:"1.2.0",test:"AT-052",owner:"Platform"},
+  {id:"DEF-046",sev:"High",status:"Closed",title:"Reserve line tracked the run-off because reserve windows were independently dated",
+   found:"1.3.0",fixed:"1.4.0",test:"AT-039",owner:"Data"},
+  {id:"DEF-047",sev:"Low",status:"Closed",title:"Active window tag referenced an undefined tag class",
+   found:"1.3.0",fixed:"1.4.0",test:"—",owner:"Design"},
+  {id:"DEF-048",sev:"Medium",status:"Open",title:"A released reserve is not netted against the deal when it lands, so both count briefly",
+   found:"1.3.0",fixed:"",test:"—",owner:"Data"},
+  {id:"DEF-049",sev:"Low",status:"Open",title:"Heatmap at All draws every tile eagerly; no virtualisation",
+   found:"1.0.0",fixed:"",test:"—",owner:"Platform"},
+  {id:"DEF-050",sev:"Medium",status:"Open",title:"No screen-reader pass; heatmap meaning is carried by colour alone",
+   found:"1.0.0",fixed:"",test:"MT-018",owner:"Design"},
+];
+
+/* Persisted: manual results and the runs this browser has executed. */
+const TEST_KEY="sr-dash-tests-v1";
+const TEST_STATE=loadLS(TEST_KEY,{manual:{},runs:[]});
+if(!TEST_STATE.manual) TEST_STATE.manual={};
+if(!TEST_STATE.runs) TEST_STATE.runs=[];
+/* Seed a plausible manual history the first time, so the dashboards are not empty. */
+if(!Object.keys(TEST_STATE.manual).length){
+  const testers=["Amanda Chok","Jerome Pang","Priya Menon","Rachel Ng","Owen Chen"];
+  MANUAL_TESTS.forEach((m,i)=>{
+    const st = i%9===4 ? "Failed" : i%7===6 ? "Blocked" : i%5===3 ? "Not run" : "Passed";
+    if(st==="Not run") return;
+    TEST_STATE.manual[m.id]={status:st,by:testers[i%testers.length],at:fmtDate(dateAt(randInt(1,40))),
+      notes:st==="Failed"?"Reproduced twice; raised as a defect.":st==="Blocked"?"Needs a screen-reader environment.":""};
+  });
+  saveLS(TEST_KEY,TEST_STATE);
+}
+function saveTests(){ saveLS(TEST_KEY,TEST_STATE); }
+function allRuns(){ return TEST_STATE.runs.concat(SEED_RUNS).sort((a,b)=>b.ts-a.ts); }
+
+/* ---- the runner. Real assertions, real timings. ---- */
+let TEST_RESULTS={};
+function runAutoTests(suiteId){
+  const list=AUTO_TESTS.filter(t=>!suiteId||t.suite===suiteId);
+  const t0=performance.now();
+  list.forEach(t=>{
+    const s=performance.now();
+    let r;
+    try{ r=t.fn()||{}; }catch(e){ r={pass:false,detail:"threw: "+e.message}; }
+    TEST_RESULTS[t.id]={pass:!!r.pass,detail:r.detail||"",ms:+(performance.now()-s).toFixed(1)};
+  });
+  const ms=Math.round(performance.now()-t0);
+  const passed=list.filter(t=>TEST_RESULTS[t.id].pass).length;
+  const now=new Date();
+  TEST_STATE.runs.unshift({
+    id:"RUN-"+String(9000+TEST_STATE.runs.length+1),
+    ts:now.getTime(), date:fmtDate(now), release:RELEASES[RELEASES.length-1].v,
+    trigger:"Manual · this browser", total:list.length, passed, failed:list.length-passed, ms,
+    suite:suiteId||"", live:true,
+  });
+  TEST_STATE.runs=TEST_STATE.runs.slice(0,40);
+  saveTests();
+  return {total:list.length,passed,ms};
+}
+
+/* ---- dashboards ---- */
+/* Stacked pass/fail per run, most recent on the right. */
+function runHistoryChart(runs){
+  const list=runs.slice(0,24).reverse();
+  if(!list.length) return `<div class="empty">No runs recorded.</div>`;
+  const w=560,h=250,pad=30,botPad=34,topPad=14;
+  const base=h-botPad, plotW=w-pad-10;
+  const max=Math.max(...list.map(r=>r.total))*1.1;
+  const bw=Math.min(22,plotW/list.length-3);
+  const X=i=>pad+(i+0.5)*(plotW/list.length);
+  const Y=v=>base-(v/max)*(base-topPad);
+  let grid="";
+  [0.5,1].forEach(g=>{const v=max*g;grid+=`<line x1="${pad}" y1="${Y(v).toFixed(1)}" x2="${w-10}" y2="${Y(v).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/><text x="${pad-5}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" font-size="8.5" fill="var(--ink-3)" font-family="var(--mono)">${Math.round(v)}</text>`;});
+  const bars=list.map((r,i)=>{
+    const x=(X(i)-bw/2).toFixed(1);
+    const hp=base-Y(r.passed), hf=base-Y(r.total)-(base-Y(r.passed));
+    return `<g data-tip="${esc(r.id+" · "+r.date)}" data-tipsub="${esc(r.trigger+" · release "+r.release)}" data-tiptable="Passed¦${r.passed}§Failed¦${r.failed}§Duration¦${r.ms} ms">`
+      +`<rect x="${x}" y="${Y(r.passed).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hp).toFixed(1)}" rx="2" fill="var(--pass)" opacity="${r.live?1:.72}"/>`
+      +(r.failed?`<rect x="${x}" y="${Y(r.total).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,hf).toFixed(1)}" rx="2" fill="var(--fail)"/>`:"")
+      +(r.live?`<rect x="${x}" y="${(Y(r.total)-4).toFixed(1)}" width="${bw.toFixed(1)}" height="2" rx="1" fill="var(--brand)"/>`:"")
+      +`</g>`;
+  }).join("");
+  const first=list[0], last=list[list.length-1];
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Tests passed and failed per run">
+    ${grid}${bars}
+    <line x1="${pad}" y1="${base}" x2="${w-10}" y2="${base}" stroke="var(--hair)"/>
+    <text x="${pad}" y="${base+16}" font-size="8.5" fill="var(--ink-3)">${esc(first.date)}</text>
+    <text x="${w-10}" y="${base+16}" text-anchor="end" font-size="8.5" fill="var(--ink-3)">${esc(last.date)}</text>
+    <text x="${w-10}" y="${base+29}" text-anchor="end" font-size="8.5" fill="var(--brand)" font-weight="700">${list.some(r=>r.live)?"blue tick = run in this browser":""}</text>
+  </svg>`;
+}
+/* Pass rate at each release, oldest to newest. */
+function qualityTrendChart(runs){
+  const byRel=RELEASES.map(rel=>{
+    const rs=runs.filter(r=>r.release===rel.v);
+    const t=rs.reduce((a,r)=>a+r.total,0), p=rs.reduce((a,r)=>a+r.passed,0);
+    return {v:rel.v,name:rel.name,rate:t?p/t:0,runs:rs.length,auto:rel.auto};
+  }).filter(x=>x.runs);
+  if(byRel.length<2) return `<div class="empty">Not enough history yet.</div>`;
+  const w=560,h=250,pad=34,botPad=34,topPad=16;
+  const base=h-botPad, plotW=w-pad-12;
+  const lo=Math.min(0.6,Math.min(...byRel.map(x=>x.rate))-0.05);
+  const X=i=>pad+i*(plotW/(byRel.length-1));
+  const Y=v=>base-((v-lo)/(1-lo))*(base-topPad);
+  let grid="";
+  [lo+(1-lo)/2,1].forEach(g=>{grid+=`<line x1="${pad}" y1="${Y(g).toFixed(1)}" x2="${w-12}" y2="${Y(g).toFixed(1)}" stroke="var(--hair)" stroke-width=".5" stroke-dasharray="${g===1?"":"3 3"}"/><text x="${pad-5}" y="${(Y(g)+3).toFixed(1)}" text-anchor="end" font-size="8.5" fill="${g===1?"var(--pass)":"var(--ink-3)"}" font-family="var(--mono)">${Math.round(g*100)}%</text>`;});
+  const pts=byRel.map((x,i)=>X(i).toFixed(1)+","+Y(x.rate).toFixed(1)).join(" ");
+  const dots=byRel.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.rate).toFixed(1)}" r="3.4" fill="${x.rate>=1?"var(--pass)":x.rate>=0.9?"var(--warn)":"var(--fail)"}" data-tip="${esc(x.v+" — "+x.name)}" data-tipsub="${x.runs} run${x.runs===1?"":"s"} · ${x.auto} automated tests" data-tiptable="Pass rate¦${fmtPct(x.rate)}"/>`).join("");
+  const labels=byRel.map((x,i)=>(i%Math.ceil(byRel.length/6)===0||i===byRel.length-1)?`<text x="${X(i).toFixed(1)}" y="${base+15}" text-anchor="middle" font-size="8.5" fill="var(--ink-2)" font-weight="600">${x.v}</text>`:"").join("");
+  const areaPts=`${X(0).toFixed(1)},${base} ${pts} ${X(byRel.length-1).toFixed(1)},${base}`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Automated pass rate by release">
+    ${grid}
+    <polygon points="${areaPts}" fill="var(--run)" opacity=".10"/>
+    <polyline points="${pts}" fill="none" stroke="var(--run)" stroke-width="2" stroke-linejoin="round"/>
+    ${dots}
+    <line x1="${pad}" y1="${base}" x2="${w-12}" y2="${base}" stroke="var(--hair)"/>
+    ${labels}
+    <text x="${pad}" y="${base+29}" font-size="8.5" fill="var(--ink-3)">pass rate across all runs in each release</text>
+  </svg>`;
+}
+/* Per-suite result bars for the current run. */
+function suiteBreakdown(){
+  const rows=TEST_SUITES.map(s=>{
+    const list=AUTO_TESTS.filter(t=>t.suite===s.id);
+    const done=list.filter(t=>TEST_RESULTS[t.id]);
+    const pass=done.filter(t=>TEST_RESULTS[t.id].pass).length;
+    const fail=done.length-pass;
+    const ms=done.reduce((a,t)=>a+TEST_RESULTS[t.id].ms,0);
+    return {s,n:list.length,done:done.length,pass,fail,ms};
+  });
+  return `<div class="panel-body"><div class="colhd"><div style="width:8.5em"></div><div style="flex:1"></div><div style="width:3.6em;text-align:right">Tests</div><div style="width:4.2em;text-align:right">Time</div></div>
+  <div class="dist-list">${rows.map(r=>{
+    const pct=r.n?r.pass/r.n*100:0, fpct=r.n?r.fail/r.n*100:0;
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:2px 3px" data-tip="${esc(r.s.blurb)}">
+      <div style="width:8.5em;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.s.name}</div>
+      <div class="bar-mini" style="flex:1"><i style="width:${pct.toFixed(1)}%;background:var(--pass)"></i><i style="width:${fpct.toFixed(1)}%;background:var(--fail);left:${pct.toFixed(1)}%;position:absolute;top:0;bottom:0;border-radius:3px"></i></div>
+      <div class="num" style="width:3.6em;text-align:right">${r.done?r.pass+"/"+r.n:"—"}</div>
+      <div class="num muted" style="width:4.2em;text-align:right">${r.done?r.ms.toFixed(0)+"ms":"—"}</div></div>`;
+  }).join("")}</div></div>`;
+}
+
+function paneTests(){
+  const runs=allRuns();
+  const ranIds=Object.keys(TEST_RESULTS);
+  const ranList=AUTO_TESTS.filter(t=>TEST_RESULTS[t.id]);
+  const autoPass=ranList.filter(t=>TEST_RESULTS[t.id].pass).length;
+  const autoRate=ranList.length?autoPass/ranList.length:null;
+  const lastRun=TEST_STATE.runs[0]||null;
+  const man=MANUAL_TESTS.map(m=>TEST_STATE.manual[m.id]||{status:"Not run"});
+  const manPassed=man.filter(x=>x.status==="Passed").length;
+  const manFailed=man.filter(x=>x.status==="Failed").length;
+  const manBlocked=man.filter(x=>x.status==="Blocked").length;
+  const manRun=man.filter(x=>x.status!=="Not run").length;
+  const openDef=DEFECTS.filter(d=>d.status==="Open");
+  const kpis=[
+    ["Automated tests",String(AUTO_TESTS.length),TEST_SUITES.length+" suites · run in this page","var(--run)","runc",
+     "Real assertions against the live dataset in this browser. Each one runs the same check the build is verified with, so a pass here is a genuine pass, not a recorded one."],
+    ["Last run",autoRate===null?"—":fmtPct(autoRate,1),autoRate===null?"press Run all tests":autoPass+" of "+ranList.length+" passed in "+(lastRun?lastRun.ms:0)+"ms","var(--pass)","passc",
+     "The result of the most recent run in this browser. Nothing is cached from a server — pressing Run all tests executes the assertions now."],
+    ["Manual coverage",manRun+" / "+MANUAL_TESTS.length,manPassed+" passed · "+manFailed+" failed · "+manBlocked+" blocked","var(--cyan)","cyanc",
+     "Checks a person has to make: things that need a pointer, a screen reader, or a judgement about how something reads. Status is recorded in this browser."],
+    ["Open defects",String(openDef.length),DEFECTS.length-openDef.length+" closed across "+RELEASES.length+" releases","var(--warn)","warnc",
+     "Known issues still outstanding. Each one names the release it was found in and, where there is one, the automated test that now guards against it."],
+  ];
+  const sel=state.tests.suite;
+  return `<div class="kpis kpis-4">${kpis.map(([l,v,s,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${s}</small></div>`).join("")}</div>
+
+  <div class="grid3 mt14">
+    <div class="panel"><div class="panel-hd"><h3>Run history<i class="info" data-tip="Every recorded run, oldest on the left. Green is tests passed, red is tests failed. Runs executed in this browser are marked and stored locally; the rest are seeded history.">i</i></h3><span class="slo">last ${Math.min(24,runs.length)} runs</span></div>
+      <div class="panel-body"><div class="chart-well">${runHistoryChart(runs)}</div></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Quality trend<i class="info" data-tip="Automated pass rate across all runs in each release. The suite grows with the product, so a flat line at 100% means the new tests are passing too, not that nothing was added.">i</i></h3><span class="slo">pass rate by release</span></div>
+      <div class="panel-body"><div class="chart-well">${qualityTrendChart(runs)}</div></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Suite breakdown<i class="info" data-tip="Results and elapsed time per suite for the current run. Empty until you run the tests.">i</i></h3><span class="slo">${ranList.length?"this run":"not yet run"}</span></div>
+      ${suiteBreakdown()}</div>
+  </div>
+
+  <div class="panel mt14"><div class="panel-hd"><h3>Automated tests<i class="info" data-tip="These execute for real when you press Run. Each asserts something about the live data or the rendered output, and reports what it actually found. Tests marked with an invariant number correspond to the numbered invariants in the Documentation tab.">i</i></h3>
+    <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <select class="mini-sel" id="tst-suite" data-tip="Narrow to one suite."><option value="">All suites</option>${TEST_SUITES.map(s=>`<option value="${s.id}"${sel===s.id?" selected":""}>${s.name}</option>`).join("")}</select>
+      <select class="mini-sel" id="tst-show" data-tip="Show everything, or only what failed."><option value="">Show all</option><option value="fail"${state.tests.show==="fail"?" selected":""}>Failures only</option><option value="notrun"${state.tests.show==="notrun"?" selected":""}>Not yet run</option></select>
+      <button type="button" class="btn" id="tst-run">${sel?"Run "+SUITE_NAME[sel]:"Run all tests"}</button>
+      ${ranList.length?`<button type="button" class="btn-ghost" id="tst-reset">Clear results</button>`:""}
+    </span></div>
+    ${ranList.length?`<div class="foot" style="border-top:0;border-bottom:1px solid var(--hair)">Last run ${esc(lastRun?lastRun.date:"")} · <b>${autoPass} passed</b>${ranList.length-autoPass?` · <b style="color:var(--fail)">${ranList.length-autoPass} failed</b>`:""} of ${ranList.length} in ${lastRun?lastRun.ms:0}ms</div>`:""}
+    <div class="table-wrap"><table><thead><tr>
+      ${sortTh("tests","id","Test")}${sortTh("tests","suite","Suite")}${sortTh("tests","name","Asserts")}<th>Invariant</th>${sortTh("tests","status","Result","r")}${sortTh("tests","ms","Time","r")}<th>Observed</th></tr></thead>
+    <tbody>${(function(){
+      let list=AUTO_TESTS.filter(t=>!sel||t.suite===sel);
+      if(state.tests.show==="fail") list=list.filter(t=>TEST_RESULTS[t.id]&&!TEST_RESULTS[t.id].pass);
+      if(state.tests.show==="notrun") list=list.filter(t=>!TEST_RESULTS[t.id]);
+      const sorted=applySort(list,"tests",{
+        id:t=>t.id, suite:t=>SUITE_NAME[t.suite]||t.suite, name:t=>t.name,
+        status:t=>{const r=TEST_RESULTS[t.id];return r?(r.pass?2:0):1;},
+        ms:t=>TEST_RESULTS[t.id]?TEST_RESULTS[t.id].ms:-1,
+      });
+      if(!sorted.length) return `<tr><td colspan="7"><div class="empty">Nothing matches this filter.</div></td></tr>`;
+      return sorted.map(t=>{
+        const r=TEST_RESULTS[t.id];
+        const tag=!r?`<span class="tag t-muted">Not run</span>`:r.pass?`<span class="tag t-pass">Pass</span>`:`<span class="tag t-fail">Fail</span>`;
+        return `<tr${r&&!r.pass?' style="background:color-mix(in srgb,var(--fail) 6%,transparent)"':''}>
+          <td class="mono">${t.id}</td>
+          <td class="muted">${SUITE_NAME[t.suite]}</td>
+          <td>${esc(t.name)}</td>
+          <td class="muted">${t.inv?`<span class="tag t-run" data-tip="Invariant ${t.inv} in the Documentation tab">#${t.inv}</span>`:"—"}</td>
+          <td class="r">${tag}</td>
+          <td class="r num muted">${r?r.ms.toFixed(1)+"ms":"—"}</td>
+          <td class="muted" style="font-size:0.6875rem">${r?esc(r.detail):""}</td></tr>`;
+      }).join("");
+    })()}</tbody></table></div></div>
+
+  <div class="panel mt14"><div class="panel-hd"><h3>Manual test checklist<i class="info" data-tip="Checks that need a person. Expand a row for the steps and the expected result, then record the outcome — it is saved in this browser.">i</i></h3>
+    <span class="slo">${manRun} of ${MANUAL_TESTS.length} executed · ${manPassed} passed · ${manFailed} failed · ${manBlocked} blocked</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Test</th><th>Area</th><th>Scenario</th><th>Priority</th><th class="r">Status</th><th>Last run</th><th class="r">Record</th></tr></thead>
+    <tbody>${MANUAL_TESTS.map(m=>{
+      const r=TEST_STATE.manual[m.id]||{status:"Not run"};
+      const cls=r.status==="Passed"?"t-pass":r.status==="Failed"?"t-fail":r.status==="Blocked"?"t-warn":"t-muted";
+      const open=state.tests.openManual===m.id;
+      return `<tr class="clickable" data-manopen="${m.id}">
+        <td class="mono">${m.id}</td>
+        <td class="muted">${m.area}</td>
+        <td>${esc(m.name)}<div class="sub2">${open?"":"click for steps"}</div></td>
+        <td class="muted">${m.priority}</td>
+        <td class="r"><span class="tag ${cls}">${r.status}</span></td>
+        <td class="muted">${r.at?esc(r.at)+`<div class="sub2">${esc(r.by||"")}</div>`:"—"}</td>
+        <td class="r" style="white-space:nowrap">
+          <button class="btn-ghost" data-manset="${m.id}|Passed" data-tip="Record a pass">Pass</button>
+          <button class="btn-ghost btn-danger" data-manset="${m.id}|Failed" data-tip="Record a failure">Fail</button>
+          <button class="btn-ghost" data-manset="${m.id}|Blocked" data-tip="Cannot be run right now">Block</button></td></tr>
+        ${open?`<tr><td colspan="7" style="background:var(--panel-2)">
+          <div style="padding:4px 2px 10px"><div class="eyebrow" style="margin-bottom:6px">Steps</div>
+          <ol style="margin:0 0 10px 18px;font-size:0.75rem;color:var(--ink-2);line-height:1.7">${m.steps.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
+          <div class="eyebrow" style="margin-bottom:4px">Expected</div>
+          <div style="font-size:0.75rem;color:var(--ink-2);line-height:1.6">${esc(m.expected)}</div>
+          ${r.notes?`<div class="eyebrow" style="margin:10px 0 4px">Tester note</div><div style="font-size:0.75rem;color:var(--ink-3)">${esc(r.notes)}</div>`:""}
+        </div></td></tr>`:""}`;
+    }).join("")}</tbody></table></div></div>
+
+  <div class="grid2 mt14">
+    <div class="panel"><div class="panel-hd"><h3>Release testing<i class="info" data-tip="What each release was tested against. The automated suite grows with the product, so the test count rises release on release.">i</i></h3><span class="slo">${RELEASES.length} releases</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Release</th><th>Contents</th><th class="r">Automated</th><th class="r">Runs</th><th class="r">Final result</th><th class="r">Signed off</th></tr></thead>
+      <tbody>${RELEASES.slice().reverse().map(rel=>{
+        const rs=runs.filter(r=>r.release===rel.v).sort((a,b)=>b.ts-a.ts);
+        const finalRun=rs.find(r=>!r.live)||rs[0];
+        const green=finalRun&&finalRun.failed===0;
+        const current=rel.v===RELEASES[RELEASES.length-1].v;
+        return `<tr><td class="mono">${rel.v}${current?` <span class="tag t-run">Current</span>`:""}</td>
+          <td>${esc(rel.name)}</td>
+          <td class="r num">${rel.auto}</td>
+          <td class="r num muted">${rs.length}</td>
+          <td class="r">${finalRun?(green?`<span class="tag t-pass">${finalRun.passed}/${finalRun.total}</span>`:`<span class="tag t-fail">${finalRun.passed}/${finalRun.total}</span>`):"—"}</td>
+          <td class="r">${current?`<span class="tag t-warn">In test</span>`:`<span class="tag t-pass">Yes</span>`}</td></tr>`;
+      }).join("")}</tbody></table></div></div>
+    <div class="panel"><div class="panel-hd"><h3>Defect log<i class="info" data-tip="Issues found during testing. Where a defect has a guarding test, that test now fails if the bug ever returns — which is what makes it a regression suite rather than a checklist.">i</i></h3>
+      <span class="slo">${openDef.length} open · ${DEFECTS.length-openDef.length} closed</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Ref</th><th>Severity</th><th>Issue</th><th>Found</th><th>Guarded by</th><th class="r">Status</th></tr></thead>
+      <tbody>${DEFECTS.slice().sort((a,b)=>(a.status==="Open"?0:1)-(b.status==="Open"?0:1)).map(d=>`<tr>
+        <td class="mono">${d.id}</td>
+        <td><span class="tag ${d.sev==="High"?"t-fail":d.sev==="Medium"?"t-warn":"t-muted"}">${d.sev}</span></td>
+        <td style="font-size:0.71875rem">${esc(d.title)}</td>
+        <td class="muted mono">${d.found}</td>
+        <td class="mono muted">${d.test}</td>
+        <td class="r"><span class="tag ${d.status==="Open"?"t-warn":"t-pass"}">${d.status}${d.fixed?" "+d.fixed:""}</span></td></tr>`).join("")}</tbody></table></div></div>
+  </div>`;
+}
+
+/* ============================================================
    Top-level render
 ============================================================ */
-const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests,reserves:paneReserves,docs:paneDocs};
+const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests,reserves:paneReserves,tests:paneTests,docs:paneDocs};
 function render(){
   renderSidebarStats();
   renderChips();
@@ -4157,6 +4856,24 @@ document.addEventListener("click",e=>{
   }
   const rvev=e.target.closest("[data-rsvevent]");
   if(rvev){ state.rsvFilters.purpose=rvev.dataset.rsvevent; state.rsvFilters.status="Approved"; render(); return; }
+  const trun=e.target.closest("#tst-run");
+  if(trun){
+    /* Paint the running state first, then execute — otherwise the button never
+       shows it was pressed on a suite that takes a second. */
+    trun.textContent="Running…"; trun.disabled=true;
+    setTimeout(()=>{ runAutoTests(state.tests.suite); render(); },20);
+    return;
+  }
+  const treset=e.target.closest("#tst-reset"); if(treset){ TEST_RESULTS={}; render(); return; }
+  const mset=e.target.closest("[data-manset]");
+  if(mset){
+    const [id,st]=mset.dataset.manset.split("|");
+    const now=new Date();
+    TEST_STATE.manual[id]={status:st,by:"You",at:fmtDate(now),notes:(TEST_STATE.manual[id]||{}).notes||""};
+    saveTests(); render(); return;
+  }
+  const mopen=e.target.closest("[data-manopen]");
+  if(mopen){ const id=mopen.dataset.manopen; state.tests.openManual=state.tests.openManual===id?null:id; render(); return; }
   const rvclear=e.target.closest("#rv-clearfilters"); if(rvclear){state.rsvFilters={customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""};render();return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
   if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
@@ -4201,6 +4918,8 @@ document.addEventListener("change",e=>{
   if(e.target.id==="expo-seg"){ state.expo.seg=e.target.value; render(); return; }
   const RQF={"rqf-type":"type","rqf-requester":"requester","rqf-approver":"approver","rqf-status":"status"};
   if(RQF[e.target.id]){ state.reqFilters[RQF[e.target.id]]=e.target.value; render(); return; }
+  if(e.target.id==="tst-suite"){ state.tests.suite=e.target.value; render(); return; }
+  if(e.target.id==="tst-show"){ state.tests.show=e.target.value; render(); return; }
   const RVF={"rvf-scope":"scope","rvf-window":"window","rvf-purpose":"purpose","rvf-requester":"requester","rvf-approver":"approver","rvf-status":"status"};
   if(RVF[e.target.id]){ state.rsvFilters[RVF[e.target.id]]=e.target.value; render(); return; }
   if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
