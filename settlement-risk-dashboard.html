@@ -1563,13 +1563,17 @@ function seedReserves(){
     .map(co=>({co, free: co.amountM-carveDrawn(co)}))
     .filter(x=>x.free>=10)
     .sort((a,b)=>b.free-a.free)
-    .slice(0,1500);
+    .slice(0,4200);
   const out=[];
-  for(let i=0;i<170 && pool.length;i++){
+  for(let i=0;i<900 && pool.length;i++){
     const k=Math.min(pool.length-1, Math.floor(Math.pow(rng(),2.2)*pool.length));
     const pick=pool.splice(k,1)[0];
     const co=pick.co;
-    const amountM=Math.max(1,Math.round(pick.free*rand(0.28,0.82)));
+    /* A jumbo hold now and then. Without a fat tail the aggregate is a smooth
+       hump; the point of the chart is to show a reserve opening and closing, and
+       that only reads if some individual holds are big enough to see. */
+    const jumbo=rng()<0.14;
+    const amountM=Math.max(1,Math.round(pick.free*(jumbo?rand(0.80,0.97):rand(0.30,0.80))));
     /* Days from today, positive = future. Most reserves are near-dated because
        a desk reserves against a deal it can see; a minority are programme trades
        phased over two or three quarters, which is what puts a tail on the
@@ -1817,12 +1821,15 @@ function trendChart(hist,fcast,days,opts={}){
     ma.forEach((v,i)=>{ if(v!=null) pts.push(X(i).toFixed(1)+","+Y(v).toFixed(1)); });
     if(pts.length>1) maLine=`<polyline points="${pts.join(" ")}" fill="none" stroke="var(--violet)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }
-  let resvBand="";
+  let resvFill="", resvBand="";
   if(resv){
     const top=fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v+resv[i]).toFixed(1));
     const bot=fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v).toFixed(1)).reverse();
-    resvBand=`<polygon points="${top.concat(bot).join(" ")}" fill="var(--gold)" opacity=".22"/>`
-      +`<polyline points="${top.join(" ")}" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    /* The fill goes down first so the run-off line stays readable through it; the
+       reserve line goes on LAST so where the two nearly touch it is the reserve
+       that stays visible, not a doubled-up green line. */
+    resvFill=`<polygon points="${top.concat(bot).join(" ")}" fill="var(--gold)" opacity=".26"/>`;
+    resvBand=`<polyline points="${top.join(" ")}" fill="none" stroke="var(--gold)" stroke-width="2.2" stroke-dasharray="8 3" stroke-linejoin="round"/>`;
     /* At portfolio scale the band is only a couple of percent of the axis — real,
        but too thin to measure by eye. Call the peak out in words so the figure is
        readable without inflating the data to make the shape bigger. */
@@ -1845,8 +1852,9 @@ function trendChart(hist,fcast,days,opts={}){
     ${weekTicks}
     <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="${lineW}" stroke-linejoin="round"/>
     ${maLine}
-    ${resvBand}
+    ${resvFill}
     <polyline points="${fcastPts}" fill="none" stroke="var(--pass)" stroke-width="2" stroke-dasharray="5 4"/>
+    ${resvBand}
     ${monthLbls}${yearLbls}
     </svg>`;
 }
@@ -2105,7 +2113,7 @@ function trendLegend(showMA,hasReserve){
     <span><i class="lk" style="background:var(--run)"></i>Actual utilization</span>
     ${showMA?`<span><i class="lk" style="background:var(--violet)"></i>3-month moving average</span>`:""}
     <span><i class="lk dash" style="color:var(--pass)"></i>Forward settlement run-off</span>
-    ${hasReserve?`<span data-tip="Approved limit reserves held for expected deals, stacked on top of the run-off. The gap between the top of this band and the 100% line is the capacity genuinely free to trade."><i class="lk band"></i>Reserved for expected deals</span>`:""}
+    ${hasReserve?`<span data-tip="The upper line is the run-off plus every approved reserve open on that day, so it lifts away from the run-off for as long as a reserve window is open and falls back when it closes. The shaded gap is the reserved capacity itself; the distance from the upper line to 100% is what is genuinely free to trade."><i class="lk band"></i>Run-off + approved reserves</span>`:""}
     <span><i class="lk dash" style="color:var(--fail)"></i>100% limit</span>
   </div>`;
 }
@@ -2360,7 +2368,7 @@ function paneOverviewPortfolio(){
     ${heatLegend()}
     ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit.">i</i></h3>
+  <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor; it only declines because future trades are unknowable. Gold = that same run-off plus every approved limit reserve open on the day, so it lifts away from the green line while a reserve window is open. Red dashed line is the 100% limit.">i</i></h3>
       <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><label class="machk" data-tip="Show or hide approved limit reserves stacked on the forward run-off. A reserve holds part of a carve-out for an expected deal, so it removes headroom that would otherwise be free."><input type="checkbox" id="ov-resv"${state.showReserve?" checked":""}> Reserves</label><span class="slo">18 months actual + 12 months run-off${rsvPeakM>0?" · "+fmtM(rsvPeakM)+" reserved at peak":""}</span></span></div>
       <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46,showReserve:state.showReserve,fcastReserve:fcastRsv,reserveLabel:rsvPeakM>0?fmtM(rsvPeakM)+" reserved at peak":""})}</div></div>
       ${trendLegend(state.showMA,state.showReserve&&rsvPeakM>0)}</div>`;
@@ -2802,7 +2810,7 @@ function paneReserves(){
   ];
   return `<div class="kpis kpis-4">${kpis.map(([l,v,sub,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${sub}</small></div>`).join("")}</div>
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="The same chart as the Overview tab. Solid blue is 18 months of actual limit-weighted utilization. Dashed green is the settlement run-off — capacity coming back as trades already on the book reach their value dates. The gold band on top is approved limit reserves, capacity that is coming back but is already claimed. The gap between the top of the band and the 100% line is what a desk can genuinely still sell.">i</i></h3>
+  <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="The same chart as the Overview tab. Solid blue is 18 months of actual limit-weighted utilization. Dashed green is the settlement run-off — capacity coming back as trades already on the book reach their value dates. The gold line above it is the same run-off plus every approved reserve open on that day: it lifts away from the green line for as long as a reserve window is open and settles back onto it when the window closes. The shaded gap between them is the reserved capacity. The gap between the top of the band and the 100% line is what a desk can genuinely still sell.">i</i></h3>
     <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><label class="machk" data-tip="Show or hide approved limit reserves stacked on the forward run-off."><input type="checkbox" id="ov-resv"${state.showReserve?" checked":""}> Reserves</label><span class="slo">18 months actual + 12 months run-off${peakM>0?" · "+fmtM(peakM)+" reserved at peak":""}</span></span></div>
     <div class="panel-body"><div class="chart-well tall">${trendChart(PT.hist,PT.fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46,showReserve:state.showReserve,fcastReserve:ov,reserveLabel:peakM>0?fmtM(peakM)+" reserved at peak":""})}</div></div>
     ${trendLegend(state.showMA,state.showReserve&&peakM>0)}
@@ -3575,7 +3583,8 @@ function paneDocs(){
   created:"29 Jul 2026", decided:"30 Jul 2026"
 }</code></pre>
   <h4>Seeding</h4>
-  <p><b>${nf(RESERVES.length)}</b> reserves are generated, one per carve-out at most. They are drawn from carve-outs that still have headroom, weighted hard towards the largest — a desk reserves capacity ahead of a big deal, not against a $2M slice. Each takes 28% to 82% of what is free on its carve-out.</p>
+  <p><b>${nf(RESERVES.length)}</b> reserves are generated, at most one per carve-out. They are drawn from carve-outs that still have headroom, weighted hard towards the largest — a desk reserves capacity ahead of a big deal, not against a $2M slice. Each takes 30% to 80% of what is free on its carve-out, and about one in seven is a jumbo hold taking up to 97%.</p>
+  <div class="note"><b>On the size of the reserve book</b>Approved reserves peak at <b>${fmtPct(Math.max.apply(null,reserveOverlay(null,FWD_DAYS,WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),"docsize")),1)}</b> of approved limits — around a third of what is still on the book at that point. That is a deliberately busy pipeline. An earlier build seeded roughly a fifth as much, and the result was a reserve line that sat on the run-off line and looked like a rendering fault: the effect the tab exists to show was invisible at portfolio scale. The volume here is chosen so the two lines separate. It is not a claim about how much capacity a bank typically reserves.</div>
   <p>Most windows are near-dated, opening anywhere from 25 days ago to 105 days out and running 14 to 130 days. About a fifth are programme trades phased over two or three quarters, opening up to 230 days out and running as long as 220 days.</p>
   <p><b>Live:</b> ${nf(RESERVES.filter(r=>r.status==="Approved").length)} approved, ${nf(RESERVES.filter(r=>r.status==="Pending").length)} pending, ${nf(RESERVES.filter(r=>r.status==="Rejected").length)} rejected. ${nf(RESERVES.filter(rsvHoldsToday).length)} are holding capacity today, worth <b>${fmtM(RESERVES.filter(rsvHoldsToday).reduce((a,r)=>a+r.amountM,0))}</b>.</p>
   <h4>Two states, not one</h4>
@@ -3685,7 +3694,7 @@ function paneDocs(){
   <div class="note why"><b>One ranking, not two</b>The same criterion decides both which names make the cut and what order they appear in, with the customer name breaking ties. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of appending to the end of it.</div>
   <h4>Utilization trend and capacity run-off</h4>
   <p>Full width at the foot of the tab. It shows eighteen months of actual daily utilization, an optional three-month moving average, and twelve months of forward settlement run-off, with a marked line at today and the forward half lightly shaded.</p>
-  <p>A gold band sits on top of the run-off wherever approved <b>limit reserves</b> are holding capacity, with its peak called out in words. A <b>Reserves</b> checkbox turns it off. At portfolio scale the band is only a few percent of the axis — that is the true proportion, so it is annotated rather than exaggerated. On a single customer it is usually much thicker. The <a href="#d-tab-reserves">Limit Reserve Requests</a> tab repeats this exact chart, with a horizon readout underneath that separates capacity released by maturing trades from capacity held by reserves. See <a href="#d-data-rsv">5.8</a>.
+  <p>A second gold line runs above the run-off: the same run-off plus every approved reserve open on that day. It lifts away from the green line for as long as a reserve window is open and settles back onto it when the window closes, so the gap between the two is the reserved capacity, with its peak called out in words. A <b>Reserves</b> checkbox turns it off. At portfolio scale the band is only a few percent of the axis — that is the true proportion, so it is annotated rather than exaggerated. On a single customer it is usually much thicker. The <a href="#d-tab-reserves">Limit Reserve Requests</a> tab repeats this exact chart, with a horizon readout underneath that separates capacity released by maturing trades from capacity held by reserves. See <a href="#d-data-rsv">5.8</a>.
   <p>The horizontal axis is a real calendar: a small tick every Monday, a taller tick and a gridline on the first of each month, month names underneath, and the year printed under each January. Month names thin themselves out automatically when they would otherwise collide.</p>
   <div class="note"><b>The forward line can only fall</b>It is not a forecast. It is the run-off of exposure <b>already on the book</b>, worked out from how long each live trade still has to run. Future trades cannot be known, so the line steps down as today's book matures and never rises. It is a staircase rather than a curve because settlement happens on value dates, in lumps.</div>
 
@@ -3962,7 +3971,7 @@ repeat up to 6 times, while anything remains:
     <tr><td>Drawing cost at full scale</td><td>The heatmap set to All draws ${nf(CUSTOMERS.length)} tiles and takes roughly a second to paint. A production build over a book this size would need to draw only what is on screen, or aggregate on a server. Here, the Top-N control is the answer.</td></tr>
     <tr><td>The portfolio line is smoother than any single name</td><td>This is genuine diversification, not a shortcut. Averaging ${nf(WITH_LIMIT.length)} books damps the block-trade spikes that are obvious on one customer. It was deliberately left alone.</td></tr>
     <tr><td>The treemap leaves out names with nothing to measure</td><td>A name with no limit — or nothing drawn, when sizing by utilized — has no area and cannot be drawn. The heatmap is where those names are visible.</td></tr>
-    <tr><td>The reserve band is thin at portfolio scale</td><td>Approved reserves peak at ${fmtPct(Math.max.apply(null,reserveOverlay(null,FWD_DAYS,WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),"doclim")),2)} of approved limits, so on the portfolio chart the band is a few pixels. That is the honest proportion; it is annotated with its peak in words rather than inflated. The per-customer charts and the reserve tab's own chart show it at a readable scale.</td></tr>
+    <tr><td>The reserve book is sized for legibility</td><td>Reserve volume was chosen so the reserve line visibly separates from the run-off at portfolio scale. It is a demonstration setting, not an estimate of normal practice — see the note in <a href="#d-data-rsv">5.8</a>.</td></tr>
     <tr><td>Reserves are not netted against expected drawings</td><td>When the anticipated deal is actually booked, a real system would release the reserve as the exposure lands. Here a reserve simply lapses at the end of its window, so for a short period a booked deal and its reserve can both be counted against headroom.</td></tr>
     <tr><td>Reserved buffer disappears under a filter</td><td>The reserved buffer is a portfolio-level number and cannot honestly be attributed to a country or segment, so it drops to zero whenever a filter is on. See <a href="#d-controls-rail">6.3</a>.</td></tr>
     <tr><td>Carve-out storage size</td><td>Around ${nf(CARVEOUTS.length)} seeded carve-outs come to roughly a megabyte when saved. The write is wrapped safely, so hitting the browser's storage quota fails quietly instead of breaking the page.</td></tr>
