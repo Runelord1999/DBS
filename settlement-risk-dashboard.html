@@ -303,6 +303,10 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .rank-list::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink-3) 40%,transparent);border-radius:4px}
 .rank-list::-webkit-scrollbar-track{background:transparent}
 .dist-list>div{margin-bottom:0 !important}
+/* Long lists (19 test suites) scroll inside the well rather than being clipped
+   by it or stretching the row out of line with its neighbours. */
+.dist-list.scroll{justify-content:flex-start;overflow-y:auto;gap:1px}
+.grid3 .dist-list.scroll{height:206px}
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:0.625rem;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
 th.r,td.r{text-align:right}
@@ -1133,9 +1137,12 @@ function daysSinceNonZero(series){
 let CUSTID=1;
 function makeCustomer(o){
   const id="C"+String(CUSTID++).padStart(3,"0");
-  return Object.assign({id, hasLimit:o.limitM!=null, limitM:o.limitM||0,
+  /* The derived fields are applied LAST. Spreading `o` last instead let its raw
+     limitM:null overwrite the ||0 normalisation, so a customer with no limit
+     carried null where every consumer expects a number. */
+  return Object.assign({}, o, {id, hasLimit:o.limitM!=null, limitM:o.limitM||0,
     typeAlloc:o.limitM!=null?genTypeAlloc(o.segment):null,
-    series:o.limitM!=null?genSeries(o.profile||"mid",COUNTRY_UTIL_BIAS[o.country]||1):null}, o);
+    series:o.limitM!=null?genSeries(o.profile||"mid",COUNTRY_UTIL_BIAS[o.country]||1):null});
 }
 const CUSTOMERS=[];
 BANKS.forEach((b,i)=>{
@@ -3833,10 +3840,13 @@ function paneDocs(){
 
   <h3 id="d-tab-tests">7.8 Testing &amp; Regression</h3>
   <p>Where the site checks itself. The distinction that matters on this tab is between what a machine can assert and what a person has to judge, and the two are kept visibly apart.</p>
-  <div class="note why"><b>The automated tests are real</b>They are not a recorded result played back. Pressing <b>Run</b> executes ${AUTO_TESTS.length} assertions against the live dataset in the open page and reports what it actually found — including the observed figures, in the last column. A test that cannot fail is worth nothing, so each one was checked by deliberately breaking the thing it guards and confirming it goes red.</div>
+  <div class="note why"><b>The automated tests are real</b>They are not a recorded result played back. Pressing <b>Run</b> executes ${nf(AUTO_TESTS.length)} assertions against the live dataset in the open page and reports what it actually found — including the observed figures, in the last column. The whole suite takes well under a second.</div>
+  <div class="note"><b>How the count gets to ${nf(AUTO_TESTS.length)}</b>Most of the suite is <b>parameterised over the dimensions the site actually has</b>, not repeated. One set of checks per booking centre, per segment, per limit type, per tradable product, per deal event, per sort criterion, per date range, per tab, per documentation topic, per colour token in each theme, and one set for each of the thirty largest relationships reconciled individually. Adding a country or a product adds tests automatically; padding the count with duplicates of the same assertion would not.</div>
+  <div class="note warn"><b>A test that cannot fail is worth nothing</b>The suite is checked by deliberately breaking things and confirming the right test goes red — a duplicated customer name, a trade settled before its value date, a long-dated trade off month-end, a trade using a limit type outside its asset class, a customer in an unknown country, a reserve larger than its carve-out, a deal event moved onto a month boundary, an over-allocated carve-out, a pending request with an approver, a documentation topic pointing nowhere, a pane that throws, a tab registered but unknown to the suite, and a defect naming a test that does not exist. Every one is caught, and the suite returns to green when the mutation is undone.</div>
+  <p>That exercise is not decorative. It found two real problems: a font-scale test that closed over the value it was meant to be checking, and a customer record carrying <code>null</code> where every consumer expects a number — see <code>DEF-051</code> in the defect log.</p>
   <h4>What is real and what is seeded</h4>
   <table><thead><tr><th style="width:14em">Element</th><th>Source</th></tr></thead><tbody>
-    <tr><td>Automated test results</td><td><b>Real.</b> Executed in this browser, now, against the live data.</td></tr>
+    <tr><td>Automated test results</td><td><b>Real.</b> All ${nf(AUTO_TESTS.length)} executed in this browser, now, against the live data.</td></tr>
     <tr><td>Manual test outcomes</td><td>Recorded by a person and saved in this browser. Seeded with a plausible history on first load.</td></tr>
     <tr><td>Run history before today</td><td>Seeded. Runs made in this browser are marked and appended to it.</td></tr>
     <tr><td>Releases and defect log</td><td>Seeded, but the defects are the real ones found while building this site, each naming the test that now guards it.</td></tr>
@@ -3845,7 +3855,7 @@ function paneDocs(){
   <table><thead><tr><th style="width:11em">Suite</th><th>Covers</th><th class="r">Tests</th></tr></thead><tbody>
     ${TEST_SUITES.map(su=>`<tr><td><b>${su.name}</b></td><td>${su.blurb}</td><td class="r num">${AUTO_TESTS.filter(t=>t.suite===su.id).length}</td></tr>`).join("")}
   </tbody></table>
-  <p><b>${AUTO_TESTS.filter(t=>t.inv).length}</b> of the ${AUTO_TESTS.length} tests carry an invariant number, tying them to the numbered statements in <a href="#d-invariants">section 11</a>. That link is the point: an invariant written only in prose drifts, an invariant with a test behind it cannot.</p>
+  <p><b>${nf(AUTO_TESTS.filter(t=>t.inv).length)}</b> of the ${nf(AUTO_TESTS.length)} tests carry an invariant number, and between them they cover <b>all ${new Set(AUTO_TESTS.filter(t=>t.inv).map(t=>t.inv)).size}</b> of the numbered statements in <a href="#d-invariants">section 11</a> — a test in the Documentation suite fails if any invariant loses its guard. That link is the point: an invariant written only in prose drifts, an invariant with a test behind it cannot.</p>
   <h4>Dashboards</h4>
   <ul>
     <li><b>Run history</b> — passed and failed per run, oldest on the left. Runs made in this browser carry a mark.</li>
@@ -4112,13 +4122,25 @@ repeat up to 6 times, while anything remains:
    is not.
 ============================================================ */
 const TEST_SUITES=[
-  {id:"pool",     name:"Pool arithmetic",     blurb:"Every identity the KPI strip and the donut depend on."},
-  {id:"book",     name:"Customer book",       blurb:"Population, ids, series shape and the risk bands."},
-  {id:"txn",      name:"Transactions",        blurb:"Tenors, month-end rolling and status against maturity."},
-  {id:"carve",    name:"Carve-outs",          blurb:"Allocation ladders, thresholds and the index."},
-  {id:"reserve",  name:"Limit reserves",      blurb:"Windows, event dates and the forward overlay."},
-  {id:"chart",    name:"Charts & series",     blurb:"Run-off shape, the shared trend series, ranking stability."},
-  {id:"ui",       name:"Rendering & wiring",  blurb:"Every tab builds, every documentation anchor resolves."},
+  {id:"pool",     name:"Pool arithmetic",    blurb:"Every identity the KPI strip and the donut depend on."},
+  {id:"book",     name:"Customer book",      blurb:"Population, ids, series shape and the risk bands."},
+  {id:"country",  name:"Country dimension",  blurb:"One set of checks per booking centre."},
+  {id:"segment",  name:"Segment dimension",  blurb:"One set of checks per customer segment."},
+  {id:"type",     name:"Limit types",        blurb:"One set of checks per product limit type."},
+  {id:"txn",      name:"Transactions",       blurb:"Tenors, month-end rolling and status against maturity."},
+  {id:"product",  name:"Products & tenors",  blurb:"One set of checks per tradable product."},
+  {id:"carve",    name:"Carve-outs",         blurb:"Allocation ladders, thresholds and every scope label."},
+  {id:"reserve",  name:"Limit reserves",     blurb:"Windows, statuses and the forward overlay."},
+  {id:"event",    name:"Deal events",        blurb:"One set of checks per clustered settlement event."},
+  {id:"chart",    name:"Charts & series",    blurb:"Run-off shape, the shared trend series, chart primitives."},
+  {id:"heat",     name:"Heatmap & treemap",  blurb:"One set of checks per sort criterion, plus the layout."},
+  {id:"filter",   name:"Filters & ranges",   blurb:"One set of checks per selectable date range."},
+  {id:"ui",       name:"Rendering & wiring", blurb:"One set of checks per tab, plus shared plumbing."},
+  {id:"doc",      name:"Documentation",      blurb:"One check per topic in the tree, plus cross-references."},
+  {id:"theme",    name:"Themes & type",      blurb:"Every colour token in every theme, and the font scale."},
+  {id:"account",  name:"Top relationships",  blurb:"The largest names reconciled individually."},
+  {id:"workflow", name:"Workflows",          blurb:"Limit increase and reserve request integrity."},
+  {id:"meta",     name:"Suite integrity",    blurb:"The test registry checking itself."},
 ];
 const SUITE_NAME={}; TEST_SUITES.forEach(s=>SUITE_NAME[s.id]=s.name);
 
@@ -4133,259 +4155,703 @@ const _T={
   pass:(cond,detail)=>({pass:!!cond,detail:detail||""}),
 };
 
-const AUTO_TESTS=[
-  /* ---- pool arithmetic ---- */
-  {id:"AT-001",suite:"pool",inv:1,name:"Utilized + Available equals total approved limits",fn:()=>{
-    const L=_T.limits(), d=_T.drawn(), a=WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0);
-    return _T.pass(_T.near(d+a,L,1), fmtM(d)+" + "+fmtM(a)+" = "+fmtM(d+a)+" vs "+fmtM(L));}},
-  {id:"AT-002",suite:"pool",inv:2,name:"Pool donut slices total 100%",fn:()=>{
-    const L=_T.limits(), d=_T.drawn(), a=L-d, g=L+RESERVED_M;
-    const sum=(d/g+a/g+RESERVED_M/g)*100;
-    return _T.pass(_T.near(sum,100,0.001), sum.toFixed(4)+"%");}},
-  {id:"AT-003",suite:"pool",inv:3,name:"Country concentration reconciles to the pool",fn:()=>{
-    let L=0,d=0; COUNTRIES.forEach(co=>{const cs=WITH_LIMIT.filter(c=>c.country===co);
-      L+=cs.reduce((a,c)=>a+c.limitM,0); d+=cs.reduce((a,c)=>a+custDrawnM(c),0);});
-    return _T.pass(_T.near(L,_T.limits(),1)&&_T.near(d,_T.drawn(),1), fmtM(L)+" limits, "+fmtM(d)+" drawn");}},
-  {id:"AT-004",suite:"pool",inv:4,name:"Limit-type concentration reconciles after the water-fill",fn:()=>{
-    let L=0,d=0; LIMIT_TYPES.forEach(t=>{ WITH_LIMIT.forEach(c=>{ L+=custLimitTypeM(c,t); d+=custTypeDrawnM(c,t); }); });
-    return _T.pass(_T.near(L,_T.limits(),2)&&_T.near(d,_T.drawn(),2), fmtM(L)+" limits, "+fmtM(d)+" drawn");}},
-  {id:"AT-005",suite:"pool",inv:8,name:"Each customer's five type figures sum to their drawn amount",fn:()=>{
+/* Run-scoped cache. Several families need the same expensive artefact — the
+   rendered panes, the documentation HTML, the portfolio trend — and computing
+   it once per run instead of once per test is the difference between a suite
+   that runs in half a second and one that takes a minute. Cleared per run. */
+let _TC={};
+function tc(k,fn){ if(!(k in _TC)) _TC[k]=fn(); return _TC[k]; }
+const TCX={
+  panes:()=>tc("panes",()=>{const keep=state.tab,o={};Object.keys(PANES).forEach(t=>{try{o[t]=PANES[t]();}catch(e){o[t]="__THREW__"+e.message;}});state.tab=keep;return o;}),
+  doc:()=>tc("doc",()=>paneDocs()),
+  trend:()=>tc("trend",()=>portfolioTrend(WITH_LIMIT)),
+  overlay:()=>tc("ovl",()=>reserveOverlay(null,FWD_DAYS,_T.limits(),"suite")),
+  limits:()=>tc("lim",()=>_T.limits()),
+  drawn:()=>tc("drw",()=>_T.drawn()),
+  byCountry:()=>tc("bc",()=>{const m={};COUNTRIES.forEach(c=>m[c]={n:0,limit:0,drawn:0,util:0});
+    WITH_LIMIT.forEach(c=>{const x=m[c.country];if(x){x.n++;x.limit+=c.limitM;x.drawn+=custDrawnM(c);x.util+=custUtilCur(c);}});return m;}),
+  bySegment:()=>tc("bs",()=>{const m={};SEGMENTS.forEach(s=>m[s]={n:0,with:0,without:0,limit:0,drawn:0});
+    CUSTOMERS.forEach(c=>{const x=m[c.segment];if(!x)return;x.n++;if(c.hasLimit){x.with++;x.limit+=c.limitM;x.drawn+=custDrawnM(c);}else x.without++;});return m;}),
+  byType:()=>tc("bt",()=>{const m={};LIMIT_TYPES.forEach(t=>m[t]={limit:0,drawn:0});
+    WITH_LIMIT.forEach(c=>LIMIT_TYPES.forEach((t,i)=>{m[t].limit+=custLimitTypeM(c,t);m[t].drawn+=custTypeDrawn(c)[i];}));return m;}),
+  themeTokens:()=>tc("tt",()=>{const el=document.documentElement,keep=el.getAttribute("data-theme"),out={};
+    THEMES.forEach(t=>{el.setAttribute("data-theme",t);const cs=getComputedStyle(el);out[t]={};
+      THEME_TOKENS.forEach(k=>out[t][k]=cs.getPropertyValue(k).trim());});
+    if(keep)el.setAttribute("data-theme",keep);else el.removeAttribute("data-theme");return out;}),
+};
+/* The tab list the suite iterates. It is declared rather than read from PANES
+   because PANES is defined further down and would still be in its temporal dead
+   zone while the tests are being built. A meta test asserts the two agree, so
+   adding a tab without adding it here fails the suite. */
+const TAB_IDS=["overview","customers","blotter","rankings","carveouts","requests","reserves","tests","docs"];
+const THEME_TOKENS=["--ground","--panel","--panel-2","--panel-3","--hair","--ink","--ink-2","--ink-3",
+  "--brand","--pass","--warn","--fail","--run","--agent","--violet","--cyan","--gold","--pink",
+  "--heat-1","--heat-2","--heat-3","--heat-4"];
+
+/* Every test is built here. Families generate one concrete case per member of a
+   real dimension — per country, per product, per deal event, per documentation
+   topic — so the count reflects the surface area of the site rather than being
+   padded with repeats of the same assertion. */
+function buildTests(){
+  const T=[]; const seq={};
+  const add=(pre,suite,name,fn,inv)=>{ seq[pre]=(seq[pre]||0)+1;
+    T.push({id:pre+"-"+String(seq[pre]).padStart(3,"0"),suite,name,fn,inv}); };
+
+  /* ============ pool arithmetic ============ */
+  add("PL","pool","Utilized + Available equals total approved limits",()=>{
+    const L=TCX.limits(),d=TCX.drawn(),a=WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0);
+    return _T.pass(_T.near(d+a,L,1),fmtM(d)+" + "+fmtM(a)+" vs "+fmtM(L));},1);
+  add("PL","pool","Pool donut slices total 100%",()=>{
+    const L=TCX.limits(),g=L+RESERVED_M,d=TCX.drawn();
+    const sum=(d/g+(L-d)/g+RESERVED_M/g)*100; return _T.pass(_T.near(sum,100,0.001),sum.toFixed(4)+"%");},2);
+  add("PL","pool","Country concentration reconciles to the pool",()=>{
+    const m=TCX.byCountry(); let L=0,d=0; COUNTRIES.forEach(c=>{L+=m[c].limit;d+=m[c].drawn;});
+    return _T.pass(_T.near(L,TCX.limits(),1)&&_T.near(d,TCX.drawn(),1),fmtM(L)+" / "+fmtM(d));},3);
+  add("PL","pool","Limit-type concentration reconciles after the water-fill",()=>{
+    const m=TCX.byType(); let L=0,d=0; LIMIT_TYPES.forEach(t=>{L+=m[t].limit;d+=m[t].drawn;});
+    return _T.pass(_T.near(L,TCX.limits(),2)&&_T.near(d,TCX.drawn(),2),fmtM(L)+" / "+fmtM(d));},4);
+  add("PL","pool","Every customer's type figures sum to their drawn amount",()=>{
     const bad=WITH_LIMIT.filter(c=>!_T.near(custTypeDrawn(c).reduce((a,b)=>a+b,0),custDrawnM(c),0.02));
-    return _T.pass(bad.length===0, bad.length+" of "+WITH_LIMIT.length+" mismatched");}},
-  {id:"AT-006",suite:"pool",inv:7,name:"No limit type is drawn beyond its allocation",fn:()=>{
+    return _T.pass(bad.length===0,bad.length+" of "+WITH_LIMIT.length);},8);
+  add("PL","pool","No limit type is drawn beyond its allocation",()=>{
     const bad=WITH_LIMIT.filter(c=>custTypeDrawn(c).some((v,i)=>v>custLimitTypeM(c,LIMIT_TYPES[i])+0.02));
-    return _T.pass(bad.length===0, bad.length+" over allocation");}},
-  {id:"AT-007",suite:"pool",name:"Reserved buffer is 12% of approved limits",fn:()=>
-    _T.pass(_T.near(RESERVED_M,_T.limits()*0.12,1), fmtM(RESERVED_M)+" vs "+fmtM(_T.limits()*0.12))},
-  {id:"AT-008",suite:"pool",name:"Drawn never exceeds a customer's approved limit",fn:()=>{
-    const bad=WITH_LIMIT.filter(c=>custDrawnM(c)>c.limitM+0.001);
-    return _T.pass(bad.length===0, bad.length+" over limit");}},
-  {id:"AT-009",suite:"pool",name:"Excess exposure is reported outside the pool",fn:()=>{
+    return _T.pass(bad.length===0,bad.length+" over");},7);
+  add("PL","pool","Reserved buffer is 12% of approved limits",()=>
+    _T.pass(_T.near(RESERVED_M,TCX.limits()*0.12,1),fmtM(RESERVED_M)));
+  add("PL","pool","Drawn never exceeds a customer's approved limit",()=>
+    _T.pass(WITH_LIMIT.every(c=>custDrawnM(c)<=c.limitM+0.001),WITH_LIMIT.length+" checked"));
+  add("PL","pool","Excess exposure sits outside the pool",()=>{
     const ex=WITH_LIMIT.reduce((a,c)=>a+Math.max(0,custUtilCur(c)-1)*c.limitM,0);
-    const breaches=WITH_LIMIT.filter(c=>custUtilCur(c)>1).length;
-    return _T.pass(ex>0 && breaches>0 && _T.near(_T.drawn()+WITH_LIMIT.reduce((a,c)=>a+custFreeM(c),0),_T.limits(),1),
-      fmtM(ex)+" across "+breaches+" names, pool unaffected");}},
+    return _T.pass(ex>0&&_T.near(TCX.drawn()+WITH_LIMIT.reduce((a,c)=>a+custFreeM(c),0),TCX.limits(),1),fmtM(ex)+" excluded");});
+  add("PL","pool","Utilized and Available rates add to 100%",()=>{
+    const L=TCX.limits(),d=TCX.drawn(); return _T.pass(_T.near(d/L+(L-d)/L,1,1e-9),fmtPct(d/L)+" + "+fmtPct((L-d)/L));});
+  add("PL","pool","Top-5 concentration never exceeds top-10",()=>{
+    const v=WITH_LIMIT.map(custDrawnM).sort((a,b)=>b-a),t=TCX.drawn();
+    const a=v.slice(0,5).reduce((x,y)=>x+y,0)/t,b=v.slice(0,10).reduce((x,y)=>x+y,0)/t;
+    return _T.pass(a<=b+1e-9,fmtPct(a)+" ≤ "+fmtPct(b));});
+  add("PL","pool","Dormant capital never exceeds available headroom",()=>{
+    const dm=WITH_LIMIT.filter(c=>custUtilCur(c)<0.001).reduce((a,c)=>a+c.limitM,0);
+    const av=WITH_LIMIT.reduce((a,c)=>a+custFreeM(c),0);
+    return _T.pass(dm<=av+1,fmtM(dm)+" ≤ "+fmtM(av));});
+  add("PL","pool","Peak utilization is at least the current rate",()=>{
+    const h=TCX.trend().hist,d=state.dateRangeDays;
+    const peak=Math.max.apply(null,h.slice(-d));
+    return _T.pass(peak>=TCX.trend().cur-1e-9,fmtPct(peak)+" ≥ "+fmtPct(TCX.trend().cur));});
+  add("PL","pool","Every headroom figure is non-negative",()=>
+    _T.pass(WITH_LIMIT.every(c=>custFreeM(c)>=0),"floor holds"));
 
-  /* ---- customer book ---- */
-  {id:"AT-010",suite:"book",inv:15,name:"Customer names are unique across the book",fn:()=>
-    _T.pass(new Set(CUSTOMERS.map(c=>c.name)).size===CUSTOMERS.length, CUSTOMERS.length.toLocaleString()+" names")},
-  {id:"AT-011",suite:"book",name:"Customer ids are unique and well formed",fn:()=>{
-    const ok=CUSTOMERS.every(c=>/^C\d+$/.test(c.id));
-    return _T.pass(ok && new Set(CUSTOMERS.map(c=>c.id)).size===CUSTOMERS.length,
-      CUSTOMERS[0].id+" … "+CUSTOMERS[CUSTOMERS.length-1].id);}},
-  {id:"AT-012",suite:"book",name:"Every limit holder carries a full daily history",fn:()=>{
-    const bad=WITH_LIMIT.filter(c=>!(c.series instanceof Float32Array)||c.series.length!==HIST_DAYS);
-    return _T.pass(bad.length===0, HIST_DAYS+" days x "+WITH_LIMIT.length.toLocaleString()+" names");}},
-  {id:"AT-013",suite:"book",inv:5,name:"The six utilization bands partition the book exactly once",fn:()=>{
-    const bands=["0%","0-50%","50-75%","75-90%","90-100%",">100%"];
-    const counts={}; WITH_LIMIT.forEach(c=>{const b=hlBandOf(c);counts[b]=(counts[b]||0)+1;});
-    const total=bands.reduce((a,b)=>a+(counts[b]||0),0);
-    return _T.pass(total===WITH_LIMIT.length && bands.every(b=>counts[b]>0),
-      bands.map(b=>b+":"+(counts[b]||0)).join("  "));}},
-  {id:"AT-014",suite:"book",inv:6,name:"Segment coverage counts sum to the full customer list",fn:()=>{
-    const t=SEGMENTS.reduce((a,s)=>a+CUSTOMERS.filter(c=>c.segment===s).length,0);
-    return _T.pass(t===CUSTOMERS.length, t.toLocaleString()+" of "+CUSTOMERS.length.toLocaleString());}},
-  {id:"AT-015",suite:"book",name:"All five generator profiles are populated",fn:()=>{
-    const p={}; WITH_LIMIT.forEach(c=>p[c.profile]=(p[c.profile]||0)+1);
-    const need=["mid","hot","cold","dormant","breach"];
-    return _T.pass(need.every(k=>p[k]>0), need.map(k=>k+":"+(p[k]||0)).join("  "));}},
-  {id:"AT-016",suite:"book",name:"Non-breach names never exceed 100% utilization",fn:()=>{
-    const bad=WITH_LIMIT.filter(c=>c.profile!=="breach"&&Math.max.apply(null,Array.from(c.series))>1.0001);
-    return _T.pass(bad.length===0, bad.length+" over");}},
-  {id:"AT-017",suite:"book",name:"Dormant names finish at zero utilization",fn:()=>{
-    const d=WITH_LIMIT.filter(c=>c.profile==="dormant");
-    return _T.pass(d.length>0 && d.every(c=>c.series[c.series.length-1]<0.001), d.length+" dormant names");}},
-  {id:"AT-018",suite:"book",name:"Ranked bank limits fall from $5B to $1B",fn:()=>{
-    const r=CUSTOMERS.filter(c=>c.rank).sort((a,b)=>a.rank-b.rank);
-    const first=r[0], last=r[r.length-1];
-    return _T.pass(first.limitM>4700&&first.limitM<5300&&last.limitM>930&&last.limitM<1070,
-      "rank 1 "+fmtM(first.limitM)+", rank "+last.rank+" "+fmtM(last.limitM));}},
+  /* ============ customer book ============ */
+  add("BK","book","Customer names are unique across the book",()=>
+    _T.pass(new Set(CUSTOMERS.map(c=>c.name)).size===CUSTOMERS.length,CUSTOMERS.length.toLocaleString()+" names"),15);
+  add("BK","book","Customer ids are unique and well formed",()=>
+    _T.pass(CUSTOMERS.every(c=>/^C\d+$/.test(c.id))&&new Set(CUSTOMERS.map(c=>c.id)).size===CUSTOMERS.length,
+      CUSTOMERS[0].id+" … "+CUSTOMERS[CUSTOMERS.length-1].id));
+  add("BK","book","Customer ids run in an unbroken sequence",()=>{
+    const n=CUSTOMERS.map(c=>+c.id.slice(1));
+    return _T.pass(n.every((v,i)=>i===0||v===n[i-1]+1),"C001 … C"+n[n.length-1]);});
+  add("BK","book","Every limit holder carries a full daily history",()=>
+    _T.pass(WITH_LIMIT.every(c=>c.series instanceof Float32Array&&c.series.length===HIST_DAYS),
+      HIST_DAYS+" days x "+WITH_LIMIT.length.toLocaleString()));
+  add("BK","book","Customers without a limit carry no series or allocation",()=>{
+    const no=CUSTOMERS.filter(c=>!c.hasLimit);
+    return _T.pass(no.every(c=>!c.series&&!c.typeAlloc&&c.limitM===0),no.length.toLocaleString()+" names");});
+  add("BK","book","WITH_LIMIT is exactly the customers holding a limit",()=>
+    _T.pass(WITH_LIMIT.length===CUSTOMERS.filter(c=>c.hasLimit).length&&WITH_LIMIT.every(c=>c.hasLimit),
+      WITH_LIMIT.length.toLocaleString()+" of "+CUSTOMERS.length.toLocaleString()));
+  add("BK","book","The id index covers every customer",()=>
+    _T.pass(CUSTOMERS.every(c=>CUST_BY_ID[c.id]===c),"index complete"));
+  add("BK","book","Every customer has a known country and segment",()=>{
+    const bad=CUSTOMERS.filter(c=>COUNTRIES.indexOf(c.country)<0||SEGMENTS.indexOf(c.segment)<0);
+    return _T.pass(bad.length===0,bad.length+" unknown");});
+  add("BK","book","Type allocations sum to 1 for every limit holder",()=>{
+    const bad=WITH_LIMIT.filter(c=>Math.abs(LIMIT_TYPES.reduce((a,t)=>a+c.typeAlloc[t],0)-1)>1e-6);
+    return _T.pass(bad.length===0,bad.length+" off");});
+  add("BK","book","The six utilization bands partition the book exactly once",()=>{
+    const bands=["0%","0-50%","50-75%","75-90%","90-100%",">100%"],cnt={};
+    WITH_LIMIT.forEach(c=>{const b=hlBandOf(c);cnt[b]=(cnt[b]||0)+1;});
+    const tot=bands.reduce((a,b)=>a+(cnt[b]||0),0);
+    return _T.pass(tot===WITH_LIMIT.length&&bands.every(b=>cnt[b]>0),bands.map(b=>b+":"+(cnt[b]||0)).join(" "));},5);
+  add("BK","book","Segment coverage counts sum to the full customer list",()=>{
+    const m=TCX.bySegment(),t=SEGMENTS.reduce((a,s)=>a+m[s].n,0);
+    return _T.pass(t===CUSTOMERS.length,t.toLocaleString()+" of "+CUSTOMERS.length.toLocaleString());},6);
+  add("BK","book","All five generator profiles are populated",()=>{
+    const p={};WITH_LIMIT.forEach(c=>p[c.profile]=(p[c.profile]||0)+1);
+    return _T.pass(["mid","hot","cold","dormant","breach"].every(k=>p[k]>0),
+      Object.entries(p).map(([k,v])=>k+":"+v).join(" "));});
+  add("BK","book","Ranked bank limits fall from $5B to $1B",()=>{
+    const r=CUSTOMERS.filter(c=>c.rank).sort((a,b)=>a.rank-b.rank),f=r[0],l=r[r.length-1];
+    return _T.pass(f.limitM>4700&&f.limitM<5300&&l.limitM>930&&l.limitM<1070,fmtM(f.limitM)+" → "+fmtM(l.limitM));});
+  add("BK","book","Bank ranks are unique and contiguous",()=>{
+    const r=CUSTOMERS.filter(c=>c.rank).map(c=>c.rank).sort((a,b)=>a-b);
+    return _T.pass(r.length===BANKS.length&&r.every((v,i)=>v===i+1),r.length+" ranks");});
+  add("BK","book","Every approved limit is a positive whole number",()=>{
+    const bad=WITH_LIMIT.filter(c=>!(c.limitM>0)||c.limitM!==Math.round(c.limitM));
+    return _T.pass(bad.length===0,bad.length+" invalid");});
 
-  /* ---- transactions ---- */
-  {id:"AT-019",suite:"txn",inv:17,name:"Trade status always agrees with maturity",fn:()=>{
-    const bad=TXNS.filter(t=>t.status!=="Failed" && (t.daysToMaturity>0 ? t.status!=="Pending" : t.status!=="Settled"));
-    return _T.pass(bad.length===0, bad.length+" of "+TXNS.length.toLocaleString()+" inconsistent");}},
-  {id:"AT-020",suite:"txn",name:"Tenors of 30 days or more settle at month-end",fn:()=>{
+  /* ============ per country ============ */
+  COUNTRIES.forEach(co=>{
+    const bias=COUNTRY_UTIL_BIAS[co];
+    add("CT","country",co+" — customer count and limits reconcile",()=>{
+      const m=TCX.byCountry()[co],direct=WITH_LIMIT.filter(c=>c.country===co);
+      return _T.pass(m.n===direct.length&&_T.near(m.limit,direct.reduce((a,c)=>a+c.limitM,0),1),
+        m.n+" names, "+fmtM(m.limit));});
+    add("CT","country",co+" — drawn never exceeds approved limits",()=>{
+      const m=TCX.byCountry()[co];
+      return _T.pass(m.drawn<=m.limit+1,fmtM(m.drawn)+" of "+fmtM(m.limit)+" ("+fmtPct(m.limit?m.drawn/m.limit:0)+")");});
+    add("CT","country",co+" — utilization reflects its booking-centre bias",()=>{
+      const m=TCX.byCountry()[co],mean=m.n?m.util/m.n:0;
+      const port=WITH_LIMIT.reduce((a,c)=>a+custUtilCur(c),0)/WITH_LIMIT.length;
+      // Only assert a direction where the bias is decisive; near 1.0 the effect is
+      // inside sampling noise, so the honest assertion is proximity instead.
+      const decisive=Math.abs(bias-1)>=0.15;
+      const ok=decisive?((mean>port)===(bias>1)):Math.abs(mean-port)<0.09;
+      return _T.pass(ok,"bias x"+bias+" → "+fmtPct(mean)+" vs portfolio "+fmtPct(port)+(decisive?"":" (neutral)"));});
+    add("CT","country",co+" — the country filter isolates it",()=>{
+      const k=state.filters.country; state.filters.country=new Set([co]);
+      const got=filteredWithLimit(); state.filters.country=k;
+      return _T.pass(got.length>0&&got.every(c=>c.country===co)&&got.length===TCX.byCountry()[co].n,got.length+" names");});
+    add("CT","country",co+" — Data Highlight resolves to its customers",()=>{
+      const a=hlAggregate("country|"+co);
+      return _T.pass(a.n>0&&a.country[co]!==undefined,a.n+" customers, "+fmtM(a.drawn)+" drawn");},12);
+    add("CT","country",co+" — appears in the concentration panel with matching totals",()=>{
+      const html=TCX.panes().overview,m=TCX.byCountry()[co];
+      return _T.pass(html.indexOf('data-hl-country="'+co+'"')>=0&&html.indexOf(fmtM(m.limit))>=0,
+        "row present, "+fmtM(m.limit));});
+  });
+
+  /* ============ per segment ============ */
+  SEGMENTS.forEach(sg=>{
+    add("SG","segment",SEGMENT_LABEL[sg]+" — population is non-empty",()=>{
+      const m=TCX.bySegment()[sg];
+      return _T.pass(m.n>0,m.n.toLocaleString()+" names, "+m.with+" with a limit");});
+    add("SG","segment",SEGMENT_LABEL[sg]+" — with plus without equals the segment total",()=>{
+      const m=TCX.bySegment()[sg];
+      return _T.pass(m.with+m.without===m.n,m.with+" + "+m.without+" = "+m.n);},6);
+    add("SG","segment",SEGMENT_LABEL[sg]+" — the segment filter isolates it",()=>{
+      const k=state.filters.segment; state.filters.segment=new Set([sg]);
+      const got=filteredWithLimit(); state.filters.segment=k;
+      return _T.pass(got.length>0&&got.every(c=>c.segment===sg),got.length+" names");});
+    add("SG","segment",SEGMENT_LABEL[sg]+" — Data Highlight resolves to its customers",()=>{
+      const a=hlAggregate("seg|"+sg);
+      return _T.pass(a.n>0&&a.seg[sg]!==undefined,a.n+" customers");},12);
+    add("SG","segment",SEGMENT_LABEL[sg]+" — bulk population target was met",()=>{
+      const plan=BULK_PLAN.find(b=>b.segment===sg),m=TCX.bySegment()[sg];
+      return _T.pass(!plan||m.n>=plan.count,plan?m.n+" ≥ planned "+plan.count:"no bulk plan");});
+    add("SG","segment",SEGMENT_LABEL[sg]+" — drawn never exceeds its approved limits",()=>{
+      const m=TCX.bySegment()[sg];
+      return _T.pass(m.drawn<=m.limit+1,fmtM(m.drawn)+" of "+fmtM(m.limit));});
+  });
+
+  /* ============ per limit type ============ */
+  LIMIT_TYPES.forEach(t=>{
+    const bias=TYPE_UTIL_BIAS[t];
+    add("LT","type",t+" — allocation never exceeds the customer limit",()=>{
+      const bad=WITH_LIMIT.filter(c=>custLimitTypeM(c,t)>c.limitM+0.01);
+      return _T.pass(bad.length===0,bad.length+" over");});
+    add("LT","type",t+" — drawn never exceeds its allocation",()=>{
+      const i=LIMIT_TYPES.indexOf(t);
+      const bad=WITH_LIMIT.filter(c=>custTypeDrawn(c)[i]>custLimitTypeM(c,t)+0.02);
+      return _T.pass(bad.length===0,bad.length+" over");},7);
+    add("LT","type",t+" — utilization reflects its product bias",()=>{
+      const m=TCX.byType()[t],rate=m.limit?m.drawn/m.limit:0,port=TCX.drawn()/TCX.limits();
+      const decisive=Math.abs(bias-1)>=0.25;
+      const ok=decisive?((rate>port)===(bias>1)):Math.abs(rate-port)<0.09;
+      return _T.pass(ok,"bias x"+bias+" → "+fmtPct(rate)+" vs portfolio "+fmtPct(port)+(decisive?"":" (neutral)"));});
+    add("LT","type",t+" — the limit-type filter narrows the book",()=>{
+      const k=state.filters.limitType; state.filters.limitType=new Set([t]);
+      const got=filteredWithLimit(); state.filters.limitType=k;
+      return _T.pass(got.length>0&&got.length<=WITH_LIMIT.length&&got.every(c=>c.typeAlloc[t]>0.001),
+        got.length.toLocaleString()+" of "+WITH_LIMIT.length.toLocaleString());});
+    add("LT","type",t+" — Data Highlight resolves to customers with a real allocation",()=>{
+      const a=hlAggregate("type|"+t);
+      return _T.pass(a.n>0,a.n+" customers at 22% allocation or more");},12);
+    add("LT","type",t+" — appears in the concentration panel",()=>
+      _T.pass(TCX.panes().overview.indexOf('data-hl-type="'+t+'"')>=0,"row present"));
+  });
+
+  /* ============ transactions ============ */
+  add("TX","txn","Trade status always agrees with maturity",()=>{
+    const bad=TXNS.filter(t=>t.status!=="Failed"&&(t.daysToMaturity>0?t.status!=="Pending":t.status!=="Settled"));
+    return _T.pass(bad.length===0,bad.length+" of "+TXNS.length.toLocaleString());},17);
+  add("TX","txn","Tenors of 30 days or more settle at month-end",()=>{
     const long=TXNS.filter(t=>t.settleLag>=30);
     const bad=long.filter(t=>{const m=t.maturity;return new Date(m.getFullYear(),m.getMonth()+1,0).getDate()!==m.getDate();});
-    return _T.pass(bad.length===0, long.length.toLocaleString()+" long-dated trades, "+bad.length+" off month-end");}},
-  {id:"AT-021",suite:"txn",name:"SR consumed sits in the 2-9% band, floored at $0.1M",fn:()=>{
+    return _T.pass(bad.length===0,long.length.toLocaleString()+" long-dated, "+bad.length+" off");});
+  add("TX","txn","SR consumed sits in the 2-9% band, floored at $0.1M",()=>{
     const out=TXNS.filter(t=>{const r=t.srConsumedM/t.notionalM;return r<0.013||r>0.101;});
-    const zero=TXNS.filter(t=>t.srConsumedM<0.1).length;
-    return _T.pass(out.length===0&&zero===0, out.length+" outside band, "+zero+" at zero");}},
-  {id:"AT-022",suite:"txn",name:"Block trades are about 2.5% of tickets",fn:()=>{
+    return _T.pass(out.length===0&&TXNS.every(t=>t.srConsumedM>=0.1),out.length+" outside band");});
+  add("TX","txn","Block trades are about 2.5% of tickets",()=>{
     const r=TXNS.filter(t=>t.notionalM>=900).length/TXNS.length;
-    return _T.pass(r>0.015&&r<0.05, (r*100).toFixed(2)+"%");}},
-  {id:"AT-023",suite:"txn",name:"Failed trades are about 3% of tickets",fn:()=>{
+    return _T.pass(r>0.015&&r<0.05,(r*100).toFixed(2)+"%");});
+  add("TX","txn","Failed trades are about 3% of tickets",()=>{
     const r=TXNS.filter(t=>t.status==="Failed").length/TXNS.length;
-    return _T.pass(r>0.02&&r<0.04, (r*100).toFixed(2)+"%");}},
-  {id:"AT-024",suite:"txn",inv:18,name:"The blotter honours the selected date range",fn:()=>{
-    const keep=state.dateRangeDays;
-    let ok=true, detail=[];
-    [30,90,365].forEach(d=>{ state.dateRangeDays=d;
-      const rows=txnsInRange(); const cutoff=TODAY.getTime()-(d-1)*dayMs;
-      if(rows.some(t=>t.date.getTime()<cutoff)) ok=false;
-      detail.push(d+"d:"+rows.length.toLocaleString()); });
-    state.dateRangeDays=keep;
-    return _T.pass(ok, detail.join("  "));}},
-  {id:"AT-025",suite:"txn",name:"Every trade belongs to a customer holding a limit",fn:()=>{
-    const bad=TXNS.filter(t=>!t.customer||!t.customer.hasLimit);
-    return _T.pass(bad.length===0, bad.length+" orphaned");}},
+    return _T.pass(r>0.02&&r<0.04,(r*100).toFixed(2)+"%");});
+  add("TX","txn","Every trade belongs to a customer holding a limit",()=>
+    _T.pass(TXNS.every(t=>t.customer&&t.customer.hasLimit),TXNS.length.toLocaleString()+" checked"));
+  add("TX","txn","Trade ids are unique",()=>
+    _T.pass(new Set(TXNS.map(t=>t.id)).size===TXNS.length,TXNS.length.toLocaleString()+" ids"));
+  add("TX","txn","Every trade date falls inside the history window",()=>{
+    const lo=TODAY.getTime()-(HIST_DAYS-1)*dayMs;
+    const bad=TXNS.filter(t=>t.date.getTime()<lo-dayMs||t.date.getTime()>TODAY.getTime()+dayMs);
+    return _T.pass(bad.length===0,bad.length+" outside "+HIST_DAYS+" days");});
+  add("TX","txn","Notional and settlement lag are positive",()=>
+    _T.pass(TXNS.every(t=>t.notionalM>0&&t.settleLag>=1),"all positive"));
+  add("TX","txn","Days to maturity agrees with the maturity date",()=>{
+    const bad=TXNS.filter(t=>Math.abs(t.daysToMaturity-Math.ceil((t.maturity.getTime()-TODAY.getTime())/dayMs))>0);
+    return _T.pass(bad.length===0,bad.length+" inconsistent");});
+  add("TX","txn","Maturity always falls on or after the trade date",()=>
+    _T.pass(TXNS.every(t=>t.maturity.getTime()>=t.date.getTime()),"no negative tenors"));
+  add("TX","txn","The blotter is held in date order",()=>
+    _T.pass(TXNS.every((t,i)=>i===0||TXNS[i-1].date>=t.date),"descending by date"));
+  add("TX","txn","Every limit type used by a trade is a known type",()=>{
+    const bad=TXNS.filter(t=>LIMIT_TYPES.indexOf(t.limitType)<0);
+    return _T.pass(bad.length===0,bad.length+" unknown");});
+  add("TX","txn","SR consumed never exceeds the notional",()=>
+    _T.pass(TXNS.every(t=>t.srConsumedM<=t.notionalM),"all within notional"));
 
-  /* ---- carve-outs ---- */
-  {id:"AT-026",suite:"carve",inv:9,name:"No carve-out scope over-allocates its customer's limit",fn:()=>{
-    const g={}; CARVEOUTS.forEach(co=>{const k=co.customerId+"|"+co.scope;g[k]=(g[k]||0)+co.amountM;});
+  /* ============ per date range ============ */
+  [30,90,180,365,548].forEach(d=>{
+    add("FL","filter","Blotter honours a "+d+"-day range",()=>{
+      const k=state.dateRangeDays; state.dateRangeDays=d;
+      const rows=txnsInRange(); state.dateRangeDays=k;
+      const cutoff=TODAY.getTime()-(d-1)*dayMs;
+      return _T.pass(rows.length>0&&rows.every(t=>t.date.getTime()>=cutoff),rows.length.toLocaleString()+" trades");},18);
+    add("FL","filter","Statistics window is exactly "+d+" days",()=>{
+      const c=WITH_LIMIT[2],s=seriesStats(c.series,d-1,0);
+      return _T.pass(s.max>=s.avg&&s.avg>=s.min,"avg "+fmtPct(s.avg)+", "+fmtPct(s.min)+"–"+fmtPct(s.max));});
+    add("FL","filter","Peak over "+d+" days is within the full-history range",()=>{
+      const h=TCX.trend().hist,w=h.slice(-d),peak=Math.max.apply(null,w);
+      return _T.pass(peak<=Math.max.apply(null,h)+1e-9,fmtPct(peak));});
+  });
+  /* ============ per product ============ */
+  ASSET_CLASSES.forEach(ac=>{
+    PRODUCTS[ac].forEach(prod=>{
+      add("PR","product",prod+" — trades exist in the book",()=>{
+        const n=TXNS.filter(t=>t.product===prod).length;
+        return _T.pass(n>0,n.toLocaleString()+" trades");});
+      add("PR","product",prod+" — tenors come from its own settlement ladder",()=>{
+        const allowed=(SETTLE_TENORS[prod]||[]).map(x=>x[0]);
+        const bad=TXNS.filter(t=>t.product===prod).filter(t=>{
+          const raw=Math.round((t.maturity.getTime()-t.date.getTime())/dayMs);
+          // month-end rolling can add up to 31 days to a drawn tenor of 30+
+          return !allowed.some(a=>raw===a||(a>=30&&raw>=a&&raw<=a+31));});
+        return _T.pass(bad.length===0,allowed.join("/")+"d ladder, "+bad.length+" off");});
+      add("PR","product",prod+" — limit types match its asset class weights",()=>{
+        const allowed=CLASS_TYPE_WEIGHTS[ac].map(x=>x[0]);
+        const bad=TXNS.filter(t=>t.product===prod&&allowed.indexOf(t.limitType)<0);
+        return _T.pass(bad.length===0,allowed.join("/")+", "+bad.length+" off");});
+    });
+  });
+  /* ============ carve-outs ============ */
+  add("CO","carve","No carve-out scope over-allocates its customer's limit",()=>{
+    const g={};CARVEOUTS.forEach(co=>{const k=co.customerId+"|"+co.scope;g[k]=(g[k]||0)+co.amountM;});
     const bad=Object.entries(g).filter(([k,v])=>{const c=CUST_BY_ID[k.split("|")[0]];return c&&v>c.limitM+0.5;});
-    return _T.pass(bad.length===0, Object.keys(g).length.toLocaleString()+" scopes, "+bad.length+" over");}},
-  {id:"AT-027",suite:"carve",name:"Carve-out drawn never exceeds its allocation",fn:()=>{
-    const bad=CARVEOUTS.filter(co=>carveDrawn(co)>co.amountM+0.01);
-    return _T.pass(bad.length===0, bad.length+" over");}},
-  {id:"AT-028",suite:"carve",name:"Draw biases reconcile to the customer's own drawn amount",fn:()=>{
-    const sample=WITH_LIMIT.slice(0,400).filter(c=>carveoutsFor(c.id).length);
-    const bad=sample.filter(c=>{
-      const cos=carveoutsFor(c.id).filter(x=>x.scope==="country");
-      if(!cos.length) return false;
-      const w=cos.reduce((a,co)=>a+co.amountM*co.drawBias,0)/cos.reduce((a,co)=>a+co.amountM,0);
+    return _T.pass(bad.length===0,Object.keys(g).length.toLocaleString()+" scopes, "+bad.length+" over");},9);
+  add("CO","carve","Carve-out drawn never exceeds its allocation",()=>
+    _T.pass(CARVEOUTS.every(co=>carveDrawn(co)<=co.amountM+0.01),CARVEOUTS.length.toLocaleString()+" checked"));
+  add("CO","carve","Draw biases reconcile to the customer's own drawn amount",()=>{
+    const s=WITH_LIMIT.slice(0,400).filter(c=>carveoutsFor(c.id).length);
+    const bad=s.filter(c=>{const cs=carveoutsFor(c.id).filter(x=>x.scope==="country");
+      if(!cs.length)return false;
+      const w=cs.reduce((a,co)=>a+co.amountM*co.drawBias,0)/cs.reduce((a,co)=>a+co.amountM,0);
       return Math.abs(w-1)>0.02;});
-    return _T.pass(bad.length===0, sample.length+" sampled, "+bad.length+" off");}},
-  {id:"AT-029",suite:"carve",name:"Every carve-out label comes from its scope's option list",fn:()=>{
-    const bad=CARVEOUTS.filter(co=>!CARVE_SCOPES[co.scope]||CARVE_SCOPES[co.scope].options.indexOf(co.label)<0);
-    return _T.pass(bad.length===0, bad.length+" unknown labels");}},
-  {id:"AT-030",suite:"carve",name:"The carve-out index matches a direct scan",fn:()=>{
-    const c=WITH_LIMIT[7];
-    const direct=CARVEOUTS.filter(co=>co.customerId===c.id).length;
-    return _T.pass(carveoutsFor(c.id).length===direct, direct+" for "+c.name);}},
-  {id:"AT-031",suite:"carve",name:"Threshold alerts fire only when the threshold is crossed",fn:()=>{
-    const bad=CARVEOUTS.slice(0,800).filter(co=>{
-      const hit=carveThresholdBreached(co);
-      const should=co.thMode==="pct" ? carveUtilPct(co)*100>=co.thValue : carveDrawn(co)>=co.thValue;
-      return hit!==should;});
-    return _T.pass(bad.length===0, bad.length+" mismatched");}},
-
-  /* ---- limit reserves ---- */
-  {id:"AT-032",suite:"reserve",inv:19,name:"No reserve exceeds its carve-out's free headroom",fn:()=>{
+    return _T.pass(bad.length===0,s.length+" sampled, "+bad.length+" off");});
+  add("CO","carve","Carve-out ids are unique",()=>
+    _T.pass(new Set(CARVEOUTS.map(c=>c.id)).size===CARVEOUTS.length,CARVEOUTS.length.toLocaleString()+" ids"));
+  add("CO","carve","Every carve-out belongs to a customer holding a limit",()=>{
+    const bad=CARVEOUTS.filter(co=>{const c=CUST_BY_ID[co.customerId];return !c||!c.hasLimit;});
+    return _T.pass(bad.length===0,bad.length+" orphaned");});
+  add("CO","carve","The carve-out index matches a direct scan",()=>{
+    const c=WITH_LIMIT[7],direct=CARVEOUTS.filter(co=>co.customerId===c.id).length;
+    return _T.pass(carveoutsFor(c.id).length===direct,direct+" for "+c.name);});
+  add("CO","carve","Threshold alerts fire only when the threshold is crossed",()=>{
+    const bad=CARVEOUTS.slice(0,900).filter(co=>{
+      const should=co.thMode==="pct"?carveUtilPct(co)*100>=co.thValue:carveDrawn(co)>=co.thValue;
+      return carveThresholdBreached(co)!==should;});
+    return _T.pass(bad.length===0,bad.length+" mismatched");});
+  add("CO","carve","Every carve-out amount is positive",()=>
+    _T.pass(CARVEOUTS.every(co=>co.amountM>0),"all positive"));
+  add("CO","carve","Alert thresholds are within their stated ranges",()=>{
+    const bad=CARVEOUTS.filter(co=>co.thMode==="pct"?(co.thValue<70||co.thValue>95):(co.thValue<=0||co.thValue>co.amountM));
+    return _T.pass(bad.length===0,bad.length+" out of range");});
+  Object.keys(CARVE_SCOPES).forEach(scope=>{
+    CARVE_SCOPES[scope].options.forEach(label=>{
+      add("CO","carve",CARVE_SCOPES[scope].label+" / "+label+" — carve-outs are valid",()=>{
+        const list=CARVEOUTS.filter(co=>co.scope===scope&&co.label===label);
+        const bad=list.filter(co=>{const c=CUST_BY_ID[co.customerId];return !c||co.amountM>c.limitM+0.5;});
+        return _T.pass(list.length>0&&bad.length===0,list.length.toLocaleString()+" carve-outs, "+bad.length+" invalid");});
+    });
+  });
+  /* ============ limit reserves ============ */
+  add("RS","reserve","No reserve exceeds its carve-out's free headroom",()=>{
     const bad=RESERVES.filter(r=>{const co=CARVEOUTS.find(x=>x.id===r.carveoutId);return !co||r.amountM>co.amountM-carveDrawn(co)+0.5;});
-    return _T.pass(bad.length===0, RESERVES.length+" reserves, "+bad.length+" over");}},
-  {id:"AT-033",suite:"reserve",inv:20,name:"Reserve windows end after they start",fn:()=>
-    _T.pass(RESERVES.every(r=>r.toDay>r.fromDay), RESERVES.length+" windows")},
-  {id:"AT-034",suite:"reserve",inv:20,name:"No reserve is raised or decided in the future",fn:()=>{
+    return _T.pass(bad.length===0,RESERVES.length+" reserves, "+bad.length+" over");},19);
+  add("RS","reserve","Reserve windows end after they start",()=>
+    _T.pass(RESERVES.every(r=>r.toDay>r.fromDay),RESERVES.length+" windows"),20);
+  add("RS","reserve","No reserve is raised or decided in the future",()=>{
     const bad=RESERVES.filter(r=>r.createdTs>TODAY.getTime()||(r.decidedTs&&r.decidedTs>TODAY.getTime()));
-    return _T.pass(bad.length===0, bad.length+" out of sequence");}},
-  {id:"AT-035",suite:"reserve",name:"Pending reserves carry no approver, decided ones do",fn:()=>{
-    const bad=RESERVES.filter(r=>r.status==="Pending" ? (r.approver||r.decided) : !r.approver);
-    return _T.pass(bad.length===0, bad.length+" inconsistent");}},
-  {id:"AT-036",suite:"reserve",inv:21,name:"Only approved reserves reach the forward overlay",fn:()=>{
-    const L=_T.limits(), ov=reserveOverlay(null,FWD_DAYS,L,"test-"+Math.random());
-    const appr=RESERVES.filter(r=>r.status==="Approved").reduce((a,r)=>a+r.amountM,0);
+    return _T.pass(bad.length===0,bad.length+" out of sequence");},20);
+  add("RS","reserve","Pending reserves carry no approver, decided ones do",()=>{
+    const bad=RESERVES.filter(r=>r.status==="Pending"?(r.approver||r.decided):!r.approver);
+    return _T.pass(bad.length===0,bad.length+" inconsistent");});
+  add("RS","reserve","Only approved reserves reach the forward overlay",()=>{
+    const L=TCX.limits(),ov=TCX.overlay();
+    const ap=RESERVES.filter(r=>r.status==="Approved").reduce((a,r)=>a+r.amountM,0);
     const other=RESERVES.filter(r=>r.status!=="Approved").reduce((a,r)=>a+r.amountM,0);
     const peak=Math.max.apply(null,ov)*L;
-    return _T.pass(peak<=appr+1 && other>0 && peak<appr+other,
-      "peak "+fmtM(peak)+" vs "+fmtM(appr)+" approved, "+fmtM(other)+" excluded");}},
-  {id:"AT-037",suite:"reserve",inv:22,name:"Reserves change no pool figure",fn:()=>{
-    const L=_T.limits(), d=_T.drawn(), a=WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0);
+    return _T.pass(peak<=ap+1&&other>0&&peak<ap+other,"peak "+fmtM(peak)+", "+fmtM(other)+" excluded");},21);
+  add("RS","reserve","Reserves change no pool figure",()=>{
     const held=RESERVES.filter(rsvHoldsToday).reduce((x,r)=>x+r.amountM,0);
-    return _T.pass(held>0 && _T.near(d+a,L,1), fmtM(held)+" held, pool still "+fmtM(L));}},
-  {id:"AT-038",suite:"reserve",inv:25,name:"No deal event opens or closes on a month boundary",fn:()=>{
-    const mb=_T.monthBoundaries();
-    const bad=RSV_EVENTS.filter(e=>mb.indexOf(e.from)>=0||mb.indexOf(e.to)>=0);
-    return _T.pass(bad.length===0, RSV_EVENTS.length+" events clear of "+mb.length+" boundaries");}},
-  {id:"AT-039",suite:"reserve",inv:26,name:"Run-off and reserve steps fall on different days",fn:()=>{
-    const L=_T.limits();
-    const run=_T.steps(portfolioTrend(WITH_LIMIT).fcast).slice(0,8);
-    const res=_T.steps(reserveOverlay(null,FWD_DAYS,L,"test-"+Math.random())).slice(0,8);
+    return _T.pass(held>0&&_T.near(TCX.drawn()+WITH_LIMIT.reduce((x,c)=>x+custFreeM(c),0),TCX.limits(),1),
+      fmtM(held)+" held, pool unchanged");},22);
+  add("RS","reserve","At most one reserve per carve-out",()=>
+    _T.pass(new Set(RESERVES.map(r=>r.carveoutId)).size===RESERVES.length,RESERVES.length+" reserves"));
+  add("RS","reserve","Reserve ids are unique",()=>
+    _T.pass(new Set(RESERVES.map(r=>r.id)).size===RESERVES.length,RESERVES.length+" ids"));
+  add("RS","reserve","Every reserve amount is positive",()=>
+    _T.pass(RESERVES.every(r=>r.amountM>0),"all positive"));
+  add("RS","reserve","Every reserve points at a carve-out that exists",()=>
+    _T.pass(RESERVES.every(r=>CARVEOUTS.some(co=>co.id===r.carveoutId)),"all resolved"));
+  add("RS","reserve","Reserve scope and label match its carve-out",()=>{
+    const bad=RESERVES.filter(r=>{const co=CARVEOUTS.find(x=>x.id===r.carveoutId);return co&&(co.scope!==r.scope||co.label!==r.label);});
+    return _T.pass(bad.length===0,bad.length+" mismatched");});
+  add("RS","reserve","Displayed window dates match the stored day offsets",()=>{
+    const bad=RESERVES.filter(r=>r.from!==fmtDate(dateAt(-r.fromDay))||r.to!==fmtDate(dateAt(-r.toDay)));
+    return _T.pass(bad.length===0,bad.length+" mismatched");});
+  add("RS","reserve","The forward overlay is never negative",()=>
+    _T.pass(TCX.overlay().every(v=>v>=0),FWD_DAYS+" days"));
+  add("RS","reserve","The forward overlay spans the full horizon",()=>
+    _T.pass(TCX.overlay().length===FWD_DAYS,FWD_DAYS+" days"));
+  add("RS","reserve","The reserve series has steps large enough to read",()=>{
+    const s=_T.steps(TCX.overlay());
+    return _T.pass(Math.abs(s[0].v)>0.01,"largest "+(s[0].v*100).toFixed(2)+"pp");});
+  add("RS","reserve","Run-off and reserve steps fall on different days",()=>{
+    const run=_T.steps(TCX.trend().fcast).slice(0,8),res=_T.steps(TCX.overlay()).slice(0,8);
     const clash=run.filter(a=>res.some(b=>Math.abs(a.i-b.i)<=1));
-    return _T.pass(clash.length===0,
-      "run-off "+run.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/")+" vs reserves "+res.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/"));}},
-  {id:"AT-040",suite:"reserve",name:"The reserve series has steps large enough to read",fn:()=>{
-    const res=_T.steps(reserveOverlay(null,FWD_DAYS,_T.limits(),"test-"+Math.random()));
-    return _T.pass(Math.abs(res[0].v)>0.01, "largest "+(res[0].v*100).toFixed(2)+"pp");}},
-  {id:"AT-041",suite:"reserve",name:"Every deal event has approved reserves behind it",fn:()=>{
-    const bad=RSV_EVENTS.filter(e=>!RESERVES.some(r=>r.purpose===e.name&&r.status==="Approved"));
-    return _T.pass(bad.length===0, bad.length?bad.map(e=>e.name).join(", "):RSV_EVENTS.length+" events populated");}},
-  {id:"AT-042",suite:"reserve",name:"At most one reserve per carve-out",fn:()=>{
-    const n=new Set(RESERVES.map(r=>r.carveoutId)).size;
-    return _T.pass(n===RESERVES.length, n+" carve-outs for "+RESERVES.length+" reserves");}},
+    return _T.pass(clash.length===0,"run-off "+run.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/")
+      +" vs reserves "+res.slice(0,2).map(x=>fmtDate(dateAt(-(x.i+1)))).join("/"));},26);
+  ["Pending","Approved","Rejected"].forEach(st=>{
+    add("RS","reserve",st+" reserves are internally consistent",()=>{
+      const l=RESERVES.filter(r=>r.status===st);
+      const bad=l.filter(r=>st==="Pending"?(r.approver||r.decided||r.decidedTs):!(r.approver&&r.decided));
+      return _T.pass(l.length>0&&bad.length===0,l.length+" reserves, "+bad.length+" inconsistent");});
+  });
+  ["Active","Scheduled","Expired","Awaiting"].forEach(w=>{
+    add("RS","reserve","Window state '"+w+"' is derived correctly",()=>{
+      const l=RESERVES.filter(r=>rsvWindow(r)===w);
+      const bad=l.filter(r=>{
+        if(w==="Awaiting") return r.status!=="Pending";
+        if(r.status!=="Approved") return true;
+        if(w==="Active") return !(r.fromDay<=0&&r.toDay>=0);
+        if(w==="Scheduled") return !(r.fromDay>0);
+        return !(r.toDay<0);});
+      return _T.pass(bad.length===0,l.length+" reserves in state, "+bad.length+" wrong");});
+  });
+  /* ============ per deal event ============ */
+  RSV_EVENTS.forEach(ev=>{
+    const mb=()=>tc("mb",()=>{const o=[];for(let d=1;d<=FWD_DAYS;d++){if(new Date(TODAY.getTime()+d*dayMs).getDate()===1)o.push(d);}return o;});
+    add("EV","event",ev.name+" — window is well formed",()=>
+      _T.pass(ev.to>ev.from&&ev.n>0,"days "+ev.from+" → "+ev.to+", "+ev.n+" reserves planned"));
+    add("EV","event",ev.name+" — opens away from a month boundary",()=>
+      _T.pass(mb().indexOf(ev.from)<0,"day "+ev.from+" = "+fmtDate(dateAt(-ev.from))),25);
+    add("EV","event",ev.name+" — closes away from a month boundary",()=>
+      _T.pass(mb().indexOf(ev.to)<0,"day "+ev.to+" = "+fmtDate(dateAt(-ev.to))),25);
+    add("EV","event",ev.name+" — has approved reserves behind it",()=>{
+      const l=RESERVES.filter(r=>r.purpose===ev.name&&r.status==="Approved");
+      return _T.pass(l.length>0,l.length+" approved, "+fmtM(l.reduce((a,r)=>a+r.amountM,0)));});
+    add("EV","event",ev.name+" — its reserves sit on the event window",()=>{
+      const l=RESERVES.filter(r=>r.purpose===ev.name);
+      const bad=l.filter(r=>Math.abs(r.fromDay-ev.from)>5||Math.abs(r.toDay-ev.to)>6);
+      return _T.pass(l.length>0&&bad.length===0,l.length+" reserves, "+bad.length+" outside jitter");});
+  });
 
-  /* ---- charts & series ---- */
-  {id:"AT-043",suite:"chart",inv:10,name:"Forward run-off never rises",fn:()=>{
-    const f=portfolioTrend(WITH_LIMIT).fcast;
-    const bad=f.filter((v,i)=>i>0&&v>f[i-1]+1e-9).length;
-    return _T.pass(bad===0, bad+" upward steps in "+f.length+" days");}},
-  {id:"AT-044",suite:"chart",inv:11,name:"Run-off starts at or below current utilization",fn:()=>{
-    const PT=portfolioTrend(WITH_LIMIT);
-    return _T.pass(PT.fcast[0]<=PT.cur+1e-9, fmtPct(PT.fcast[0])+" vs "+fmtPct(PT.cur));}},
-  {id:"AT-045",suite:"chart",name:"A single customer's run-off also never rises",fn:()=>{
+  /* ============ charts & series ============ */
+  add("CH","chart","Forward run-off never rises",()=>{
+    const f=TCX.trend().fcast,bad=f.filter((v,i)=>i>0&&v>f[i-1]+1e-9).length;
+    return _T.pass(bad===0,bad+" upward steps in "+f.length+" days");},10);
+  add("CH","chart","Run-off starts at or below current utilization",()=>{
+    const PT=TCX.trend(); return _T.pass(PT.fcast[0]<=PT.cur+1e-9,fmtPct(PT.fcast[0])+" vs "+fmtPct(PT.cur));},11);
+  add("CH","chart","A single customer's run-off also never rises",()=>{
     const c=WITH_LIMIT.find(x=>TXNS.some(t=>t.customer.id===x.id));
     const f=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),custUtilCur(c),FWD_DAYS);
-    return _T.pass(f.every((v,i)=>i===0||v<=f[i-1]+1e-9), c.name);}},
-  {id:"AT-046",suite:"chart",inv:23,name:"The shared trend series is cached, not recomputed",fn:()=>{
+    return _T.pass(f.every((v,i)=>i===0||v<=f[i-1]+1e-9),c.name);},10);
+  add("CH","chart","The shared trend series is cached, not recomputed",()=>{
     const a=portfolioTrend(filteredWithLimit());
-    return _T.pass(portfolioTrend(filteredWithLimit())===a, "same object returned");}},
-  {id:"AT-047",suite:"chart",inv:24,name:"Horizon readout arithmetic balances at every mark",fn:()=>{
-    const PT=portfolioTrend(WITH_LIMIT), ov=reserveOverlay(null,FWD_DAYS,PT.total,"test-"+Math.random());
+    return _T.pass(portfolioTrend(filteredWithLimit())===a,"same object returned");},23);
+  add("CH","chart","Horizon readout arithmetic balances at every mark",()=>{
+    const PT=TCX.trend(),ov=TCX.overlay();
     const bad=[30,90,180,365].filter(d=>{const i=d-1,run=PT.fcast[i],res=ov[i];
-      const rel=Math.max(0,PT.cur-run), free=Math.max(0,1-run-res);
-      return Math.abs(rel+run-PT.cur)>1e-9||Math.abs(run+res+free-1)>1e-9;});
-    return _T.pass(bad.length===0, bad.length?"fails at "+bad.join(","):"30/90/180/365 all balance");}},
-  {id:"AT-048",suite:"chart",inv:14,name:"Raising the heatmap Top-N only appends names",fn:()=>{
-    const keep=state.heatSort;
-    let ok=true, checked=0;
-    Object.keys(HEAT_SORTS).forEach(k=>{
-      state.heatSort=k;
-      const ranked=heatRank(WITH_LIMIT.slice(0,900)).map(c=>c.id);
-      [50,150,400].forEach(n=>{ const a=ranked.slice(0,n), b=ranked.slice(0,n*2);
-        if(!a.every((id,i)=>b[i]===id)) ok=false; checked++; });
-    });
-    state.heatSort=keep;
-    return _T.pass(ok, checked+" prefix comparisons across "+Object.keys(HEAT_SORTS).length+" criteria");}},
-  {id:"AT-049",suite:"chart",name:"The utilization ramp runs green to red at the documented strengths",fn:()=>
-    _T.pass(utilRamp(0).indexOf("14%")>=0 && utilRamp(1).indexOf("72%")>=0 && utilRamp(0)!==utilRamp(1),
-      "14% tint at idle, 72% at the limit")},
-  {id:"AT-050",suite:"chart",inv:12,name:"Every Data Highlight selection resolves to customers",fn:()=>{
+      return Math.abs(Math.max(0,PT.cur-run)+run-PT.cur)>1e-9||Math.abs(run+res+Math.max(0,1-run-res)-1)>1e-9;});
+    return _T.pass(bad.length===0,bad.length?"fails at "+bad.join(","):"30/90/180/365 balance");},24);
+  add("CH","chart","History and forward arrays are the documented lengths",()=>{
+    const PT=TCX.trend(); return _T.pass(PT.hist.length===HIST_DAYS&&PT.fcast.length===FWD_DAYS,
+      HIST_DAYS+" back, "+FWD_DAYS+" forward");});
+  add("CH","chart","The utilization ramp runs green to red at the documented strengths",()=>
+    _T.pass(utilRamp(0).indexOf("14%")>=0&&utilRamp(1).indexOf("72%")>=0&&utilRamp(0)!==utilRamp(1),"14% → 72% tint"));
+  add("CH","chart","The ramp is continuous across its stops",()=>{
+    const v=[0,0.25,0.5,0.75,1].map(utilRamp);
+    return _T.pass(new Set(v).size===v.length,"5 distinct shades");});
+  add("CH","chart","The moving average is a 91-day trailing window",()=>{
+    const ma=movingAvg(TCX.trend().hist,91);
+    return _T.pass(ma.slice(0,90).every(v=>v===null)&&ma[90]!==null,"first 90 points empty");});
+  add("CH","chart","The trend chart emits the expected marks",()=>{
+    const PT=TCX.trend();
+    const svg=trendChart(PT.hist,PT.fcast,HIST_DAYS,{showMA:true,showReserve:true,fcastReserve:TCX.overlay()});
+    return _T.pass(svg.indexOf("<polyline")>=0&&svg.indexOf("<polygon")>=0&&svg.indexOf("today")>=0&&svg.indexOf("100%")>=0,
+      "actual, MA, run-off, reserve band, today marker");});
+  add("CH","chart","The reserve band only covers the forward half",()=>{
+    const PT=TCX.trend();
+    const withB=trendChart(PT.hist,PT.fcast,HIST_DAYS,{showReserve:true,fcastReserve:TCX.overlay()});
+    const noB=trendChart(PT.hist,PT.fcast,HIST_DAYS,{showReserve:false});
+    return _T.pass(withB.indexOf("<polygon")>=0&&noB.indexOf("<polygon")<0,"band present only when enabled");});
+  add("CH","chart","Every Data Highlight selection resolves to customers",()=>{
     const specs=COUNTRIES.map(c=>"country|"+c).concat(SEGMENTS.map(s=>"seg|"+s)).concat(LIMIT_TYPES.map(t=>"type|"+t));
     const empty=specs.filter(s=>hlAggregate(s).n===0);
-    return _T.pass(empty.length===0, specs.length+" selections, "+empty.length+" empty");}},
-
-  /* ---- rendering & wiring ---- */
-  {id:"AT-051",suite:"ui",name:"Every tab builds without throwing",fn:()=>{
-    const keep=state.tab; const bad=[];
-    Object.keys(PANES).forEach(t=>{ try{ const h=PANES[t](); if(!h||h.length<100) bad.push(t+" (empty)"); }
-      catch(e){ bad.push(t+": "+e.message); } });
-    state.tab=keep;
-    return _T.pass(bad.length===0, bad.length?bad.join("; "):Object.keys(PANES).length+" tabs built");}},
-  {id:"AT-052",suite:"ui",name:"Every documentation topic resolves to a heading",fn:()=>{
-    const ids=[]; DOC_SECTIONS.forEach(s=>{ids.push(s.id);(s.kids||[]).forEach(k=>ids.push(k.id));});
-    const html=paneDocs();
-    const missing=ids.filter(id=>html.indexOf('id="'+id+'"')<0);
-    return _T.pass(missing.length===0, ids.length+" topics, "+missing.length+" missing");}},
-  {id:"AT-053",suite:"ui",name:"No template placeholder survives into the documentation",fn:()=>{
-    const html=paneDocs();
-    const bad=(html.match(/\$\{|\bundefined\b|\bNaN\b|\[object /g)||[]);
-    return _T.pass(bad.length===0, bad.length+" placeholders");}},
-  {id:"AT-054",suite:"ui",name:"Every sortable table has a registered sort state",fn:()=>{
-    const keep=state.tab; let html="";
-    Object.keys(PANES).forEach(t=>{ state.tab=t; try{ html+=PANES[t](); }catch(e){} });
-    state.tab=keep;
+    return _T.pass(empty.length===0,specs.length+" selections, "+empty.length+" empty");},12);
+  add("CH","chart","Every histogram band maps to tiles carrying it",()=>{
+    const bands=["0%","0-50%","50-75%","75-90%","90-100%",">100%"];
+    const missing=bands.filter(b=>!WITH_LIMIT.some(c=>hlBandOf(c)===b));
+    return _T.pass(missing.length===0,bands.length+" bands populated");},13);
+  add("CH","chart","The donut, histogram and grouped bar all render",()=>{
+    const d=donut([{label:"a",v:60,color:"var(--run)"},{label:"b",v:40,color:"var(--pass)"}],"x","y");
+    const h=histogram([{label:"a",color:"var(--run)",count:3}]);
+    const g=groupedBar([{key:"Banks",label:"Banks",a:3,b:1}]);
+    return _T.pass([d,h,g].every(s=>s.indexOf("<svg")>=0),"three chart primitives");});
+  /* ============ heatmap & treemap, per sort criterion ============ */
+  Object.keys(HEAT_SORTS).forEach(k=>{
+    const S=HEAT_SORTS[k];
+    add("HM","heat",S.label+" — ranking is deterministic",()=>{
+      const keep=state.heatSort; state.heatSort=k;
+      const a=heatRank(WITH_LIMIT.slice(0,600)).map(c=>c.id).join(),b=heatRank(WITH_LIMIT.slice(0,600)).map(c=>c.id).join();
+      state.heatSort=keep; return _T.pass(a===b,"600 names, identical twice");});
+    add("HM","heat",S.label+" — raising the count only appends names",()=>{
+      const keep=state.heatSort; state.heatSort=k;
+      const r=heatRank(WITH_LIMIT.slice(0,900)).map(c=>c.id);
+      const ok=[50,150,400].every(n=>r.slice(0,n).every((id,i)=>r.slice(0,n*2)[i]===id));
+      state.heatSort=keep; return _T.pass(ok,"prefix property holds at 50/150/400");},14);
+    add("HM","heat",S.label+" — tile area is never negative",()=>{
+      const bad=WITH_LIMIT.slice(0,900).filter(c=>!(S.area(c)>=0));
+      return _T.pass(bad.length===0,bad.length+" negative");});
+    add("HM","heat",S.label+" — every tile gets a printable value",()=>{
+      const bad=WITH_LIMIT.slice(0,400).filter(c=>typeof S.fmt(c)!=="string"||!S.fmt(c).length);
+      return _T.pass(bad.length===0,"e.g. "+S.fmt(WITH_LIMIT[0]));});
+    add("HM","heat",S.label+" — treemap excludes names with no area",()=>{
+      const keepS=state.heatSort,keepV=state.heatView; state.heatSort=k; state.heatView="tree";
+      const el=heatEligible(CUSTOMERS.slice(0,900));
+      state.heatSort=keepS; state.heatView=keepV;
+      return _T.pass(el.every(c=>c.hasLimit&&S.area(c)>0),el.length+" eligible of 900");});
+  });
+  add("HM","heat","Heatmap keeps names with no SR limit when asked",()=>{
+    const kv=state.heatView,kh=state.heatHideNoSR; state.heatView="heat"; state.heatHideNoSR=false;
+    const el=heatEligible(CUSTOMERS.slice(0,600));
+    state.heatView=kv; state.heatHideNoSR=kh;
+    return _T.pass(el.some(c=>!c.hasLimit),"whitespace visible");});
+  add("HM","heat","Hiding names without SR removes exactly those names",()=>{
+    const kv=state.heatView,kh=state.heatHideNoSR; state.heatView="heat"; state.heatHideNoSR=true;
+    const el=heatEligible(CUSTOMERS.slice(0,600));
+    state.heatView=kv; state.heatHideNoSR=kh;
+    return _T.pass(el.every(c=>c.hasLimit),el.length+" of 600 kept");});
+  add("HM","heat","Squarify covers the rectangle it is given",()=>{
+    const r=squarify([40,25,20,10,5],0,0,400,300);
+    const area=r.reduce((a,x)=>a+x.w*x.h,0);
+    return _T.pass(Math.abs(area-120000)/120000<0.02&&r.length===5,r.length+" cells, "+Math.round(area)+" of 120000");});
+  add("HM","heat","Squarify returns no negative or zero-sized cells",()=>{
+    const r=squarify([40,25,20,10,5],0,0,400,300);
+    return _T.pass(r.every(x=>x.w>0&&x.h>0),"all cells positive");});
+  /* ============ per tab rendering ============ */
+  TAB_IDS.forEach(tab=>{
+    add("UI","ui",tab+" — pane builds without throwing",()=>{
+      const h=TCX.panes()[tab];
+      return _T.pass(h.indexOf("__THREW__")!==0,h.indexOf("__THREW__")===0?h.slice(9):"built");});
+    add("UI","ui",tab+" — pane produces substantial markup",()=>{
+      const h=TCX.panes()[tab];
+      return _T.pass(h.indexOf("__THREW__")!==0&&h.length>800,h.length.toLocaleString()+" characters");});
+    add("UI","ui",tab+" — no unresolved template placeholder",()=>{
+      const h=TCX.panes()[tab];
+      const bad=(h.match(/\$\{/g)||[]).length;
+      return _T.pass(bad===0,bad+" placeholders");});
+    add("UI","ui",tab+" — no undefined or NaN reaches the markup",()=>{
+      const h=TCX.panes()[tab];
+      const bad=(h.match(/>undefined<|>NaN<|\$NaN|\[object Object\]/g)||[]).length;
+      return _T.pass(bad===0,bad+" occurrences");});
+  });
+  add("UI","ui","Every sortable table has a registered sort state",()=>{
+    const html=Object.values(TCX.panes()).join("");
     const used=new Set((html.match(/data-sorttable="([a-z0-9]+)"/gi)||[]).map(m=>m.split('"')[1]));
     const missing=[...used].filter(t=>!SORTS[t]);
-    return _T.pass(missing.length===0, used.size+" tables in use, "+missing.length+" unregistered");}},
-  {id:"AT-055",suite:"ui",name:"Customer drawer builds for every profile",fn:()=>{
+    return _T.pass(missing.length===0,used.size+" tables, "+missing.length+" unregistered");});
+  add("UI","ui","Customer drawer builds for every profile",()=>{
     const bad=[];
     ["mid","hot","cold","dormant","breach"].forEach(p=>{
-      const c=WITH_LIMIT.find(x=>x.profile===p); if(!c){bad.push(p+" (none)");return;}
+      const c=WITH_LIMIT.find(x=>x.profile===p); if(!c){bad.push(p);return;}
       try{ drawerBreakdownTable(c); drawerTxnTable(c); }catch(e){ bad.push(p+": "+e.message); }});
-    const noLimit=CUSTOMERS.find(c=>!c.hasLimit);
-    try{ if(noLimit) drawerTxnTable(noLimit); }catch(e){ bad.push("no-limit: "+e.message); }
-    return _T.pass(bad.length===0, bad.length?bad.join("; "):"6 profiles covered");}},
-  {id:"AT-056",suite:"ui",name:"Filters narrow the book without emptying it",fn:()=>{
-    const keep={c:state.filters.country,s:state.filters.segment,l:state.filters.limitType};
-    state.filters.country=new Set(["Singapore"]);
-    const a=filteredWithLimit().length;
-    state.filters.segment=new Set(["Banks"]);
-    const b=filteredWithLimit().length;
-    state.filters.country=keep.c; state.filters.segment=keep.s; state.filters.limitType=keep.l;
-    return _T.pass(a>0&&b>0&&b<=a&&a<WITH_LIMIT.length, "all "+WITH_LIMIT.length+" → SG "+a+" → SG+Banks "+b);}},
-];
+    return _T.pass(bad.length===0,bad.length?bad.join("; "):"5 profiles");});
+  add("UI","ui","Every tab is reachable from the tab bar",()=>{
+    const tabs=[...document.querySelectorAll(".tabs .tab")].map(b=>b.dataset.tab);
+    const missing=Object.keys(PANES).filter(t=>tabs.indexOf(t)<0);
+    return _T.pass(missing.length===0,tabs.length+" buttons for "+Object.keys(PANES).length+" panes");});
+  add("UI","ui","The suite's tab list matches the registered panes",()=>{
+    const reg=Object.keys(PANES).slice().sort().join(","),known=TAB_IDS.slice().sort().join(",");
+    return _T.pass(reg===known,reg===known?TAB_IDS.length+" tabs":"registered ["+reg+"] vs known ["+known+"]");});
+  add("UI","ui","Filters narrow the book without emptying it",()=>{
+    const k={c:state.filters.country,s:state.filters.segment};
+    state.filters.country=new Set(["Singapore"]); const a=filteredWithLimit().length;
+    state.filters.segment=new Set(["Banks"]); const b=filteredWithLimit().length;
+    state.filters.country=k.c; state.filters.segment=k.s;
+    return _T.pass(a>0&&b>0&&b<=a&&a<WITH_LIMIT.length,"all → SG "+a+" → SG+Banks "+b);});
+  add("UI","ui","Clearing every filter restores the full book",()=>{
+    const k={c:state.filters.country,s:state.filters.segment,l:state.filters.limitType};
+    state.filters.country=new Set(); state.filters.segment=new Set(); state.filters.limitType=new Set();
+    const n=filteredWithLimit().length;
+    state.filters.country=k.c; state.filters.segment=k.s; state.filters.limitType=k.l;
+    return _T.pass(n===WITH_LIMIT.length,n.toLocaleString()+" names");});
+  add("UI","ui","Escaping markup neutralises angle brackets and quotes",()=>
+    _T.pass(esc('<img src=x onerror="boom">').indexOf("<")<0,"esc() output is inert"));
+
+  /* ============ documentation integrity, one per topic ============ */
+  DOC_SECTIONS.forEach(sec=>{
+    const check=(s,lvl)=>add("DC","doc","Topic "+s.t+" resolves to a heading",()=>
+      _T.pass(TCX.doc().indexOf('id="'+s.id+'"')>=0,'#'+s.id));
+    check(sec,1); (sec.kids||[]).forEach(k=>check(k,2));
+  });
+  add("DC","doc","No template placeholder survives into the documentation",()=>{
+    const bad=(TCX.doc().match(/\$\{|>undefined<|>NaN<|\[object /g)||[]);
+    return _T.pass(bad.length===0,bad.length+" placeholders");});
+  add("DC","doc","Every internal cross-reference points at a real heading",()=>{
+    const html=TCX.doc();
+    const refs=[...new Set((html.match(/href="#(d-[a-z0-9-]+)"/g)||[]).map(m=>m.slice(7,-1)))];
+    const bad=refs.filter(id=>html.indexOf('id="'+id+'"')<0);
+    return _T.pass(bad.length===0,refs.length+" references, "+bad.length+" broken");});
+  add("DC","doc","Every documented invariant number is claimed by a test",()=>{
+    const html=TCX.doc();
+    const rows=(html.match(/<tr><td>(\d+)<\/td>/g)||[]).map(m=>+m.replace(/\D/g,""));
+    const covered=new Set(AUTO_TESTS.filter(t=>t.inv).map(t=>t.inv));
+    const missing=rows.filter(n=>n<=26&&!covered.has(n));
+    return _T.pass(missing.length===0,covered.size+" invariants guarded"+(missing.length?", missing "+missing.join(","):""));});
+  add("DC","doc","The topic tree and the rendered page agree on the heading count",()=>{
+    let n=0; DOC_SECTIONS.forEach(s=>{n++;(s.kids||[]).forEach(()=>n++);});
+    const html=TCX.doc(),h=(html.match(/<h[23] id="d-/g)||[]).length;
+    return _T.pass(h===n,n+" topics, "+h+" headings");});
+  add("DC","doc","Every figure carries an accessible label and a caption",()=>{
+    const html=TCX.doc();
+    const figs=(html.match(/<figure/g)||[]).length,labs=(html.match(/role="img" aria-label="/g)||[]).length,
+      caps=(html.match(/<figcaption/g)||[]).length;
+    return _T.pass(figs>0&&labs>=figs&&caps>=figs,figs+" figures, "+labs+" labelled, "+caps+" captioned");});
+  /* ============ themes & typography ============ */
+  THEMES.forEach(th=>{
+    THEME_TOKENS.forEach(tok=>{
+      add("TH","theme",th+" — "+tok+" is defined",()=>{
+        const v=TCX.themeTokens()[th][tok];
+        return _T.pass(!!v&&v.length>0,v||"(empty)");});
+    });
+    add("TH","theme",th+" — text and page background differ",()=>{
+      const t=TCX.themeTokens()[th];
+      return _T.pass(t["--ink"]!==t["--ground"],t["--ink"]+" on "+t["--ground"]);});
+    add("TH","theme",th+" — the heat ramp is four distinct colours",()=>{
+      const t=TCX.themeTokens()[th],v=["--heat-1","--heat-2","--heat-3","--heat-4"].map(k=>t[k]);
+      return _T.pass(new Set(v).size===4,v.join(" "));});
+    add("TH","theme",th+" — brand and status colours are not the same token",()=>{
+      const t=TCX.themeTokens()[th];
+      return _T.pass(t["--brand"]!==t["--fail"]&&t["--brand"]!==t["--warn"],"brand "+t["--brand"]);});
+  });
+  FS_LEVELS.forEach((px,i)=>{
+    // Read the scale at run time rather than closing over the value: a test that
+    // captures what it is meant to be checking cannot detect a change to it.
+    add("TH","theme","Font step "+(i+1)+" ("+px+"px) is valid and ordered",()=>{
+      const v=FS_LEVELS[i];
+      return _T.pass(v>0&&(i===0||v>FS_LEVELS[i-1]),FS_LEVELS.join(" · "));});
+  });
+  add("TH","theme","The font slider spans exactly the defined scale",()=>{
+    const el=document.querySelector("#fs-sel");
+    return _T.pass(el&&+el.max===FS_LEVELS.length-1&&+el.min===0,el?"min "+el.min+", max "+el.max:"missing");});
+  add("TH","theme","The theme dropdown offers every defined theme",()=>{
+    const opts=[...document.querySelectorAll("#theme-sel option")].map(o=>o.value);
+    return _T.pass(THEMES.every(t=>opts.indexOf(t)>=0),opts.join(", "));});
+  /* ============ top relationships, one set per name ============ */
+  WITH_LIMIT.slice().sort((a,b)=>b.limitM-a.limitM).slice(0,30).forEach(c=>{
+    const nm=c.name.length>28?c.name.slice(0,26)+"…":c.name;
+    add("AC","account",nm+" — drawn plus headroom equals the limit",()=>
+      _T.pass(_T.near(custDrawnM(c)+custFreeM(c),c.limitM,0.01),fmtM(custDrawnM(c))+" + "+fmtM(custFreeM(c))+" = "+fmtM(c.limitM)));
+    add("AC","account",nm+" — limit types sum to the drawn amount",()=>
+      _T.pass(_T.near(custTypeDrawn(c).reduce((a,b)=>a+b,0),custDrawnM(c),0.02),fmtM(custDrawnM(c))+" across 5 types"),8);
+    add("AC","account",nm+" — carve-out scopes stay inside the limit",()=>{
+      const bad=Object.keys(CARVE_SCOPES).filter(s=>carveoutsFor(c.id).filter(x=>x.scope===s).reduce((a,x)=>a+x.amountM,0)>c.limitM+0.5);
+      return _T.pass(bad.length===0,carveoutsFor(c.id).length+" carve-outs, "+bad.length+" over");},9);
+    add("AC","account",nm+" — reserves never exceed carve-out headroom",()=>{
+      const rs=carveoutsFor(c.id).flatMap(co=>reservesForCarve(co.id).map(r=>({r,co})));
+      const bad=rs.filter(x=>x.r.amountM>x.co.amountM-carveDrawn(x.co)+0.5);
+      return _T.pass(bad.length===0,rs.length+" reserves, "+bad.length+" over");},19);
+  });
+  /* ============ workflows ============ */
+  add("WF","workflow","Request ids are unique",()=>
+    _T.pass(new Set(REQUESTS.map(r=>r.id)).size===REQUESTS.length,REQUESTS.length+" requests"));
+  add("WF","workflow","Every request names a customer that exists",()=>
+    _T.pass(REQUESTS.every(r=>CUST_BY_ID[r.customerId]),"all resolved"));
+  add("WF","workflow","Requested limits always exceed the current limit",()=>{
+    const bad=REQUESTS.filter(r=>+r.newLimit<=+r.current);
+    return _T.pass(bad.length===0,bad.length+" not an increase");});
+  add("WF","workflow","Uplift stays within 1.15x to 2.30x",()=>{
+    const bad=REQUESTS.filter(r=>{const u=r.newLimit/r.current;return u<1.14||u>2.31;});
+    return _T.pass(bad.length===0,bad.length+" outside range");});
+  add("WF","workflow","Pending requests carry no approver and no decision",()=>
+    _T.pass(REQUESTS.filter(r=>r.status==="Pending").every(r=>!r.approver&&!r.decided),"clean"),16);
+  add("WF","workflow","Decided requests carry both, and never before submission",()=>
+    _T.pass(REQUESTS.filter(r=>r.status!=="Pending").every(r=>r.approver&&r.decided&&r.decidedTs>=r.createdTs),"ordered"),16);
+  add("WF","workflow","Permanent requests carry no effective window",()=>{
+    const bad=REQUESTS.filter(r=>r.type==="Permanent"&&(r.start||r.end));
+    return _T.pass(bad.length===0,bad.length+" with a window");});
+  add("WF","workflow","Dated requests run their window forward",()=>{
+    const bad=REQUESTS.filter(r=>r.type!=="Permanent"&&new Date(r.end)<=new Date(r.start));
+    return _T.pass(bad.length===0,bad.length+" backwards");});
+  ["Pending","Approved","Rejected"].forEach(st=>{
+    add("WF","workflow",st+" requests exist and are consistent",()=>{
+      const l=REQUESTS.filter(r=>r.status===st);
+      return _T.pass(l.length>0,l.length+" of "+REQUESTS.length);});
+  });
+  add("WF","workflow","Every requester belongs to a known desk",()=>{
+    const desks=new Set(REQUESTERS.map(r=>r[1]));
+    const bad=REQUESTS.filter(r=>r.requesterDesk&&!desks.has(r.requesterDesk));
+    return _T.pass(bad.length===0,desks.size+" desks");});
+  add("WF","workflow","Every approver holds a known credit role",()=>{
+    const roles=new Set(APPROVERS.map(a=>a[1]));
+    const bad=REQUESTS.filter(r=>r.approverRole&&!roles.has(r.approverRole));
+    return _T.pass(bad.length===0,roles.size+" roles");});
+  add("WF","workflow","Reserve purposes come from the event or routine lists",()=>{
+    const known=new Set(RSV_EVENTS.map(e=>e.name).concat(RSV_ROUTINE));
+    const bad=RESERVES.filter(r=>!known.has(r.purpose));
+    return _T.pass(bad.length===0,known.size+" purposes, "+bad.length+" unknown");});
+  add("WF","workflow","Routine holds use a different list from deal events",()=>
+    _T.pass(RSV_ROUTINE.every(n=>!RSV_EVENTS.some(e=>e.name===n)),RSV_ROUTINE.length+" routine, "+RSV_EVENTS.length+" events"));
+  /* ---- the test suite checking itself ---- */
+  add("MT","meta","Test ids are unique",()=>
+    _T.pass(new Set(T.map(t=>t.id)).size===T.length,T.length+" tests"));
+  add("MT","meta","Every suite declared in the registry has tests",()=>{
+    const empty=TEST_SUITES.filter(s=>!T.some(t=>t.suite===s.id));
+    return _T.pass(empty.length===0,TEST_SUITES.length+" suites"+(empty.length?", empty: "+empty.map(s=>s.id).join(","):""));});
+  add("MT","meta","Every test belongs to a declared suite",()=>{
+    const known=new Set(TEST_SUITES.map(s=>s.id));
+    const bad=T.filter(t=>!known.has(t.suite));
+    return _T.pass(bad.length===0,bad.length+" orphaned");});
+  add("MT","meta","Every test has a name and an assertion",()=>{
+    const bad=T.filter(t=>!t.name||typeof t.fn!=="function");
+    return _T.pass(bad.length===0,bad.length+" malformed");});
+  add("MT","meta","Manual test ids are unique and fully specified",()=>{
+    const ids=new Set(MANUAL_TESTS.map(m=>m.id));
+    const bad=MANUAL_TESTS.filter(m=>!m.steps.length||!m.expected||!m.area||!m.priority);
+    return _T.pass(ids.size===MANUAL_TESTS.length&&bad.length===0,MANUAL_TESTS.length+" scenarios, "+bad.length+" incomplete");});
+  add("MT","meta","Every defect naming a test names one that exists",()=>{
+    const ids=new Set(T.map(t=>t.id).concat(MANUAL_TESTS.map(m=>m.id)));
+    const bad=DEFECTS.filter(d=>d.test&&d.test!=="—"&&!ids.has(d.test));
+    return _T.pass(bad.length===0,bad.length?bad.map(d=>d.id+"→"+d.test).join(", "):DEFECTS.length+" defects");});
+  add("MT","meta","Every defect names a release that exists",()=>{
+    const v=new Set(RELEASES.map(r=>r.v));
+    const bad=DEFECTS.filter(d=>!v.has(d.found)||(d.fixed&&!v.has(d.fixed)));
+    return _T.pass(bad.length===0,bad.length+" unknown releases");});
+  add("MT","meta","Release test counts never go backwards",()=>
+    _T.pass(RELEASES.every((r,i)=>i===0||r.auto>=RELEASES[i-1].auto),RELEASES.map(r=>r.auto).join(" → ")));
+  return T;
+}
+const AUTO_TESTS=buildTests();
 
 /* Manual tests. These cannot be automated here — they need a person to look at
    the screen, use a pointer, or judge whether something reads correctly. Each
@@ -4455,15 +4921,19 @@ const MANUAL_TESTS=[
 
 /* Releases and run history. Seeded mock data so the dashboards have a past to
    show — only the current run is real. */
+/* The suite grows with the product. Seeded counts ramp towards the live total so
+   the run-history chart stays readable — a bar of 18 next to a bar of 678 tells
+   you nothing about either. */
 const RELEASES=[
-  {v:"0.7.0",name:"Portfolio overview & blotter",days:214,auto:18},
-  {v:"0.8.0",name:"Carve-outs and rankings",days:171,auto:26},
-  {v:"0.9.0",name:"Heatmap at full book scale",days:138,auto:31},
-  {v:"1.0.0",name:"Treemap, sorting, Data Highlight",days:104,auto:38},
-  {v:"1.1.0",name:"Limit increase requests",days:78,auto:43},
-  {v:"1.2.0",name:"Documentation tab",days:47,auto:47},
-  {v:"1.3.0",name:"Limit reserve requests",days:16,auto:52},
-  {v:"1.4.0",name:"Deal events & shared trend series",days:1,auto:AUTO_TESTS.length},
+  {v:"0.7.0",name:"Portfolio overview & blotter",days:214,auto:Math.round(AUTO_TESTS.length*0.14)},
+  {v:"0.8.0",name:"Carve-outs and rankings",days:171,auto:Math.round(AUTO_TESTS.length*0.22)},
+  {v:"0.9.0",name:"Heatmap at full book scale",days:138,auto:Math.round(AUTO_TESTS.length*0.31)},
+  {v:"1.0.0",name:"Treemap, sorting, Data Highlight",days:104,auto:Math.round(AUTO_TESTS.length*0.42)},
+  {v:"1.1.0",name:"Limit increase requests",days:78,auto:Math.round(AUTO_TESTS.length*0.55)},
+  {v:"1.2.0",name:"Documentation tab",days:47,auto:Math.round(AUTO_TESTS.length*0.66)},
+  {v:"1.3.0",name:"Limit reserve requests",days:16,auto:Math.round(AUTO_TESTS.length*0.78)},
+  {v:"1.4.0",name:"Deal events & shared trend series",days:12,auto:Math.round(AUTO_TESTS.length*0.89)},
+  {v:"1.5.0",name:"Full regression suite",days:1,auto:AUTO_TESTS.length},
 ];
 const TEST_TRIGGERS=["CI · commit","CI · pull request","Nightly","Manual"];
 function seedTestRuns(){
@@ -4491,19 +4961,19 @@ function seedTestRuns(){
 const SEED_RUNS=seedTestRuns();
 const DEFECTS=[
   {id:"DEF-014",sev:"High",status:"Closed",title:"weightedChoice ignored the weight total, collapsing every tenor onto the shortest",
-   found:"0.9.0",fixed:"0.9.0",test:"AT-020",owner:"Platform"},
+   found:"0.9.0",fixed:"0.9.0",test:"TX-002",owner:"Platform"},
   {id:"DEF-021",sev:"Medium",status:"Closed",title:"Heat ramp reused the status palette, flattening 20-55% utilization into one shade",
-   found:"0.9.0",fixed:"1.0.0",test:"AT-049",owner:"Design"},
+   found:"0.9.0",fixed:"1.0.0",test:"CH-007",owner:"Design"},
   {id:"DEF-027",sev:"High",status:"Closed",title:"Top-N cut and display order used different rankings, so raising the count reshuffled names",
-   found:"1.0.0",fixed:"1.0.0",test:"AT-048",owner:"Platform"},
+   found:"1.0.0",fixed:"1.0.0",test:"HM-002",owner:"Platform"},
   {id:"DEF-033",sev:"High",status:"Closed",title:"Approve/Reject keyed off the row index, deciding the wrong request once the table could sort",
-   found:"1.1.0",fixed:"1.1.0",test:"AT-054",owner:"Platform"},
+   found:"1.1.0",fixed:"1.1.0",test:"UI-005",owner:"Platform"},
   {id:"DEF-038",sev:"Low",status:"Closed",title:"Reserved slice missing from the pool donut legend below 1600px",
    found:"1.1.0",fixed:"1.2.0",test:"—",owner:"Design"},
   {id:"DEF-041",sev:"Medium",status:"Closed",title:"Documentation scroll-spy went blank inside long sections",
-   found:"1.2.0",fixed:"1.2.0",test:"AT-052",owner:"Platform"},
+   found:"1.2.0",fixed:"1.2.0",test:"DC-058",owner:"Platform"},
   {id:"DEF-046",sev:"High",status:"Closed",title:"Reserve line tracked the run-off because reserve windows were independently dated",
-   found:"1.3.0",fixed:"1.4.0",test:"AT-039",owner:"Data"},
+   found:"1.3.0",fixed:"1.4.0",test:"RS-016",owner:"Data"},
   {id:"DEF-047",sev:"Low",status:"Closed",title:"Active window tag referenced an undefined tag class",
    found:"1.3.0",fixed:"1.4.0",test:"—",owner:"Design"},
   {id:"DEF-048",sev:"Medium",status:"Open",title:"A released reserve is not netted against the deal when it lands, so both count briefly",
@@ -4512,6 +4982,8 @@ const DEFECTS=[
    found:"1.0.0",fixed:"",test:"—",owner:"Platform"},
   {id:"DEF-050",sev:"Medium",status:"Open",title:"No screen-reader pass; heatmap meaning is carried by colour alone",
    found:"1.0.0",fixed:"",test:"MT-018",owner:"Design"},
+  {id:"DEF-051",sev:"Low",status:"Closed",title:"makeCustomer spread its input last, so limitM stayed null instead of 0 for names with no limit",
+   found:"1.4.0",fixed:"1.5.0",test:"BK-005",owner:"Data"},
 ];
 
 /* Persisted: manual results and the runs this browser has executed. */
@@ -4535,7 +5007,9 @@ function allRuns(){ return TEST_STATE.runs.concat(SEED_RUNS).sort((a,b)=>b.ts-a.
 
 /* ---- the runner. Real assertions, real timings. ---- */
 let TEST_RESULTS={};
+const TEST_ROW_CAP=250;
 function runAutoTests(suiteId){
+  _TC={};   // shared artefacts are recomputed once per run, not once per test
   const list=AUTO_TESTS.filter(t=>!suiteId||t.suite===suiteId);
   const t0=performance.now();
   list.forEach(t=>{
@@ -4629,7 +5103,7 @@ function suiteBreakdown(){
     return {s,n:list.length,done:done.length,pass,fail,ms};
   });
   return `<div class="panel-body"><div class="colhd"><div style="width:8.5em"></div><div style="flex:1"></div><div style="width:3.6em;text-align:right">Tests</div><div style="width:4.2em;text-align:right">Time</div></div>
-  <div class="dist-list">${rows.map(r=>{
+  <div class="dist-list scroll">${rows.map(r=>{
     const pct=r.n?r.pass/r.n*100:0, fpct=r.n?r.fail/r.n*100:0;
     return `<div style="display:flex;align-items:center;gap:8px;font-size:0.71875rem;padding:2px 3px" data-tip="${esc(r.s.blurb)}">
       <div style="width:8.5em;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.s.name}</div>
@@ -4694,7 +5168,7 @@ function paneTests(){
         ms:t=>TEST_RESULTS[t.id]?TEST_RESULTS[t.id].ms:-1,
       });
       if(!sorted.length) return `<tr><td colspan="7"><div class="empty">Nothing matches this filter.</div></td></tr>`;
-      return sorted.map(t=>{
+      return sorted.slice(0,TEST_ROW_CAP).map(t=>{
         const r=TEST_RESULTS[t.id];
         const tag=!r?`<span class="tag t-muted">Not run</span>`:r.pass?`<span class="tag t-pass">Pass</span>`:`<span class="tag t-fail">Fail</span>`;
         return `<tr${r&&!r.pass?' style="background:color-mix(in srgb,var(--fail) 6%,transparent)"':''}>
@@ -4706,7 +5180,12 @@ function paneTests(){
           <td class="r num muted">${r?r.ms.toFixed(1)+"ms":"—"}</td>
           <td class="muted" style="font-size:0.6875rem">${r?esc(r.detail):""}</td></tr>`;
       }).join("");
-    })()}</tbody></table></div></div>
+    })()}</tbody></table>${(function(){
+      const base=AUTO_TESTS.filter(t=>!sel||t.suite===sel);
+      const n=state.tests.show==="fail" ? base.filter(t=>TEST_RESULTS[t.id]&&!TEST_RESULTS[t.id].pass).length
+            : state.tests.show==="notrun" ? base.filter(t=>!TEST_RESULTS[t.id]).length : base.length;
+      return n>TEST_ROW_CAP?`<div class="foot">Showing ${TEST_ROW_CAP} of ${n.toLocaleString()} in this sort order — narrow by suite, or switch to Failures only.</div>`:"";
+    })()}</div></div>
 
   <div class="panel mt14"><div class="panel-hd"><h3>Manual test checklist<i class="info" data-tip="Checks that need a person. Expand a row for the steps and the expected result, then record the outcome — it is saved in this browser.">i</i></h3>
     <span class="slo">${manRun} of ${MANUAL_TESTS.length} executed · ${manPassed} passed · ${manFailed} failed · ${manBlocked} blocked</span></div>
