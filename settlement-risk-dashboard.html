@@ -2699,16 +2699,16 @@ function custDrawer(c){
 ============================================================ */
 const DOC_SECTIONS=[
   {id:"d-about", t:"1 · About this document"},
-  {id:"d-plain", t:"2 · The dashboard in plain English", kids:[
-    {id:"d-plain-idea", t:"2.1 The idea in one page"},
-    {id:"d-plain-gloss", t:"2.2 Glossary"},
+  {id:"d-plain", t:"2 · Purpose & scope", kids:[
+    {id:"d-plain-idea", t:"2.1 What it covers"},
+    {id:"d-plain-gloss", t:"2.2 Terms as used here"},
     {id:"d-plain-who", t:"2.3 Who should read what"},
     {id:"d-plain-not", t:"2.4 What it is not"}]},
   {id:"d-arch", t:"3 · Architecture", kids:[
     {id:"d-arch-file", t:"3.1 One file, no build"},
     {id:"d-arch-render", t:"3.2 How a screen gets drawn"},
-    {id:"d-arch-state", t:"3.3 What the app remembers"},
-    {id:"d-arch-storage", t:"3.4 What survives a reload"}]},
+    {id:"d-arch-state", t:"3.3 Application state"},
+    {id:"d-arch-storage", t:"3.4 Persistence"}]},
   {id:"d-shell", t:"4 · Page shell", kids:[
     {id:"d-shell-layout", t:"4.1 Layout"},
     {id:"d-shell-theme", t:"4.2 Themes"},
@@ -2722,7 +2722,7 @@ const DOC_SECTIONS=[
     {id:"d-data-txn", t:"5.5 Transactions"},
     {id:"d-data-carve", t:"5.6 Carve-outs"},
     {id:"d-data-req", t:"5.7 Limit increase requests"},
-    {id:"d-data-derived", t:"5.8 The numbers we derive"}]},
+    {id:"d-data-derived", t:"5.8 Derived measures"}]},
   {id:"d-controls", t:"6 · Global controls", kids:[
     {id:"d-controls-filters", t:"6.1 Filters"},
     {id:"d-controls-range", t:"6.2 Date range"},
@@ -2821,57 +2821,48 @@ function paneDocs(){
   <h2 id="d-about">1 · About this document</h2>
   <p class="lede">This is the specification for the Settlement Risk Dashboard. It explains every screen, every control, every number and every piece of generated data — in enough detail that someone could rebuild the whole site from this page alone.</p>
   <p class="meta">It lives inside the dashboard itself, so it cannot drift away from the build it describes. Figures marked <i>live</i> are read from the running dataset when the page loads.</p>
-  <div class="note"><b>How to read this</b>Section 2 is written for readers with no banking or coding background — start there. Sections 3 and 4 cover how the site is put together. Section 5 is the data model, which is the part that matters most for a rebuild. Sections 6 to 9 walk through the screens and how they behave. Section 10 gives the algorithms in full, and sections 11 and 12 are the checklist to test a rebuild against.</div>
+  <div class="note"><b>How to read this</b>Section 2 sets the scope and pins down the terms this build gives a specific meaning to. Sections 3 and 4 cover how the site is put together. Section 5 is the data model, which is the part that matters most for a rebuild. Sections 6 to 9 walk through the screens and how they behave. Section 10 gives the algorithms in full, and sections 11 and 12 are the checklist to test a rebuild against.</div>
 
-  <h2 id="d-plain">2 · The dashboard in plain English</h2>
-  <h3 id="d-plain-idea">2.1 The idea in one page</h3>
-  <p>When a bank agrees a trade with a customer, the two sides do not swap money at that instant. There is a gap — sometimes two days, sometimes a year — between striking the deal and actually settling it. If the customer collapses inside that gap, the bank can be left having paid out with nothing coming back. That exposure is called <b>settlement risk</b>.</p>
-  <p>To control it, the bank gives each customer a <b>settlement risk limit</b>: a cap on how much unsettled business it will carry against that name at any one moment. Every new trade uses up part of the limit. Every trade that settles hands that part back.</p>
-  <p>So the limit behaves like a credit card. The approved limit is the card's ceiling, the unsettled trades are the balance, and settlement is the repayment. This dashboard is the statement: it shows how much has been handed out, how much is being used right now, who is close to their ceiling, and how much capacity comes back as today's trades mature.</p>
-  <p>It answers five questions:</p>
+  <h2 id="d-plain">2 · Purpose &amp; scope</h2>
+  <h3 id="d-plain-idea">2.1 What it covers</h3>
+  <p>A front end for managing <b>settlement risk limits</b> across a wholesale banking book. It takes the limit as given and concerns itself with what happens to it: how much is drawn, against which names, products and booking centres, how it is carved up, and when it comes back.</p>
+  <p>Five questions drive the layout:</p>
   <ol>
-    <li><b>How much capacity exists, and how much of it is in use</b> — the size of the pool, the utilization rate, the headroom left.</li>
-    <li><b>Who is close to their limit</b> — the utilization heatmap, the rankings, the breach alerts.</li>
-    <li><b>Where the exposure is concentrated</b> — by customer, by country, by product and by customer segment.</li>
-    <li><b>What capacity comes back, and when</b> — the forward run-off of the trades already on the book.</li>
-    <li><b>How the limit is split up and changed</b> — carve-outs by country and product, and the limit increase workflow.</li>
+    <li><b>How much capacity exists and how much is drawn</b> — pool composition, utilization rate, headroom.</li>
+    <li><b>Who is close to their limit</b> — utilization heatmap, rankings, breach alerts.</li>
+    <li><b>Where exposure is concentrated</b> — by customer, country, product limit type and segment.</li>
+    <li><b>What capacity comes back and when</b> — forward run-off of the live book.</li>
+    <li><b>How the limit is carved up and changed</b> — carve-outs by country and limit type, and the limit increase workflow.</li>
   </ol>
+  <div class="note"><b>The one modelling choice to know up front</b>The forward half of the trend chart is <b>run-off, not forecast</b>. It projects only how exposure already on the book matures away, so it can never rise. Nothing on this site attempts to predict new business. See <a href="#d-algo-runoff">10.2</a>.</div>
 
-  <h3 id="d-plain-gloss">2.2 Glossary</h3>
-  <p>Every term used on the site, in ordinary language. If a number on a screen does not make sense, the definition is almost always here.</p>
-  <table><thead><tr><th style="width:12em">Term</th><th>What it means</th></tr></thead><tbody>
-    <tr><td><b>Settlement risk (SR)</b></td><td>The risk that a customer fails between agreeing a trade and settling it, leaving the bank out of pocket.</td></tr>
-    <tr><td><b>SR limit</b></td><td>The most unsettled business the bank will carry against one customer at one time. Also called the approved limit.</td></tr>
-    <tr><td><b>Drawn / utilized</b></td><td>How much of the limit is being used right now by trades that have not settled yet.</td></tr>
-    <tr><td><b>Utilization</b></td><td>Drawn divided by the limit, as a percentage. 70% means seven-tenths of the ceiling is in use.</td></tr>
-    <tr><td><b>Headroom / available</b></td><td>What is left of the limit. The customer can trade this much more today without asking anyone.</td></tr>
-    <tr><td><b>Breach</b></td><td>Drawn has gone above the approved limit. Utilization is over 100%, and the excess is risk nobody signed off.</td></tr>
-    <tr><td><b>Dormant</b></td><td>A limit with nothing drawn against it. Capacity committed on paper but earning nothing.</td></tr>
-    <tr><td><b>The pool</b></td><td>All approved customer limits added together, plus a reserved buffer the bank holds back centrally.</td></tr>
-    <tr><td><b>Reserved</b></td><td>Capacity kept at portfolio level and not yet given to any customer. It is spare room, not usage.</td></tr>
-    <tr><td><b>Trade / ticket</b></td><td>One deal. It consumes SR from the day it is booked until the day it settles.</td></tr>
-    <tr><td><b>Notional</b></td><td>The headline size of a trade. Only a fraction of it is at risk in settlement — here, 2% to 9%.</td></tr>
-    <tr><td><b>Tenor</b></td><td>How long a trade runs before it settles. Two days for cash, up to a year for forwards and swaps.</td></tr>
-    <tr><td><b>Maturity / value date</b></td><td>The day a trade settles. On that day its SR is released back into the limit.</td></tr>
-    <tr><td><b>Run-off</b></td><td>The way exposure falls away as trades reach their value dates. It is what the forward line on the trend chart shows.</td></tr>
-    <tr><td><b>Carve-out</b></td><td>A slice of a customer's limit reserved for one country or one product, so no single corner can eat the whole limit.</td></tr>
-    <tr><td><b>Limit type</b></td><td>The product family a limit slice belongs to: ${LIMIT_TYPES.join(", ")}.</td></tr>
-    <tr><td><b>Segment</b></td><td>The kind of customer: banks, funds, corporates, small businesses, and so on.</td></tr>
-    <tr><td><b>Booking centre</b></td><td>The country whose branch books the trade. Used here as the customer's country.</td></tr>
-    <tr><td><b>Block trade</b></td><td>One unusually large deal. It steps the utilization line up sharply and releases it in one go at maturity.</td></tr>
-    <tr><td><b>Heatmap</b></td><td>One equally sized tile per customer, shaded by utilization. Good for comparing rates.</td></tr>
-    <tr><td><b>Treemap</b></td><td>The same tiles, but each sized by how big the customer is. Good for seeing where the money sits.</td></tr>
-    <tr><td><b>Data Highlight</b></td><td>Point at one country, product or segment and the whole page dims everything that does not belong to it.</td></tr>
-    <tr><td><b>Moving average</b></td><td>A smoothed version of the utilization line — each point is the average of the previous three months.</td></tr>
+  <h3 id="d-plain-gloss">2.2 Terms as used here</h3>
+  <p>Market terms carry their ordinary meaning. Listed below are the ones this build either defines narrowly, draws a hard boundary around, or invents — the cases where a screen depends on the exact reading.</p>
+  <table><thead><tr><th style="width:13em">Term</th><th>As used on this site</th></tr></thead><tbody>
+    <tr><td><b>Drawn / utilized</b></td><td>Current utilization <b>capped at 100%</b>, times the limit. Anything above the limit is reported separately as excess, never folded into drawn.</td></tr>
+    <tr><td><b>Excess exposure</b></td><td>The portion above 100%. Held outside the pool and outside every utilization rate.</td></tr>
+    <tr><td><b>The pool</b></td><td>Approved customer limits <b>plus</b> the reserved buffer. Utilization percentages divide by approved limits only — see <a href="#d-data-derived">5.8</a>.</td></tr>
+    <tr><td><b>Reserved</b></td><td>An unallocated portfolio-level buffer, fixed here at 12% of approved limits. It drops to zero under any filter, because it cannot be attributed to a country or segment.</td></tr>
+    <tr><td><b>Utilization rate</b></td><td>Always limit-weighted: total drawn over total approved limits for the customers in scope, never an average of per-customer percentages.</td></tr>
+    <tr><td><b>Risk bands</b></td><td>Fixed boundaries used by the rail, the histogram and the highlight: breach above 100%, critical 90–100%, watch 75–90%, dormant at 0%.</td></tr>
+    <tr><td><b>Dormant</b></td><td>Current utilization at zero. Not "low" — exactly zero.</td></tr>
+    <tr><td><b>Profile</b></td><td>A generator label, not a business one. It sets where a name's simulated utilization should sit: mid, hot, cold, dormant or breach. See <a href="#d-data-series">5.4</a>.</td></tr>
+    <tr><td><b>Limit type</b></td><td>The five product families the book is cut by: ${LIMIT_TYPES.join(", ")}.</td></tr>
+    <tr><td><b>Carve-out</b></td><td>A slice of one customer's limit reserved for one country entity or one limit type. The two scopes are <b>alternative cuts of the same limit</b> and are never added together — see <a href="#d-data-carve">5.6</a>.</td></tr>
+    <tr><td><b>Block trade</b></td><td>Here, a ticket of $900M–$4,200M against a normal $2M–$450M. Blocks are what make the single-name utilization line step rather than drift.</td></tr>
+    <tr><td><b>Run-off</b></td><td>The forward line. Maturity of the existing book only, never new business.</td></tr>
+    <tr><td><b>Heatmap / Treemap</b></td><td>Two views of the same names. Heatmap gives every customer an equal tile and encodes only rate; treemap encodes size in the area and rate in the colour.</td></tr>
+    <tr><td><b>Data Highlight</b></td><td>This build's name for brushing and linking: hovering one aggregate dims everything that does not belong to it, across every panel at once. See <a href="#d-int-highlight">9.1</a>.</td></tr>
+    <tr><td><b><i>live</i></b></td><td>A figure in this document read from the running dataset at page load, rather than typed in by hand.</td></tr>
   </tbody></table>
 
   <h3 id="d-plain-who">2.3 Who should read what</h3>
   <table><thead><tr><th>If you are…</th><th>Start at</th></tr></thead><tbody>
-    <tr><td>New to settlement risk</td><td>Section 2, then section 7 to walk the screens</td></tr>
     <tr><td>Rebuilding the site</td><td>Section 3, then section 5, then the checklist in section 12</td></tr>
-    <tr><td>A risk or sales user learning the screens</td><td>Sections 7 and 9</td></tr>
-    <tr><td>A designer changing the look</td><td>Sections 4 and 8</td></tr>
-    <tr><td>Questioning a number on a screen</td><td>Section 5.8, then the invariants in section 11</td></tr>
+    <tr><td>Learning the screens</td><td>Sections 7 and 9</td></tr>
+    <tr><td>Changing the look</td><td>Sections 4 and 8</td></tr>
+    <tr><td>Questioning a number on a screen</td><td>Section 2.2, then 5.8, then the invariants in section 11</td></tr>
+    <tr><td>Judging whether the mock data is realistic</td><td>Sections 5.3 to 5.5, then the limitations in section 13</td></tr>
   </tbody></table>
 
   <h3 id="d-plain-not">2.4 What it is not</h3>
@@ -2884,18 +2875,18 @@ function paneDocs(){
 
   <h2 id="d-arch">3 · Architecture</h2>
   <h3 id="d-arch-file">3.1 One file, no build</h3>
-  <p>The whole application is a single HTML file. The markup, the styling and the code all sit inside it, and nothing is downloaded from anywhere else. You can open it by double-clicking it, email it as an attachment, or put it on a web server — it behaves exactly the same way in all three cases.</p>
+  <p>The whole application is a single HTML file. The markup, the styling and the code all sit inside it, and nothing is downloaded from anywhere else. It can be opened by double-click, sent as an attachment, or served as a static file; behaviour is identical in all three cases.</p>
   <table><thead><tr><th style="width:16em">Rule</th><th>Why</th></tr></thead><tbody>
     <tr><td>No outside scripts, fonts or images</td><td>It has to work offline and straight from a local folder, and it has to survive strict corporate security policies that block outside downloads.</td></tr>
-    <tr><td>No framework</td><td>Nothing to install, version or patch. Screens are built as text and handed to the browser in one go.</td></tr>
+    <tr><td>No framework</td><td>Nothing to install, version or patch. Panes are built as strings and assigned in one write.</td></tr>
     <tr><td>Charts drawn by hand as SVG</td><td>Avoids a charting library, and lets every line and bar pick up its colour from the current theme automatically.</td></tr>
     <tr><td>Modern browsers assumed</td><td>It uses <code>color-mix()</code>, <code>:has()</code>, CSS grid and <code>aspect-ratio</code>. Current Chrome, Edge, Safari and Firefox are the target; there are no fallbacks for older browsers.</td></tr>
   </tbody></table>
 
   <h3 id="d-arch-render">3.2 How a screen gets drawn</h3>
-  <p>There is one drawing function, called <code>render()</code>. Whenever anything changes — a filter, a tab, a sort, a checkbox — it throws away the current screen and builds the whole thing again from scratch. There is no clever patching of individual elements.</p>
+  <p>There is one drawing function, called <code>render()</code>. Whenever anything changes — a filter, a tab, a sort, a checkbox — it discards the current pane and rebuilds it from state. Nothing is patched in place.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 210" role="img" aria-label="The render loop: an interaction updates state, render rebuilds the rail and the pane, then re-attaches wiring">
-    ${DG.box(14,66,150,58,"You do something","click, type, drag","var(--panel)")}
+    ${DG.box(14,66,150,58,"An interaction","click, type, drag","var(--panel)")}
     ${DG.arrowR(170,95,40)}
     ${DG.box(216,66,150,58,"state is updated","one plain object","color-mix(in srgb, var(--run) 10%, var(--panel))")}
     ${DG.arrowR(372,95,40)}
@@ -2926,7 +2917,7 @@ function paneDocs(){
   <div class="note why"><b>The consequence worth knowing</b>Because the pane is thrown away and rebuilt, anything that points at a specific element on screen has to be re-attached <b>after</b> the rebuild, not before. Anything the browser was holding — where a list was scrolled to, an open dropdown, selected text — is lost. That is why the search boxes put the cursor back where it was: see <a href="#d-tab-customers">7.2</a> and <a href="#d-tab-requests">7.6</a>.</div>
   <p>Clicks are handled centrally. Rather than attaching a handler to every button, a handful of listeners sit on the document and work out what was clicked by looking at the element's data attributes. Handlers therefore survive the pane being replaced. The order they are checked in matters: the highlight-pin handler has to run before the general customer handler, otherwise clicking a tile would pin a selection instead of opening the customer.</p>
 
-  <h3 id="d-arch-state">3.3 What the app remembers</h3>
+  <h3 id="d-arch-state">3.3 Application state</h3>
   <p>One plain object called <code>state</code> holds everything the screens need in order to draw themselves. It is never saved as a whole — only the four items in <a href="#d-arch-storage">3.4</a> outlive a reload.</p>
   <table><thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead><tbody>
     <tr><td><code>tab</code></td><td>string</td><td>Which tab is open: overview, customers, blotter, rankings, carveouts, requests, docs.</td></tr>
@@ -2944,7 +2935,7 @@ function paneDocs(){
     <tr><td><code>reqFilters</code></td><td>object</td><td>The column filters on the requests table.</td></tr>
   </tbody></table>
 
-  <h3 id="d-arch-storage">3.4 What survives a reload</h3>
+  <h3 id="d-arch-storage">3.4 Persistence</h3>
   <p>Four things are written into the browser's own storage. Everything else is rebuilt from scratch each time the page opens.</p>
   <table><thead><tr><th>Key</th><th>Holds</th><th>Notes</th></tr></thead><tbody>
     <tr><td><code>sr-dash-theme-v2</code></td><td>light, dark or dbs</td><td>The suffix was bumped when light became the default, so an older saved choice cannot override it.</td></tr>
@@ -2977,7 +2968,7 @@ function paneDocs(){
   <p>The brand mark is a link back to <code>index.html</code>. The link is relative, so it lands on the site's home page when published and still works from a local copy of the file.</p>
 
   <h3 id="d-shell-theme">4.2 Themes</h3>
-  <p>Three themes, chosen from the dropdown at the top right: <b>Light</b> (the default), <b>Dark</b> and <b>Red</b> — the DBS-branded skin, stored internally as <code>dbs</code>. Every colour on the site is defined once as a named token, and each theme simply redefines those tokens. No individual component knows or cares which theme is active.</p>
+  <p>Three themes, chosen from the dropdown at the top right: <b>Light</b> (the default), <b>Dark</b> and <b>Red</b> — the DBS-branded skin, stored internally as <code>dbs</code>. Every colour on the site is defined once as a named token, and each theme redefines those tokens. No individual component knows or cares which theme is active.</p>
   <table><thead><tr><th style="width:16em">Token</th><th>What it colours</th></tr></thead><tbody>
     <tr><td><code>--ground</code>, <code>--panel</code>, <code>--panel-2</code>, <code>--panel-3</code></td><td>Backgrounds, from the page behind everything to the deepest inset surface.</td></tr>
     <tr><td><code>--hair</code></td><td>Borders and dividing lines.</td></tr>
@@ -3002,7 +2993,7 @@ function paneDocs(){
     <li><b>Plain</b> — a single sentence.</li>
     <li><b>Structured</b> — a title, an optional subtitle, and a list of label-and-value rows laid out as a neat two-column grid. Each row may also name a colour class for its value, so a breach figure can be shown in red. The rows are built as plain text, never as markup, so nothing in the data can inject anything into the page.</li>
   </ul>
-  <p>Explanations of <b>what a chart or panel is</b> hang off a small circled <b>i</b> at the end of the title, rather than off the whole panel. That way they appear when someone asks for them, instead of every time the pointer crosses a header. Tooltips on <b>data</b> — a tile, a row, a bar — still appear on hover, because there the pointer really is pointing at something.</p>
+  <p>Explanations of <b>what a chart or panel is</b> hang off a small circled <b>i</b> at the end of the title, rather than off the whole panel. That way they appear when someone asks for them, instead of every time the pointer crosses a header. Tooltips on <b>data</b> — a tile, a row, a bar — stay on hover, where the pointer is already the selector.</p>
 
   <h2 id="d-data">5 · Data model</h2>
   <p>Everything on the site is invented in the browser the moment the page opens. It comes from a random number generator with a fixed starting seed, which means the same file always produces exactly the same book of business — the same names, the same limits, the same trades. Figures below marked <i>live</i> are read from that book as this page loads.</p>
@@ -3065,14 +3056,14 @@ function paneDocs(){
   <h4>Pass 2 — the bulk population</h4>
   <p>Around 4,000 further names, so the interface is exercised at the scale it would really face:</p>
   <table><thead><tr><th>Segment</th><th class="r">Count</th><th class="r">Hold a limit</th><th>Limit range</th><th>Spread</th></tr></thead><tbody>
-    ${BULK_PLAN.map(b=>`<tr><td>${SEGMENT_LABEL[b.segment]}</td><td>${nf(b.count)}</td><td>${Math.round(b.withRate*100)}%</td><td>$${b.limit[0]}M – $${nf(b.limit[1])}M</td><td>${b.bell?"Bell curve — most names sit near the middle":"Even — any value equally likely"}</td></tr>`).join("")}
+    ${BULK_PLAN.map(b=>`<tr><td>${SEGMENT_LABEL[b.segment]}</td><td>${nf(b.count)}</td><td>${Math.round(b.withRate*100)}%</td><td>$${b.limit[0]}M – $${nf(b.limit[1])}M</td><td>${b.bell?"Bell curve, range spans ±3σ":"Uniform"}</td></tr>`).join("")}
   </tbody></table>
   <p><b>Live totals:</b> ${nf(CUSTOMERS.length)} customers, of which ${nf(WITH_LIMIT.length)} hold a limit and ${nf(CUSTOMERS.length-WITH_LIMIT.length)} do not. Approved limits come to <b>${fmtM(totalLimitM)}</b>. On top of that sits an unallocated reserved buffer of <b>${fmtM(RESERVED_M)}</b>, set at 12% of approved limits, making a total pool of <b>${fmtM(totalLimitM+RESERVED_M)}</b>.</p>
   <h4>Where the names come from</h4>
   <p>Names are assembled from a word list plus a set of endings chosen to suit the segment — so banks get endings like Merchant Bank and small businesses get Trading Pte Ltd. If the two-word combinations run out, the generator moves to a three-word form, and finally to a numbered variant. Every name in the book is unique, and the hand-written bank roster is registered first so the bulk names can never collide with it.</p>
 
   <h3 id="d-data-series">5.4 The utilization line</h3>
-  <p>Every limit holder carries <b>${HIST_DAYS} days</b> — eighteen months — of daily utilization. This is not a smoothed random wiggle. It is simulated as an actual book of trades, because that is what gives the line its real shape.</p>
+  <p>Every limit holder carries <b>${HIST_DAYS} days</b> — eighteen months — of daily utilization. It is not a smoothed random walk. It is simulated as an actual book of tickets, which is what gives the line its shape.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 288" role="img" aria-label="Trades booked and maturing over time, and the resulting step-shaped utilization line">
     <text x="14" y="16" font-size="10.5" font-weight="700" fill="var(--ink)">Trades on the book — each bar runs from booking to settlement</text>
     ${[[60,30,150,0],[420,30,260,0],[110,44,300,0],[470,44,150,0],[170,58,120,0],[540,58,330,1],[230,72,420,1],[700,72,140,0],[300,86,180,0],[660,86,200,0]].map(([x,y,w,blk])=>`<rect x="${x}" y="${y}" width="${w}" height="9" rx="3" fill="${blk?"color-mix(in srgb, var(--warn) 70%, var(--panel))":"color-mix(in srgb, var(--run) 45%, var(--panel))"}" stroke="${blk?"var(--warn)":"var(--run)"}" stroke-width=".6"/>`).join("")}
@@ -3084,17 +3075,17 @@ function paneDocs(){
     <text x="14" y="150" font-size="10.5" font-weight="700" fill="var(--ink)">The utilization line those trades produce</text>
     <polyline points="14,240 60,240 60,227 110,227 110,208 170,208 170,199 230,199 230,172 300,172 300,162 350,162 350,182 420,182 420,171 470,171 470,179 530,179 530,158 610,158 610,176 660,176 660,167 720,167 720,192 790,192 790,212 886,212" fill="none" stroke="var(--run)" stroke-width="2.2" stroke-linejoin="round"/>
     <line x1="14" y1="244" x2="886" y2="244" stroke="var(--hair)"/>
-    ${DG.cap(180,262,"steps UP the day a trade is booked")}
-    ${DG.cap(660,262,"steps DOWN the day it settles")}
+    ${DG.cap(180,262,"steps up when a ticket is booked")}
+    ${DG.cap(660,262,"steps down at its value date")}
     ${DG.cap(450,280,"No smoothing anywhere. The shape comes entirely from trades arriving and maturing.")}
-  </svg></div><figcaption>Each trade pushes the line up on the day it is booked and pulls it back down on the day it settles. The steps are the point — utilization really does move in jumps.</figcaption></figure>
+  </svg></div><figcaption>Each ticket steps the line up when it is booked and back down at its value date. The staircase is the point: utilization moves in jumps, not drifts.</figcaption></figure>
   <h4>How it is generated</h4>
   <ol>
-    <li>A running tally is kept over the eighteen months, plus a ${SERIES_WARM}-day warm-up before the window so that day one already has live trades on it, and a long tail after it to absorb trades maturing past the end.</li>
-    <li>Each day, a random draw decides how many trades are booked. Each one adds its size on the day it is booked and subtracts it on the day it matures. Weekends run at roughly a fifth of weekday activity, and about 1% of days are a customer's own hedging programme, which quadruples that day's volume.</li>
-    <li>Trade sizes are deliberately lopsided: most are small, a few are very large. Each customer gets its own degree of lopsidedness.</li>
+    <li>A difference array spans the eighteen months, plus a ${SERIES_WARM}-day warm-up so day one already carries a live book, and a tail long enough to absorb maturities past the end.</li>
+    <li>A Poisson draw sets each day's ticket count. Each ticket adds its size on the booking day and subtracts it at maturity. Weekends run at roughly a fifth of weekday activity, and about 1% of days are a customer's own hedging programme, which quadruples that day's volume.</li>
+    <li>Ticket sizes are fat-tailed, with the tail weight set per customer.</li>
     <li>Tenor is drawn from a fixed ladder: ${SERIES_TENORS.map(t=>t[0]+"d ("+t[1]+"%)").join(", ")}.</li>
-    <li>Adding it all up day by day gives the outstanding exposure on each day.</li>
+    <li>A prefix sum turns that into daily outstanding exposure.</li>
     <li>Finally the whole line is scaled so its <b>average</b> lands on the target for that customer's profile.</li>
   </ol>
   <h4>Block trades</h4>
@@ -3132,7 +3123,7 @@ function paneDocs(){
   <div class="note why"><b>Month-end rolling</b>Any tenor of 30 days or more is snapped forward to <b>the last day of that month</b>, which is how forwards, swaps and term repo really settle. Without it, ${nf(TXNS.length)} maturities scattered evenly across 365 days average out into a smooth curve. With it, maturities bunch up at month ends and capacity comes back in monthly lumps — which is what turns the forward run-off into a staircase.</div>
   <h4>Status</h4>
   <p><b>Status follows maturity.</b> A trade cannot settle before its value date, so anything still short of maturity is <code>Pending</code> and its SR is still being consumed. Anything past maturity is <code>Settled</code>. About 3% are <code>Failed</code> regardless of date.</p>
-  <p>Roughly 2.5% of tickets are blocks — term repo, large bond settlements, block equity crosses — sized $900M to $4,200M against a normal $2M to $450M. Fixed income trades are scaled up further, since bond and repo tickets are simply larger.</p>
+  <p>Roughly 2.5% of tickets are blocks — term repo, large bond settlements, block equity crosses — sized $900M to $4,200M against a normal $2M to $450M. Fixed income trades are scaled up further, since bond and repo tickets run larger.</p>
   <div class="note"><b>A rounding detail</b>SR consumed is stored to one decimal place and floored at $0.1M. On the very smallest tickets — a $2M or $3M notional — that rounding moves the effective percentage a point or so outside the 2%-to-9% band. It affects fewer than ten trades in ${nf(TXNS.length)} and nothing that is totalled anywhere, but a rebuild checking the band strictly will see it.</div>
 
   <h3 id="d-data-carve">5.6 Carve-outs</h3>
@@ -3181,7 +3172,7 @@ function paneDocs(){
   <p>There are ${REQUESTERS.length} relationship managers across six desks, and ${APPROVERS.length} credit officers across four roles. The requested increase is between 1.15 and 2.30 times the current limit. Roughly 52% are approved, 31% still pending and 17% rejected.</p>
   <div class="note"><b>The rules the data must obey</b>A pending request has no approver and no decision date. A decided request has both, and the decision always falls one to twelve days <i>after</i> submission, never before it. The effective window starts within ten days of submission and runs for 21 to 180 days.</div>
 
-  <h3 id="d-data-derived">5.8 The numbers we derive</h3>
+  <h3 id="d-data-derived">5.8 Derived measures</h3>
   <p>Nothing on the screens is stored — every figure is worked out from the book at the moment it is drawn. This diagram is the one to keep in mind, because most questions about a number come back to it.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 240" role="img" aria-label="Anatomy of a limit: drawn and headroom make up the approved limit, excess sits above it, reserved sits outside it">
     <text x="14" y="20" font-size="10.5" font-weight="700" fill="var(--ink)">A healthy customer</text>
@@ -3204,15 +3195,15 @@ function paneDocs(){
     ${DG.cap(843,186,"portfolio buffer")}
     ${DG.cap(843,199,"outside every rate")}
     <line x1="14" y1="222" x2="886" y2="222" stroke="var(--hair)"/>
-    ${DG.cap(350,236,"Utilization = drawn divided by approved limit. Reserved is never part of that sum.")}
+    ${DG.cap(350,236,"Utilization = drawn / approved limit. Reserved is never part of that denominator.")}
   </svg></div><figcaption>Drawn plus headroom always equals the approved limit. Excess and reserved both sit outside it, for opposite reasons.</figcaption></figure>
   <table><thead><tr><th style="width:15em">Measure</th><th>How it is worked out</th></tr></thead><tbody>
     <tr><td>Current utilization</td><td>The last value of the customer's daily line. It can go above 100%.</td></tr>
-    <tr><td>Drawn / utilized</td><td>Utilization capped at 100%, times the limit. So drawn can never exceed the approved limit.</td></tr>
+    <tr><td>Drawn / utilized</td><td>Utilization capped at 100%, times the limit — so drawn never exceeds the approved limit.</td></tr>
     <tr><td>Unutilized / headroom</td><td>Limit minus drawn, never below zero.</td></tr>
     <tr><td>Excess exposure</td><td>Anything above 100%, times the limit. Reported separately as risk nobody approved, and kept out of the pool.</td></tr>
-    <tr><td>Utilization rate</td><td>Total drawn divided by total approved limits across whichever customers are in view. Bigger limits therefore count for more.</td></tr>
-    <tr><td>Average utilization 3M / 6M / 12M</td><td>The mean of the last 91, 182 or 365 days. Worked out once per customer and remembered.</td></tr>
+    <tr><td>Utilization rate</td><td>Limit-weighted: total drawn over total approved limits for the customers in scope.</td></tr>
+    <tr><td>Average utilization 3M / 6M / 12M</td><td>The mean of the trailing 91, 182 or 365 days. Memoised per customer and window.</td></tr>
     <tr><td>Peak utilization</td><td>The highest rate reached inside the selected date range.</td></tr>
     <tr><td>Dormant capital</td><td>The limits of every customer currently drawing nothing at all.</td></tr>
     <tr><td>Top-5 / top-10 concentration</td><td>The share of all drawn exposure held by the five or ten largest names.</td></tr>
@@ -3267,7 +3258,7 @@ function paneDocs(){
     <tr><td>Tile size / Height</td><td>XS · S · M · L</td><td>In heatmap view the tiles shrink and shed detail: full card, then name and rate, then rate only, then just colour and a bare number. In treemap view the same control sets the panel height (${Object.values(TREE_H).join(" / ")}px).</td></tr>
   </tbody></table>
   <p>Tiles are grouped by segment and shaded by the utilization ramp. Two states sit outside that ramp because they are different problems rather than points on a scale: a customer with <b>no SR limit</b> is drawn hatched with a dashed border, and one <b>dormant at 0%</b> is a pale violet dashed tile. Names over their limit keep the ramp colour and gain a solid red border. Clicking any tile opens that customer.</p>
-  <div class="note why"><b>One ranking, not two</b>The same criterion decides both which names make the cut and what order they appear in, with the customer name breaking ties. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of simply adding to the end of it.</div>
+  <div class="note why"><b>One ranking, not two</b>The same criterion decides both which names make the cut and what order they appear in, with the customer name breaking ties. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of appending to the end of it.</div>
   <h4>Utilization trend and capacity run-off</h4>
   <p>Full width at the foot of the tab. It shows eighteen months of actual daily utilization, an optional three-month moving average, and twelve months of forward settlement run-off, with a marked line at today and the forward half lightly shaded.</p>
   <p>The horizontal axis is a real calendar: a small tick every Monday, a taller tick and a gridline on the first of each month, month names underneath, and the year printed under each January. Month names thin themselves out automatically when they would otherwise collide.</p>
@@ -3336,7 +3327,7 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
     <text x="26" y="44" font-size="10" font-weight="700" fill="var(--ink)">Segments</text>
     ${["Banks","Non-bank FI","SME","CWM"].map((t,i)=>`<rect x="26" y="${54+i*28}" width="${i===0?170:110-i*18}" height="18" rx="3" fill="${i===0?"var(--run)":"color-mix(in srgb, var(--run) 30%, var(--panel))"}" opacity="${i===0?1:.35}"/><text x="${26+(i===0?178:120-i*18)}" y="${67+i*28}" font-size="9" fill="${i===0?"var(--ink)":"var(--ink-3)"}">${t}</text>`).join("")}
     <circle cx="120" cy="63" r="13" fill="none" stroke="var(--brand)" stroke-width="1.5"/>
-    ${DG.cap(129,196,"you point here")}
+    ${DG.cap(129,196,"the hovered aggregate")}
     <path d="M250,100 L286,100" stroke="var(--ink-3)" stroke-width="1.3" stroke-dasharray="4 3"/>
     <path d="M292,100 l-6,-4 l0,8 z" fill="var(--ink-3)"/>
     <rect x="300" y="26" width="250" height="150" rx="8" fill="var(--panel)" stroke="var(--hair)"/>
@@ -3356,12 +3347,12 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
   <p>Every element that stands for a customer is tagged with that customer's country, segment, products, utilization band and id. On hover, <b>a single style rule is rewritten</b> and the browser does the matching itself. A customer is tagged with a product only when that product accounts for at least 22% of their limit, so hovering a product lights the names it genuinely matters to rather than every name with a token allocation.</p>
   <div class="note why"><b>Why a style rule instead of marking each tile</b>Marking up to ${nf(CUSTOMERS.length)} tiles individually on every hover is far too slow. Rewriting one rule is a single small operation no matter how many tiles are on screen.</div>
   <h4>Linking across different cuts</h4>
-  <p>The country and product rows carry no segment tag — they are a different way of slicing the same book, not members of a segment. So hovering a segment works out what that selection <b>contributes</b> to every other panel in one pass over the customer list, keeps a row lit wherever the selection is present, and draws a marker inside that row's bar showing how much of it the selection accounts for. The answer is remembered per selection, so hovering the same thing twice costs nothing.</p>
+  <p>The country and product rows carry no segment tag — they are a different way of slicing the same book, not members of a segment. So hovering a segment works out what that selection <b>contributes</b> to every other panel in one pass over the customer list, keeps a row lit wherever the selection is present, and draws a marker inside that row's bar showing how much of it the selection accounts for. Memoised per selection, so re-hovering the same aggregate costs nothing.</p>
   <h4>Pinning</h4>
   <p>Clicking a total pins the selection, so it survives scrolling and redrawing, and a badge appears naming what is pinned. Click it again or press <kbd>Esc</kbd> to release. Elements that already do something when clicked — a segment bar that drills down, a tile that opens a customer — keep doing it; hovering still highlights them. The checkbox in the heatmap toolbar turns the whole effect off.</p>
 
   <h3 id="d-int-sort">9.2 Sorting</h3>
-  <p>One mechanism serves every table on the site. A central register remembers the current column and direction for each table; one helper draws a header with its arrow, another applies the sort, and a third flips the direction or switches column. Text columns start ascending, numeric columns start descending, because that is what people expect of each.</p>
+  <p>One mechanism serves every table on the site. A central register remembers the current column and direction for each table; one helper draws a header with its arrow, another applies the sort, and a third flips the direction or switches column. Text columns default to ascending, numeric columns to descending.</p>
 
   <h3 id="d-int-drawer">9.3 Customer drawer</h3>
   <p>Opens from any customer tile, table row or ranking entry. It contains the customer's identity and status; their utilization and capacity outlook (eighteen months of history plus the twelve-month run-off, with the same moving-average toggle); their carve-out allocation bars where they have any; a breakdown table of total against utilized SR that matches those bars exactly; and a trade list with maturity dates and days left to maturity.</p>
@@ -3379,13 +3370,13 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
   <h3 id="d-algo-rng">10.1 Deterministic RNG</h3>
   <p>A single random number generator, started from a fixed number. Every random choice in the build — names, limits, tenors, daily lines, carve-outs, requests — comes out of that one stream, which is why the same file always produces the same book. Built on top of it:</p>
   <table><thead><tr><th style="width:16em">Helper</th><th>What it does</th></tr></thead><tbody>
-    <tr><td><code>rand</code>, <code>randInt</code>, <code>choice</code></td><td>Pick a number in a range, or an item from a list, with everything equally likely.</td></tr>
-    <tr><td><code>weightedChoice</code></td><td>Pick an item where some are more likely than others. The weights are <b>divided by their own total</b>, so a table can be written as readable percentages.</td></tr>
-    <tr><td><code>poissonRand</code></td><td>How many events happen in one day, given an average rate. Used for daily trade arrivals.</td></tr>
-    <tr><td><code>gaussian</code></td><td>A standard bell-curve draw.</td></tr>
-    <tr><td><code>bellBetween</code></td><td>A bell curve centred in a range, with the range spanning three standard deviations either side. Values outside the range are redrawn rather than snapped to the edge, so the ends do not pile up.</td></tr>
+    <tr><td><code>rand</code>, <code>randInt</code>, <code>choice</code></td><td>Uniform draws: a number within a range, or an item from a list.</td></tr>
+    <tr><td><code>weightedChoice</code></td><td>Weighted pick. Weights are <b>normalised by their own total</b>, so a table can be written as readable percentages rather than fractions of one.</td></tr>
+    <tr><td><code>poissonRand</code></td><td>Poisson count for a given rate (Knuth's method). Daily ticket arrivals.</td></tr>
+    <tr><td><code>gaussian</code></td><td>Standard normal, via Box–Muller.</td></tr>
+    <tr><td><code>bellBetween</code></td><td>Bell curve centred in a range, the range spanning ±3σ. Out-of-range values are resampled rather than clamped, so the tails do not pile up on the bounds.</td></tr>
   </tbody></table>
-  <div class="note warn"><b>A bug worth not repeating</b><code>weightedChoice</code> originally assumed the weights already added up to 1. Tenor tables written as percentages — 34, 10, 14 and so on — therefore collapsed onto their first entry: every trade got the shortest tenor, the forward curve hit zero within days, and daily utilization swung thirty points. Dividing by the total fixed all three at once.</div>
+  <div class="note warn"><b>A bug worth avoiding</b><code>weightedChoice</code> originally assumed the weights already added up to 1. Tenor tables written as percentages therefore collapsed onto their first entry: every trade drew the shortest tenor, the forward curve hit zero within days, and daily utilization swung thirty points. Normalising by the total fixed all three.</div>
 
   <h3 id="d-algo-runoff">10.2 Settlement run-off</h3>
   <p>This is the forward half of the trend chart. It is not an extrapolation of the past — it is the run-off of exposure that has already been booked.</p>
@@ -3409,14 +3400,14 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
   <p>The house profile is spread across many separate days rather than five round tenors, so a customer with a thin book steps down like a real one instead of falling off five cliffs.</p>
 
   <h3 id="d-algo-tree">10.3 Squarified treemap</h3>
-  <p>The layout method published by Bruls, Huizing and van Wijk. The goal is to keep every tile as close to square as possible, because long thin slivers are hard to compare and hard to label.</p>
+  <p>The layout method published by Bruls, Huizing and van Wijk. It keeps tiles close to square, because slivers are both hard to compare by area and too narrow to label.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 210" role="img" aria-label="Items laid out into rows, each row filling the shorter side of the remaining rectangle">
     <rect x="14" y="24" width="250" height="160" rx="5" fill="var(--panel)" stroke="var(--hair)"/>
     <text x="139" y="16" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">1 · start with the space</text>
     <text x="139" y="110" text-anchor="middle" font-size="10" fill="var(--ink-3)">sorted biggest first</text>
     ${DG.arrowR(276,104,34)}
     <rect x="322" y="24" width="250" height="160" rx="5" fill="var(--panel)" stroke="var(--hair)"/>
-    <text x="447" y="16" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">2 · fill a row while it stays squarish</text>
+    <text x="447" y="16" text-anchor="middle" font-size="9.5" fill="var(--ink-3)">2 · fill a row while the aspect ratio improves</text>
     <rect x="322" y="24" width="104" height="160" rx="5" fill="color-mix(in srgb, var(--run) 30%, var(--panel))" stroke="var(--run)"/>
     <rect x="426" y="24" width="70" height="160" rx="5" fill="color-mix(in srgb, var(--run) 22%, var(--panel))" stroke="var(--run)"/>
     <rect x="496" y="24" width="76" height="160" rx="5" fill="color-mix(in srgb, var(--run) 16%, var(--panel))" stroke="var(--run)"/>
@@ -3434,9 +3425,9 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
   <p>The method is applied twice: once to place the segments inside the panel, and again to place customers inside each segment's rectangle, minus a strip at the top for the segment heading. Positions are worked out in a nominal space and written out as percentages, so the layout does not depend on the window size. Labels only appear when there is room: the name above roughly 52 by 26 pixels, the rate above 26 by 15, and the amount above 62 by 40.</p>
 
   <h3 id="d-algo-water">10.4 Limit-type water-fill</h3>
-  <p>The problem: split a customer's drawn amount across the five products, favouring the products that are genuinely used harder, without changing the total and without letting any product exceed the limit set aside for it.</p>
+  <p>Split a customer's drawn amount across the five limit types, biased towards the types that are genuinely worked harder, without changing the total and without letting any type exceed its own allocation.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 322" role="img" aria-label="Drawn exposure poured across five products, one filling to its cap and the surplus redistributed to the rest">
-    <text x="14" y="18" font-size="10.5" font-weight="700" fill="var(--ink)">Pass 1 — share the drawn amount out in proportion to how hard each product is worked</text>
+    <text x="14" y="18" font-size="10.5" font-weight="700" fill="var(--ink)">Pass 1 — share the drawn amount out in proportion to each type&#39;s weight</text>
     ${[["eFX",96,96],["REPO",56,22],["SBL",76,44],["FX-DERI",68,52],["SEC",72,40]].map(([l,cap,fill],i)=>{const x=44+i*98;return `<rect x="${x}" y="${132-cap}" width="70" height="${cap}" rx="4" fill="var(--panel-2)"/><rect x="${x}" y="${132-fill}" width="70" height="${fill}" rx="4" fill="color-mix(in srgb, var(--run) 45%, var(--panel))"/><rect x="${x}" y="${132-cap}" width="70" height="${cap}" rx="4" fill="none" stroke="var(--hair)"/><text x="${x+35}" y="148" text-anchor="middle" font-size="9.5" fill="var(--ink-2)">${l}</text>`;}).join("")}
     <line x1="44" y1="36" x2="114" y2="36" stroke="var(--fail)" stroke-width="2"/>
     ${DG.cap(79,30,"full — cap reached")}
@@ -3446,11 +3437,11 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
     <path d="M716,102 L716,166" stroke="var(--warn)" stroke-width="1.4" stroke-dasharray="4 3"/>
     <path d="M716,172 l-4,-6 l8,0 z" fill="var(--warn)"/>
     <line x1="14" y1="168" x2="540" y2="168" stroke="var(--hair)"/>
-    <text x="14" y="192" font-size="10.5" font-weight="700" fill="var(--ink)">Pass 2 — eFX is closed; its surplus is shared again over the products still open</text>
+    <text x="14" y="192" font-size="10.5" font-weight="700" fill="var(--ink)">Pass 2 — eFX is closed; its surplus is redistributed over the types still open</text>
     ${[["eFX",96,96,1],["REPO",56,31,0],["SBL",76,57,0],["FX-DERI",68,64,0],["SEC",72,52,0]].map(([l,cap,fill,shut],i)=>{const x=44+i*98;return `<rect x="${x}" y="${288-cap}" width="70" height="${cap}" rx="4" fill="var(--panel-2)"/><rect x="${x}" y="${288-fill}" width="70" height="${fill}" rx="4" fill="${shut?"color-mix(in srgb, var(--ink-3) 30%, var(--panel))":"color-mix(in srgb, var(--run) 45%, var(--panel))"}"/><rect x="${x}" y="${288-cap}" width="70" height="${cap}" rx="4" fill="none" stroke="var(--hair)"/><text x="${x+35}" y="304" text-anchor="middle" font-size="9.5" fill="${shut?"var(--ink-3)":"var(--ink-2)"}">${l}${shut?" (closed)":""}</text>`;}).join("")}
     ${[["REPO",1,9],["SBL",2,13],["FX-DERI",3,12],["SEC",4,12]].map(([l,i,gain])=>{const x=44+i*98;return `<rect x="${x}" y="${288-(l==="REPO"?31:l==="SBL"?57:l==="FX-DERI"?64:52)}" width="70" height="${gain}" rx="3" fill="color-mix(in srgb, var(--warn) 45%, var(--panel))"/>`;}).join("")}
-    ${DG.cap(716,204,"the orange band on each bar is the share it picked up")}
-  </svg></div><figcaption>Redistribute rather than discard, or the five products stop adding up to the customer's drawn amount. Repeat until nothing is left over — the total never changes, only where it sits.</figcaption></figure>
+    ${DG.cap(716,204,"the orange band on each bar is the surplus it absorbed")}
+  </svg></div><figcaption>Redistribute rather than discard, or the five types stop summing to the customer's drawn amount. Repeat until nothing remains — the total never changes, only its distribution.</figcaption></figure>
   <pre><code>weight for each product = share of limit x how hard that product is worked
 cap for each product    = limit x share of limit
 remaining               = the customer's drawn amount
@@ -3459,8 +3450,8 @@ repeat up to 6 times, while anything remains:
     share the remainder over the still-open products, in proportion to weight
     a product that reaches its cap takes what it can, then closes
     whatever it could not take goes back into the remainder for the next pass</code></pre>
-  <p>Because the caps add up to the whole limit, and drawn can never exceed the limit, the loop always places everything. The answer is worked out once per customer and remembered.</p>
-  <div class="note why"><b>Why not simply scale and cut off</b>Cutting a product at its cap and throwing away the surplus loses exposure. The five products would then add up to less than the customer's drawn amount, and the concentration chart would understate the book. Redistributing keeps the arithmetic exact.</div>
+  <p>Because the caps sum to the whole limit and drawn never exceeds it, the loop always places everything. Memoised per customer.</p>
+  <div class="note why"><b>Why not scale and clip</b>Cutting a product at its cap and throwing away the surplus loses exposure. The five products would then add up to less than the customer's drawn amount, and the concentration chart would understate the book. Redistributing keeps the arithmetic exact.</div>
 
   <h2 id="d-invariants">11 · Invariants &amp; acceptance tests</h2>
   <p>These statements hold true for any book the generator produces. They are the checks a rebuild should be tested against.</p>
