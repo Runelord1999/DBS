@@ -273,6 +273,9 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .trendkey span{display:inline-flex;align-items:center;gap:6px}
 .trendkey .lk{display:inline-block;width:16px;height:3px;border-radius:2px;flex:none}
 .trendkey .lk.dash{height:0;border-top:3px dashed currentColor;background:none!important;color:inherit}
+.trendkey .lk.band{height:10px;border-radius:3px;background:color-mix(in srgb,var(--gold) 30%,transparent);border-top:2px dashed var(--gold)}
+.fieldnote{display:block;font-size:0.6875rem;color:var(--ink-3);line-height:1.45;margin-top:4px}
+.fieldnote.failc{color:var(--fail);font-weight:600}
 .block .trendkey{padding:2px 0 8px;gap:12px}
 .machk{display:inline-flex;align-items:center;gap:6px;font-size:0.65625rem;color:var(--ink-2);font-weight:600;cursor:pointer;white-space:nowrap}
 .machk input{accent-color:var(--violet);width:13px;height:13px;cursor:pointer}
@@ -560,6 +563,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
         <button class="tab" role="tab" data-tab="rankings" aria-selected="false">Rankings &amp; Alerts</button>
         <button class="tab" role="tab" data-tab="carveouts" aria-selected="false">SR Carve-Outs</button>
         <button class="tab" role="tab" data-tab="requests" aria-selected="false">Limit Increase Requests</button>
+        <button class="tab" role="tab" data-tab="reserves" aria-selected="false">Limit Reserve Requests</button>
         <button class="tab" role="tab" data-tab="docs" aria-selected="false">Documentation</button>
       </div>
       <div class="tabs-right">
@@ -1314,6 +1318,8 @@ const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitTy
   carveCustomer:null, carveScope:"country", showMA:true,
   heatSize:"lg", heatView:"tree", heatTop:0, heatHideNoSR:false, heatSort:"limit", highlight:true,
   reqFilters:{customer:"",type:"",requester:"",approver:"",status:""},
+  rsvFilters:{customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""},
+  showReserve:true,
   expo:{dir:"top",n:10,seg:""}};
 
 /* ============================================================
@@ -1328,9 +1334,10 @@ const SORTS={
   breach:{key:"util",dir:-1},
   carveouts:{key:"amount",dir:-1},
   requests:{key:"created",dir:-1},
+  reserves:{key:"created",dir:-1},
   allcarve:{key:"customer",dir:1},
 };
-const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold"]);
+const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold","purpose","requester","approver"]);
 function sortTh(table,key,label,cls=""){
   const s=SORTS[table];
   const on=s.key===key;
@@ -1489,6 +1496,120 @@ function carveIndex(){
 function carveDirty(){ CARVE_BY_CUST=null; }   // call after any add/remove
 function carveoutsFor(custId){ return carveIndex().get(custId)||[]; }
 
+/* ============================================================
+   Limit reserves — a desk holds part of ONE carve-out aside for a deal it
+   expects to book, over a date window.
+
+   This is NOT the portfolio "Reserved" buffer in the pool KPIs. That buffer is
+   unallocated capacity the bank never gave to anyone. A limit reserve is a
+   claim on capacity that HAS been allocated: it does not change the approved
+   limit and it is not drawn exposure, but for the length of its window it
+   removes headroom the desk would otherwise be free to use. Which is why the
+   forward run-off charts have to show it — the run-off says how much capacity
+   comes back, and a reserve says how much of that is already spoken for.
+============================================================ */
+const RSV_PURPOSES=[
+  "Block equity cross","Jumbo bond settlement","Term repo programme",
+  "FX hedging mandate","Index rebalance flow","M&A funding leg",
+  "Sovereign issuance settlement","Option expiry cluster",
+  "ETF creation basket","Cross-currency swap unwind",
+];
+const RSV_NOTES=[
+  "Client has indicated a large ticket landing inside this window; holding capacity so the desk is not blocked on the day.",
+  "Mandate awarded but not yet dated. Reserving against the carve-out rather than asking for a permanent uplift.",
+  "Quarter-end roll expected to be materially larger than the last two quarters.",
+  "Settlement bunching around the value date leaves no headroom without a hold.",
+  "Counterparty is running close to the carve-out already; without a reserve the flow will not clear.",
+  "Anticipated new issue allocation — size confirmed verbally, documentation pending.",
+  "Bridge for a scheduled unwind; capacity returns as soon as the leg settles.",
+  "Programme trade agreed with the client, phased over the window.",
+];
+let RSVID=1;
+function seedReserves(){
+  /* Reserves ride on carve-outs that still have headroom, weighted hard towards
+     the largest — a desk reserves capacity ahead of a big deal, not against a
+     $2M slice. The bias exponent is what keeps the aggregate visible on the
+     portfolio chart instead of vanishing into a $600B pool. */
+  const pool=SEED_CARVEOUTS
+    .map(co=>({co, free: co.amountM-carveDrawn(co)}))
+    .filter(x=>x.free>=10)
+    .sort((a,b)=>b.free-a.free)
+    .slice(0,1500);
+  const out=[];
+  for(let i=0;i<170 && pool.length;i++){
+    const k=Math.min(pool.length-1, Math.floor(Math.pow(rng(),2.2)*pool.length));
+    const pick=pool.splice(k,1)[0];
+    const co=pick.co;
+    const amountM=Math.max(1,Math.round(pick.free*rand(0.28,0.82)));
+    /* Days from today, positive = future. Most reserves are near-dated because
+       a desk reserves against a deal it can see; a minority are programme trades
+       phased over two or three quarters, which is what puts a tail on the
+       forward profile instead of a cliff at four months. */
+    const programme=rng()<0.22;
+    const fromDay=Math.round(programme?rand(-25,230):rand(-25,105));
+    const toDay=fromDay+(programme?randInt(70,220):randInt(14,130));
+    const status=weightedChoice([["Approved",0.62],["Pending",0.26],["Rejected",0.12]]);
+    const createdDay=Math.min(-1, fromDay-randInt(5,45));      // never raised in the future
+    const decidedDay=status==="Pending"?null:Math.min(0, createdDay+randInt(1,10));
+    const [rqName,rqDesk]=choice(REQUESTERS);
+    const [apName,apRole]=choice(APPROVERS);
+    out.push({
+      id:"RSV-"+String(RSVID++).padStart(4,"0"),
+      carveoutId:co.id, customerId:co.customerId, scope:co.scope, label:co.label,
+      amountM, fromDay, toDay,
+      from:fmtDate(dateAt(-fromDay)), to:fmtDate(dateAt(-toDay)),
+      purpose:choice(RSV_PURPOSES),
+      requester:rqName, requesterDesk:rqDesk,
+      approver:status==="Pending"?"":apName, approverRole:status==="Pending"?"":apRole,
+      notes:choice(RSV_NOTES), status,
+      created:fmtDate(dateAt(-createdDay)), createdTs:dateAt(-createdDay).getTime(),
+      decided:decidedDay===null?"":fmtDate(dateAt(-decidedDay)),
+      decidedTs:decidedDay===null?0:dateAt(-decidedDay).getTime(),
+    });
+  }
+  return out.sort((a,b)=>b.createdTs-a.createdTs);
+}
+let RESERVES=loadLS("sr-dash-reserves-v1",seedReserves());
+RESERVES.forEach(r=>{ const n=+(r.id||"").slice(4); if(n>=RSVID) RSVID=n+1; });
+/* Where a reserve sits relative to today. Only approved reserves hold capacity;
+   a pending one is a claim nobody has agreed to yet. */
+function rsvWindow(r){
+  if(r.status!=="Approved") return r.status==="Pending"?"Awaiting":"—";
+  if(r.toDay<0) return "Expired";
+  if(r.fromDay<=0) return "Active";
+  return "Scheduled";
+}
+function rsvHoldsToday(r){ return r.status==="Approved" && r.fromDay<=0 && r.toDay>=0; }
+/* Reserved against one carve-out right now — the part of its headroom that is
+   already spoken for. */
+let RSV_BY_CARVE=null;
+function rsvIndex(){
+  if(RSV_BY_CARVE) return RSV_BY_CARVE;
+  RSV_BY_CARVE=new Map();
+  RESERVES.forEach(r=>{ if(!RSV_BY_CARVE.has(r.carveoutId)) RSV_BY_CARVE.set(r.carveoutId,[]); RSV_BY_CARVE.get(r.carveoutId).push(r); });
+  return RSV_BY_CARVE;
+}
+function rsvDirty(){ RSV_BY_CARVE=null; RSV_OVERLAY.clear(); }
+function reservesForCarve(coId){ return rsvIndex().get(coId)||[]; }
+function carveReservedM(co){ return reservesForCarve(co.id).filter(rsvHoldsToday).reduce((a,r)=>a+r.amountM,0); }
+/* Reserved capacity on each forward day, as a fraction of the approved limits in
+   scope. Index i is forward day i+1, matching runoffFractions(). */
+const RSV_OVERLAY=new Map();
+function reserveOverlay(custIds,horizon,denomM,cacheKey){
+  const key=cacheKey+"|"+horizon+"|"+Math.round(denomM);
+  if(RSV_OVERLAY.has(key)) return RSV_OVERLAY.get(key);
+  const out=new Array(horizon).fill(0);
+  RESERVES.forEach(r=>{
+    if(r.status!=="Approved") return;
+    if(custIds && !custIds.has(r.customerId)) return;
+    const a=Math.max(0,Math.round(r.fromDay)-1), b=Math.min(horizon-1,Math.round(r.toDay)-1);
+    for(let d=a;d<=b;d++) out[d]+=r.amountM;
+  });
+  if(denomM>0) for(let d=0;d<horizon;d++) out[d]/=denomM;
+  RSV_OVERLAY.set(key,out);
+  return out;
+}
+
 function matchesFilters(c){
   const f=state.filters;
   if(f.country.size && !f.country.has(c.country)) return false;
@@ -1618,9 +1739,13 @@ function trendChart(hist,fcast,days,opts={}){
   const w=opts.w||560, h=opts.h||202;
   const pad=opts.pad||36, botPad=opts.botPad||44, topPad=16;
   const lineW=opts.lineW||2;
-  const all=hist.concat(fcast);
-  const max=Math.max(1.12,...all)*1.04;
   const n=hist.length, m=fcast.length, total=n+m;
+  /* Approved limit reserves sitting on top of the run-off. The run-off says how
+     much capacity comes back; the band says how much of it is already claimed,
+     so the gap to 100% is the capacity genuinely free to trade. */
+  const resv=(opts.showReserve && opts.fcastReserve && opts.fcastReserve.length===m && opts.fcastReserve.some(v=>v>1e-9)) ? opts.fcastReserve : null;
+  const all=hist.concat(fcast, resv?fcast.map((v,i)=>v+resv[i]):[]);
+  const max=Math.max(1.12,...all)*1.04;
   const X=i=>pad+i/(total-1)*(w-pad-12);
   const baseline=h-botPad;
   const Y=v=>baseline-(v/max)*(baseline-topPad);
@@ -1663,7 +1788,27 @@ function trendChart(hist,fcast,days,opts={}){
     ma.forEach((v,i)=>{ if(v!=null) pts.push(X(i).toFixed(1)+","+Y(v).toFixed(1)); });
     if(pts.length>1) maLine=`<polyline points="${pts.join(" ")}" fill="none" stroke="var(--violet)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }
-  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend and forward settlement run-off">${monthTicks}${grid}
+  let resvBand="";
+  if(resv){
+    const top=fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v+resv[i]).toFixed(1));
+    const bot=fcast.map((v,i)=>X(n+i).toFixed(1)+","+Y(v).toFixed(1)).reverse();
+    resvBand=`<polygon points="${top.concat(bot).join(" ")}" fill="var(--gold)" opacity=".22"/>`
+      +`<polyline points="${top.join(" ")}" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    /* At portfolio scale the band is only a couple of percent of the axis — real,
+       but too thin to measure by eye. Call the peak out in words so the figure is
+       readable without inflating the data to make the shape bigger. */
+    if(opts.reserveLabel){
+      const pk=resv.reduce((bi,v,i,arr)=>v>arr[bi]?i:bi,0);
+      const px=X(n+pk), yTop=Y(fcast[pk]+resv[pk]);
+      // Park the label in the clear space above the forward curve, not on it.
+      const ly=topPad+11;
+      const atEnd=px>w*0.66;
+      resvBand+=`<line x1="${px.toFixed(1)}" y1="${yTop.toFixed(1)}" x2="${px.toFixed(1)}" y2="${(ly+3).toFixed(1)}" stroke="var(--gold)" stroke-width="1" stroke-dasharray="2 2"/>`
+        +`<circle cx="${px.toFixed(1)}" cy="${yTop.toFixed(1)}" r="2.2" fill="var(--gold)"/>`
+        +`<text x="${(atEnd?px-6:px+6).toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${atEnd?"end":"start"}" fill="var(--gold)" font-size="9.5" font-weight="700">${esc(opts.reserveLabel)}</text>`;
+    }
+  }
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Utilization trend, forward settlement run-off${resv?" and reserved capacity":""}">${monthTicks}${grid}
     <line x1="${pad}" y1="${baseline}" x2="${w-12}" y2="${baseline}" stroke="var(--hair)"/>
     <rect x="${nowX}" y="${topPad}" width="${(w-12-nowX).toFixed(1)}" height="${(baseline-topPad).toFixed(1)}" fill="var(--pass)" opacity=".045"/>
     <line x1="${nowX}" y1="${topPad-6}" x2="${nowX}" y2="${baseline}" stroke="var(--ink-3)" stroke-dasharray="2 3"/>
@@ -1671,6 +1816,7 @@ function trendChart(hist,fcast,days,opts={}){
     ${weekTicks}
     <polyline points="${histPts}" fill="none" stroke="var(--run)" stroke-width="${lineW}" stroke-linejoin="round"/>
     ${maLine}
+    ${resvBand}
     <polyline points="${fcastPts}" fill="none" stroke="var(--pass)" stroke-width="2" stroke-dasharray="5 4"/>
     ${monthLbls}${yearLbls}
     </svg>`;
@@ -1925,11 +2071,12 @@ function heatLegend(){
   </div>`;
 }
 /* Legend shared by every instance of the trend chart. */
-function trendLegend(showMA){
+function trendLegend(showMA,hasReserve){
   return `<div class="trendkey">
     <span><i class="lk" style="background:var(--run)"></i>Actual utilization</span>
     ${showMA?`<span><i class="lk" style="background:var(--violet)"></i>3-month moving average</span>`:""}
     <span><i class="lk dash" style="color:var(--pass)"></i>Forward settlement run-off</span>
+    ${hasReserve?`<span data-tip="Approved limit reserves held for expected deals, stacked on top of the run-off. The gap between the top of this band and the 100% line is the capacity genuinely free to trade."><i class="lk band"></i>Reserved for expected deals</span>`:""}
     <span><i class="lk dash" style="color:var(--fail)"></i>100% limit</span>
   </div>`;
 }
@@ -2125,6 +2272,12 @@ function paneOverviewPortfolio(){
   const inScope=new Set(list.map(x=>x.id));
   const fcast=runoffProjection(TXNS.filter(t=>inScope.has(t.customer.id)),curUtil,FWD_DAYS);
   const projected30=fcast[29]||0;
+  /* Approved reserves over the same forward window and the same denominator as
+     every other utilization rate on this page: approved limits in scope. */
+  const rsvScope = filtersActive()||state.overviewSegClick ? inScope : null;
+  const fcastRsv=reserveOverlay(rsvScope,FWD_DAYS,total,rsvScope?"ov|"+inScope.size:"ov|all");
+  const rsvPeakM=Math.max(0,...fcastRsv)*total;
+  const rsvNowM=RESERVES.filter(r=>rsvHoldsToday(r)&&(!rsvScope||rsvScope.has(r.customerId))).reduce((a,r)=>a+r.amountM,0);
 
   // concentration by country / limit type — total, utilized and %
   const byCountry=COUNTRIES.map(co=>{
@@ -2194,9 +2347,9 @@ function paneOverviewPortfolio(){
     ${state.heatView==="tree"?treemap(heatShown):heatmap(heatShown)}</div>
 
   <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="Solid blue = actual limit-weighted utilization, 18 months of daily history. It is spiky because every booking consumes SR immediately and every maturity releases it. Purple = 3-month trailing moving average, which strips that noise out. Dashed green = the settlement run-off of exposure already on the book, projected 12 months out from each trade's own remaining tenor. It only declines because future trades are unknowable — this is committed exposure maturing, not a forecast of new business. Red dashed line is the 100% limit.">i</i></h3>
-      <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
-      <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
-      ${trendLegend(state.showMA)}</div>`;
+      <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><label class="machk" data-tip="Show or hide approved limit reserves stacked on the forward run-off. A reserve holds part of a carve-out for an expected deal, so it removes headroom that would otherwise be free."><input type="checkbox" id="ov-resv"${state.showReserve?" checked":""}> Reserves</label><span class="slo">18 months actual + 12 months run-off${rsvPeakM>0?" · "+fmtM(rsvPeakM)+" reserved at peak":""}</span></span></div>
+      <div class="panel-body"><div class="chart-well tall">${trendChart(trendHist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46,showReserve:state.showReserve,fcastReserve:fcastRsv,reserveLabel:rsvPeakM>0?fmtM(rsvPeakM)+" reserved at peak":""})}</div></div>
+      ${trendLegend(state.showMA,state.showReserve&&rsvPeakM>0)}</div>`;
 }
 function paneOverviewCustomer(c){
   const days=state.dateRangeDays;
@@ -2219,6 +2372,8 @@ function paneOverviewCustomer(c){
   // portfolio chart — the sidebar date range governs the stats above, not this.
   const hist=[]; for(let off=HIST_DAYS-1; off>=0; off--){ const idx=c.series.length-1-off; hist.push(idx>=0?c.series[idx]:0); }
   const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
+  const custRsv=reserveOverlay(new Set([c.id]),FWD_DAYS,c.limitM,"cust|"+c.id);
+  const custRsvPeakM=Math.max(0,...custRsv)*c.limitM;
   const typeRows=LIMIT_TYPES.map(t=>{
     const amt=custLimitTypeM(c,t), utilAmt=custTypeDrawnM(c,t);
     const rate=amt>0?utilAmt/amt:0;
@@ -2239,9 +2394,9 @@ function paneOverviewCustomer(c){
       <div class="panel-body"><div class="colhd"><div style="width:54px"></div><div style="flex:1"></div><div style="width:56px;text-align:right">Amount</div><div style="width:56px;text-align:right">Drawn</div></div><div class="dist-list">${typeRows}</div></div></div>
   </div>
   <div class="panel mt14"><div class="panel-hd"><h3>Utilization trend &amp; capacity run-off<i class="info" data-tip="Solid blue = this customer's actual daily utilization over 18 months; it is spiky because each booking consumes SR at once and each maturity releases it. Purple = 3-month trailing moving average. Dashed green = the settlement run-off of outstanding exposure over the next 12 months, from each trade's own remaining tenor. It only declines because future trades are unknowable. Red dashed line is the 100% limit.">i</i></h3>
-    <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><span class="slo">18 months actual + 12 months run-off</span></span></div>
-    <div class="panel-body"><div class="chart-well tall">${trendChart(hist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46})}</div></div>
-    ${trendLegend(state.showMA)}</div>
+    <span style="display:flex;align-items:center;gap:14px"><label class="machk" data-tip="Show or hide the 3-month (91-day) trailing moving average."><input type="checkbox" id="ov-ma"${state.showMA?" checked":""}> 3-month MA</label><label class="machk" data-tip="Show or hide approved limit reserves stacked on the forward run-off."><input type="checkbox" id="ov-resv"${state.showReserve?" checked":""}> Reserves</label><span class="slo">18 months actual + 12 months run-off${custRsvPeakM>0?" · "+fmtM(custRsvPeakM)+" reserved at peak":""}</span></span></div>
+    <div class="panel-body"><div class="chart-well tall">${trendChart(hist,fcast,HIST_DAYS,{w:1180,h:330,showMA:state.showMA,lineW:1.1,pad:38,botPad:46,showReserve:state.showReserve,fcastReserve:custRsv,reserveLabel:custRsvPeakM>0?fmtM(custRsvPeakM)+" reserved":""})}</div></div>
+    ${trendLegend(state.showMA,state.showReserve&&custRsvPeakM>0)}</div>
   <div class="panel mt14"><div class="panel-hd"><h3>Recent transactions</h3><span class="slo">${recentTxns.length} most recent</span></div>
     ${recentTxns.length?`<table><thead><tr><th>Trade ID</th><th>Date</th><th>Asset class</th><th>Product</th><th class="r">Notional</th><th class="r">SR consumed</th><th>Limit type</th><th class="r">Status</th></tr></thead>
     <tbody>${recentTxns.map(t=>`<tr><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No transactions recorded for this customer.</div>`}</div>`;
@@ -2374,7 +2529,10 @@ function allocBarRow(c,scope){
     const col=ALLOC_PALETTE[i%ALLOC_PALETTE.length];
     const up=carveUtilPct(co), drawn=carveDrawn(co);
     const over=up>=0.999;
-    const tip=`${co.label} — carve-out ${fmtM(co.amountM)} (${w.toFixed(0)}% of limit) · drawn ${fmtM(drawn)} (${fmtPct(up)}) · headroom ${fmtM(Math.max(0,co.amountM-drawn))}`;
+    const held=carveReservedM(co);
+    const tip=`${co.label} — carve-out ${fmtM(co.amountM)} (${w.toFixed(0)}% of limit) · drawn ${fmtM(drawn)} (${fmtPct(up)})`
+      +(held>0?` · reserved ${fmtM(held)}`:"")
+      +` · free ${fmtM(Math.max(0,co.amountM-drawn-held))}`;
     return `<div class="allocseg" style="width:${w}%;--seg:${col}" data-tip="${esc(tip)}">
       <i class="allocfill${over?" over":""}" style="width:${Math.min(100,up*100).toFixed(1)}%"></i>
       <span class="alloctxt">${w>=7?esc(co.label):""}${w>=11?`<small>${(up*100).toFixed(0)}% drawn</small>`:""}</span>
@@ -2397,13 +2555,16 @@ function carveScopeTable(c,scope){
   const remaining=c.limitM-allocated;
   const rows=applySort(list,"carveouts",{
     label:co=>co.label, amount:co=>co.amountM, share:co=>co.amountM/c.limitM,
-    drawn:co=>carveDrawn(co), util:co=>carveUtilPct(co), threshold:co=>carveThresholdLabel(co), created:co=>co.created,
+    drawn:co=>carveDrawn(co), reserved:co=>carveReservedM(co), util:co=>carveUtilPct(co),
+    threshold:co=>carveThresholdLabel(co), created:co=>co.created,
   });
-  return `<div class="panel"><div class="panel-hd"><h3>${meta.label} carve-outs<i class="info" data-tip="Each row allocates part of ${esc(c.name)}'s ${fmtM(c.limitM)} SR limit to one ${meta.label.toLowerCase()} label.">i</i></h3><span class="slo">${list.length} allocated · ${fmtM(allocated)} of ${fmtM(c.limitM)}</span></div>
-    ${list.length?`<div class="table-wrap"><table><thead><tr>${sortTh("carveouts","label",meta.label)}${sortTh("carveouts","amount","Carve-out","r")}${sortTh("carveouts","share","% of limit","r")}${sortTh("carveouts","drawn","Drawn","r")}${sortTh("carveouts","util","Util.","r")}${sortTh("carveouts","threshold","Alert at")}<th class="r"></th></tr></thead>
+  const reservedTotal=list.reduce((a,co)=>a+carveReservedM(co),0);
+  return `<div class="panel"><div class="panel-hd"><h3>${meta.label} carve-outs<i class="info" data-tip="Each row allocates part of ${esc(c.name)}'s ${fmtM(c.limitM)} SR limit to one ${meta.label.toLowerCase()} label. Reserved is the part of that slice held today for an expected deal — approved but not yet drawn, and not available to anything else.">i</i></h3><span class="slo">${list.length} allocated · ${fmtM(allocated)} of ${fmtM(c.limitM)}</span></div>
+    ${list.length?`<div class="table-wrap"><table><thead><tr>${sortTh("carveouts","label",meta.label)}${sortTh("carveouts","amount","Carve-out","r")}${sortTh("carveouts","share","% of limit","r")}${sortTh("carveouts","drawn","Drawn","r")}${sortTh("carveouts","reserved","Reserved","r")}${sortTh("carveouts","util","Util.","r")}${sortTh("carveouts","threshold","Alert at")}<th class="r"></th></tr></thead>
     <tbody>${rows.map(co=>{const up=carveUtilPct(co);const br=carveThresholdBreached(co);
-      return `<tr><td>${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num muted">${(co.amountM/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(co)} ${br?'<span class="tag t-fail" style="margin-left:4px">Breached</span>':''}</td><td class="r"><button class="xbtn" data-delco="${co.id}" data-tip="Remove this carve-out" aria-label="Remove ${esc(co.label)} carve-out">&times;</button></td></tr>`;}).join("")}</tbody>
-    <tfoot class="tfoot"><tr><td>Allocated</td><td class="r num">${fmtM(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num" colspan="4">Unallocated headroom: <b class="${remaining<0?'failc':'passc'}">${fmtM(remaining)}</b></td></tr></tfoot></table></div>`
+      const rsv=carveReservedM(co);
+      return `<tr><td>${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num muted">${(co.amountM/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${rsv>0?'gold':'muted'}"${rsv>0?` data-tip="${esc(reservesForCarve(co.id).filter(rsvHoldsToday).map(r=>r.id+" · "+fmtM(r.amountM)+" · "+r.purpose+" (to "+r.to+")").join(" — "))}"`:''}>${rsv>0?fmtM(rsv):"—"}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(co)} ${br?'<span class="tag t-fail" style="margin-left:4px">Breached</span>':''}</td><td class="r"><button class="xbtn" data-delco="${co.id}" data-tip="Remove this carve-out" aria-label="Remove ${esc(co.label)} carve-out">&times;</button></td></tr>`;}).join("")}</tbody>
+    <tfoot class="tfoot"><tr><td>Allocated</td><td class="r num">${fmtM(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(list.reduce((a,co)=>a+carveDrawn(co),0))}</td><td class="r num ${reservedTotal>0?'gold':'muted'}">${reservedTotal>0?fmtM(reservedTotal):"—"}</td><td class="r num" colspan="3">Unallocated headroom: <b class="${remaining<0?'failc':'passc'}">${fmtM(remaining)}</b></td></tr></tfoot></table></div>`
     :`<div class="empty">No ${meta.label.toLowerCase()} carve-outs for this customer yet — add one above.</div>`}</div>`;
 }
 function paneCarveouts(){
@@ -2495,8 +2656,8 @@ function paneRequests(){
           <label class="formfield"><span>Effective to</span><input type="date" id="rq-end"></label>
         </div>
         <div class="formgrid mt14">
-          <label class="formfield"><span>Current limit (S$M)</span><input type="text" id="rq-current" readonly placeholder="Select a customer"></label>
-          <label class="formfield"><span>Requested new limit (S$M)</span><input type="number" id="rq-newlimit" min="1" step="1" required></label>
+          <label class="formfield"><span>Current limit ($M)</span><input type="text" id="rq-current" readonly placeholder="Select a customer"></label>
+          <label class="formfield"><span>Requested new limit ($M)</span><input type="number" id="rq-newlimit" min="1" step="1" required></label>
         </div>
         <label class="formfield mt14"><span>Justification</span><textarea id="rq-notes" placeholder="Reason for the increase — e.g. seasonal flow, new mandate, temporary settlement bridge…" required></textarea></label>
         <div class="mt14"><button type="submit" class="btn">Submit request</button></div>
@@ -2572,6 +2733,196 @@ function requestsTable(){
         <td><span class="tag ${cls}">${rq.status}</span></td>
         <td class="r">${rq.status==="Pending"?`<button class="btn-ghost" data-reqapprove="${esc(rq.id)}">Approve</button> <button class="btn-ghost btn-danger" data-reqreject="${esc(rq.id)}">Reject</button>`:""}</td></tr>`;
     }).join(""):`<tr><td colspan="13"><div class="empty">No requests match these filters.</div></td></tr>`}</tbody></table></div></div>`;
+}
+
+/* ============================================================
+   TAB: Limit Reserve Requests
+   A desk holds part of a carve-out for a deal it expects to book. The reserve
+   does not change the approved limit and is not drawn exposure — it removes
+   headroom for the length of its window, which is why it shows on the forward
+   charts as a band on top of the run-off.
+============================================================ */
+function rsvCarveOptions(custId,scope,sel){
+  if(!custId||!scope) return "";
+  return carveoutsFor(custId).filter(co=>co.scope===scope)
+    .sort((a,b)=>a.label.localeCompare(b.label))
+    .map(co=>{
+      const free=Math.max(0,co.amountM-carveDrawn(co)-carveReservedM(co));
+      return `<option value="${co.id}"${sel===co.id?" selected":""}>${esc(co.label)} — ${fmtM(co.amountM)} carve-out, ${fmtM(free)} free</option>`;
+    }).join("");
+}
+function paneReserves(){
+  const scoped=RESERVES.filter(r=>{const c=CUST_BY_ID[r.customerId];return c&&matchesFilters(c);});
+  const activeM=scoped.filter(rsvHoldsToday).reduce((a,r)=>a+r.amountM,0);
+  const activeN=scoped.filter(rsvHoldsToday).length;
+  const schedList=scoped.filter(r=>r.status==="Approved"&&r.fromDay>0);
+  const schedM=schedList.reduce((a,r)=>a+r.amountM,0);
+  const pendList=scoped.filter(r=>r.status==="Pending");
+  const pendM=pendList.reduce((a,r)=>a+r.amountM,0);
+  const scopeIds=filtersActive()?new Set(filteredWithLimit().map(c=>c.id)):null;
+  const denom=filteredWithLimit().reduce((a,c)=>a+c.limitM,0);
+  const ov=reserveOverlay(scopeIds,FWD_DAYS,denom,scopeIds?"rsvtab|"+scopeIds.size:"rsvtab|all");
+  const peakIdx=ov.reduce((bi,v,i,arr)=>v>arr[bi]?i:bi,0);
+  const peakM=ov[peakIdx]*denom;
+  const kpis=[
+    ["Active reserves",fmtM(activeM),activeN+" holding capacity today","var(--gold)","gold",
+     "Approved reserves whose window is open right now. This capacity sits inside an approved carve-out but is spoken for, so it is not headroom the desk can use for anything else."],
+    ["Scheduled",fmtM(schedM),schedList.length+" windows not yet open","var(--cyan)","cyanc",
+     "Approved reserves whose window starts in the future. They do not hold capacity yet, but they will."],
+    ["Awaiting approval",fmtM(pendM),pendList.length+" pending","var(--warn)","warnc",
+     "Requested but not yet decided. Pending reserves are deliberately excluded from the forward charts — nobody has agreed to them."],
+    ["Peak forward hold",fmtM(peakM),"day "+(peakIdx+1)+" · "+fmtPct(ov[peakIdx],2)+" of limits","var(--violet)","violetc",
+     "The busiest day for reserved capacity over the next 12 months, across every approved reserve in view. This is the high-water mark of the band on the run-off chart."],
+  ];
+  return `<div class="kpis kpis-4">${kpis.map(([l,v,sub,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${sub}</small></div>`).join("")}</div>
+
+  <div class="panel mt14"><div class="panel-hd"><h3>Reserved capacity over the next 12 months<i class="info" data-tip="Approved reserves only, summed by day and shown against the approved limits in view. Each block is one window opening and closing. This is the same series drawn as a band on the Overview run-off chart.">i</i></h3>
+    <span class="slo">${scoped.filter(r=>r.status==="Approved").length} approved reserves · peak ${fmtM(peakM)}</span></div>
+    <div class="panel-body"><div class="chart-well">${reserveProfileChart(ov,denom)}</div></div></div>
+
+  <div class="panel mt14"><div class="panel-hd"><h3>Request a limit reserve</h3><span class="slo">hold part of a carve-out for an expected deal</span></div>
+    <div class="panel-body">
+      <form id="reserve-form">
+        <div class="formgrid">
+          <label class="formfield"><span>Customer</span><select id="rv-customer" required><option value="">Select customer…</option>${custOptionsHtml()}</select></label>
+          <label class="formfield"><span>Carve-out scope</span>
+            <div class="radiorow">
+              <label class="radiopill"><input type="radio" name="rv-scope" value="country" checked> Country</label>
+              <label class="radiopill"><input type="radio" name="rv-scope" value="limitType"> Limit type</label>
+            </div></label>
+        </div>
+        <div class="formgrid mt14">
+          <label class="formfield"><span>Carve-out</span><select id="rv-carve" required><option value="">Select a customer first…</option></select></label>
+          <label class="formfield"><span>Amount to reserve ($M)</span><input type="number" id="rv-amount" min="1" step="1" required placeholder="e.g. 120"><small class="fieldnote" id="rv-free"></small></label>
+        </div>
+        <div class="formgrid mt14">
+          <label class="formfield"><span>Hold from</span><input type="date" id="rv-from" required></label>
+          <label class="formfield"><span>Hold until</span><input type="date" id="rv-to" required></label>
+        </div>
+        <div class="formgrid mt14">
+          <label class="formfield"><span>Expected deal</span><select id="rv-purpose">${RSV_PURPOSES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("")}</select></label>
+          <div class="formfield"><span>&nbsp;</span><p class="fieldnote" style="margin:0;padding-top:8px">A reserve does not raise the limit — it holds capacity that already exists, for a period. To raise the limit itself, use the Limit Increase Requests tab.</p></div>
+        </div>
+        <label class="formfield mt14"><span>Justification</span><textarea id="rv-notes" placeholder="Why the capacity needs holding — expected size, client, timing…" required></textarea></label>
+        <div class="mt14" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button type="submit" class="btn">Submit reserve request</button><span class="fieldnote" id="rv-warn"></span></div>
+      </form>
+    </div></div>
+  ${reservesTable()}`;
+}
+/* Stacked forward profile of reserved capacity — one step per window opening
+   and closing, so the shape reads the same way the band on the trend chart does. */
+function reserveProfileChart(ov,denomM){
+  const w=1180,h=200,pad=44,botPad=40,topPad=14;
+  const baseline=h-botPad, plotW=w-pad-12;
+  const peak=Math.max(...ov,1e-9);
+  const X=i=>pad+i/(ov.length-1)*plotW;
+  const Y=v=>baseline-(v/(peak*1.12))*(baseline-topPad);
+  let grid="";
+  for(let g=1;g<=3;g++){
+    const v=peak*1.12*g/4;
+    grid+=`<line x1="${pad}" y1="${Y(v).toFixed(1)}" x2="${w-12}" y2="${Y(v).toFixed(1)}" stroke="var(--hair)" stroke-width=".5"/>`
+      +`<text x="${pad-6}" y="${(Y(v)+3).toFixed(1)}" text-anchor="end" fill="var(--ink-3)" font-size="9" font-family="var(--mono)">${fmtM(v*denomM)}</text>`;
+  }
+  const pts=ov.map((v,i)=>X(i).toFixed(1)+","+Y(v).toFixed(1)).join(" ");
+  const area=`${X(0).toFixed(1)},${baseline} ${pts} ${X(ov.length-1).toFixed(1)},${baseline}`;
+  let monthLbls="",monthTicks="";
+  for(let k=0;k<ov.length;k++){
+    const d=new Date(TODAY.getTime()+(k+1)*dayMs);
+    if(d.getDate()===1){
+      const xx=X(k).toFixed(1);
+      monthTicks+=`<line x1="${xx}" y1="${baseline}" x2="${xx}" y2="${(baseline+6).toFixed(1)}" stroke="var(--ink-3)" stroke-width="1" opacity=".8"/>`;
+      monthLbls+=`<text x="${xx}" y="${(baseline+19).toFixed(1)}" fill="var(--ink-2)" font-size="9.5" font-weight="600" text-anchor="middle">${d.toLocaleDateString('en-GB',{month:'short'})}</text>`;
+    }
+  }
+  if(peak<=1e-9) return `<div class="empty">No approved reserves in the current view.</div>`;
+  return `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Reserved capacity by day over the next 12 months">
+    ${grid}
+    <polygon points="${area}" fill="var(--gold)" opacity=".22"/>
+    <polyline points="${pts}" fill="none" stroke="var(--gold)" stroke-width="1.8" stroke-linejoin="round"/>
+    <line x1="${pad}" y1="${baseline}" x2="${w-12}" y2="${baseline}" stroke="var(--hair)"/>
+    ${monthTicks}${monthLbls}
+    <text x="${pad}" y="${topPad-2}" fill="var(--ink-3)" font-size="9">peak ${fmtM(peak*denomM)} · ${fmtPct(peak,2)} of approved limits in view</text>
+  </svg>`;
+}
+function rvOptions(field,sel){
+  const vals=[...new Set(RESERVES.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  return vals.map(v=>`<option value="${esc(v)}"${sel===v?" selected":""}>${esc(v)}</option>`).join("");
+}
+function reservesTable(){
+  const f=state.rsvFilters;
+  const rows=RESERVES.filter(r=>{
+    const c=CUST_BY_ID[r.customerId];
+    const q=f.customer.toLowerCase();
+    const name=(c?c.name:r.customerId).toLowerCase();
+    if(q && !name.includes(q) && !(r.id||"").toLowerCase().includes(q) && !(r.label||"").toLowerCase().includes(q)) return false;
+    if(f.scope && r.scope!==f.scope) return false;
+    if(f.purpose && r.purpose!==f.purpose) return false;
+    if(f.requester && r.requester!==f.requester) return false;
+    if(f.approver && (r.approver||"")!==f.approver) return false;
+    if(f.status && r.status!==f.status) return false;
+    if(f.window && rsvWindow(r)!==f.window) return false;
+    return true;
+  });
+  const sorted=applySort(rows,"reserves",{
+    id:r=>r.id||"",
+    customer:r=>{const c=CUST_BY_ID[r.customerId];return c?c.name:r.customerId;},
+    scope:r=>CARVE_SCOPES[r.scope]?CARVE_SCOPES[r.scope].label:r.scope,
+    label:r=>r.label||"",
+    amount:r=>+r.amountM||0,
+    share:r=>{const c=CUST_BY_ID[r.customerId];return c&&c.limitM?r.amountM/c.limitM:0;},
+    from:r=>r.fromDay,
+    days:r=>(r.toDay-r.fromDay),
+    purpose:r=>r.purpose||"",
+    requester:r=>r.requester||"",
+    approver:r=>r.approver||"",
+    created:r=>r.createdTs||0,
+    status:r=>r.status,
+  });
+  const active=Object.values(f).some(Boolean);
+  const fc=inner=>`<th class="fcell">${inner}</th>`;
+  const holding=RESERVES.filter(rsvHoldsToday).length;
+  return `<div class="panel mt14"><div class="panel-hd"><h3>Reserve requests<i class="info" data-tip="Every limit reserve, with the desk that raised it and the credit officer who decided it. Window shows where the hold sits relative to today: Active is holding capacity now, Scheduled starts later, Expired has been released. Sort any column; filter beneath the headers.">i</i></h3>
+    <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="slo">${rows.length.toLocaleString()} of ${RESERVES.length.toLocaleString()} · ${RESERVES.filter(r=>r.status==="Pending").length} pending · ${holding} holding capacity today</span>${active?`<button type="button" class="btn-ghost" id="rv-clearfilters">Clear filters</button>`:""}</span></div>
+    <div class="table-wrap"><table><thead>
+      <tr>${sortTh("reserves","id","Reserve")}${sortTh("reserves","customer","Customer")}${sortTh("reserves","scope","Scope")}${sortTh("reserves","label","Carve-out")}${sortTh("reserves","amount","Reserved","r")}${sortTh("reserves","share","% of limit","r")}<th>Window</th>${sortTh("reserves","days","Days","r")}${sortTh("reserves","purpose","Expected deal")}${sortTh("reserves","requester","Requester")}${sortTh("reserves","approver","Approver")}${sortTh("reserves","created","Submitted")}${sortTh("reserves","status","Status")}<th class="r"></th></tr>
+      <tr class="filterrow">
+        ${fc(`<input class="fin" id="rvf-customer" placeholder="ID, name or label…" value="${esc(f.customer)}">`)}
+        <th class="fcell"></th>
+        ${fc(`<select class="fin" id="rvf-scope"><option value="">All</option>${Object.entries(CARVE_SCOPES).map(([k,v])=>`<option value="${k}"${f.scope===k?" selected":""}>${v.label}</option>`).join("")}</select>`)}
+        <th class="fcell"></th><th class="fcell"></th><th class="fcell"></th>
+        ${fc(`<select class="fin" id="rvf-window"><option value="">All</option>${["Active","Scheduled","Expired","Awaiting"].map(t=>`<option value="${t}"${f.window===t?" selected":""}>${t}</option>`).join("")}</select>`)}
+        <th class="fcell"></th>
+        ${fc(`<select class="fin" id="rvf-purpose"><option value="">All</option>${rvOptions("purpose",f.purpose)}</select>`)}
+        ${fc(`<select class="fin" id="rvf-requester"><option value="">All</option>${rvOptions("requester",f.requester)}</select>`)}
+        ${fc(`<select class="fin" id="rvf-approver"><option value="">All</option>${rvOptions("approver",f.approver)}</select>`)}
+        <th class="fcell"></th>
+        ${fc(`<select class="fin" id="rvf-status"><option value="">All</option>${["Pending","Approved","Rejected"].map(t=>`<option value="${t}"${f.status===t?" selected":""}>${t}</option>`).join("")}</select>`)}
+        <th class="fcell"></th>
+      </tr></thead>
+    <tbody>${sorted.length?sorted.slice(0,300).map(r=>{
+      const c=CUST_BY_ID[r.customerId];
+      const cls=r.status==="Approved"?"t-pass":r.status==="Rejected"?"t-fail":"t-warn";
+      const win=rsvWindow(r);
+      const wcls=win==="Active"?"t-gold":win==="Scheduled"?"t-run":win==="Expired"?"t-muted":"t-warn";
+      const share=c&&c.limitM?r.amountM/c.limitM:0;
+      return `<tr data-tip="${esc(r.notes||"")}">
+        <td class="mono">${esc(r.id)}</td>
+        <td>${c?`<span class="clickable" data-cust="${c.id}" style="cursor:pointer">${esc(c.name)}</span><div class="sub2">${SEGMENT_LABEL[c.segment]} · ${esc(c.country)}</div>`:esc(r.customerId)}</td>
+        <td><span class="tag ${r.scope==="country"?"t-run":"t-violet"}">${CARVE_SCOPES[r.scope]?CARVE_SCOPES[r.scope].label:r.scope}</span></td>
+        <td class="muted">${esc(r.label)}</td>
+        <td class="r num gold">${fmtM(r.amountM)}</td>
+        <td class="r num muted">${(share*100).toFixed(1)}%</td>
+        <td><span class="tag ${wcls}">${win}</span><div class="sub2">${esc(r.from)} → ${esc(r.to)}</div></td>
+        <td class="r num muted">${r.toDay-r.fromDay}</td>
+        <td class="muted">${esc(r.purpose||"—")}</td>
+        <td>${esc(r.requester||"—")}${r.requesterDesk?`<div class="sub2">${esc(r.requesterDesk)}</div>`:""}</td>
+        <td>${r.approver?esc(r.approver):`<span class="muted">awaiting</span>`}${r.approverRole?`<div class="sub2">${esc(r.approverRole)}</div>`:""}</td>
+        <td class="muted">${esc(r.created||"—")}</td>
+        <td><span class="tag ${cls}">${r.status}</span></td>
+        <td class="r">${r.status==="Pending"?`<button class="btn-ghost" data-rsvapprove="${esc(r.id)}">Approve</button> <button class="btn-ghost btn-danger" data-rsvreject="${esc(r.id)}">Reject</button>`
+          :(r.status==="Approved"&&r.toDay>=0?`<button class="btn-ghost btn-danger" data-rsvrelease="${esc(r.id)}">Release</button>`:"")}</td></tr>`;
+    }).join(""):`<tr><td colspan="14"><div class="empty">No reserve requests match these filters.</div></td></tr>`}</tbody></table></div>
+    ${sorted.length>300?`<div class="foot">Showing 300 of ${sorted.length.toLocaleString()} in this sort order.</div>`:""}</div>`;
 }
 
 /* ============================================================
@@ -2673,16 +3024,19 @@ function custDrawer(c){
   const cur=custUtilCur(c);
   // Forward path = run-off of this customer's outstanding exposure as it settles.
   const fcast=runoffProjection(TXNS.filter(t=>t.customer.id===c.id),cur,FWD_DAYS);
+  const dRsv=reserveOverlay(new Set([c.id]),FWD_DAYS,c.limitM,"cust|"+c.id);
+  const dRsvPeakM=Math.max(0,...dRsv)*c.limitM;
   const hasCarve=carveoutsFor(c.id).length>0;
   openDrawer("Customer"+(c.rank?" · global rank #"+c.rank:""),c.name,
     `<div class="dmeta"><span class="kv">Segment <b>${SEGMENT_LABEL[c.segment]}</b></span><span class="kv">Country <b>${c.country}</b></span><span class="kv">SR limit <b>${fmtM(c.limitM)}</b></span><span class="tag ${custStatusTag(c)[1]}" style="align-self:center">${custStatusTag(c)[0]}</span></div>
      <div class="block"><div class="lbl">Utilization &amp; capacity outlook — 18 months actual + 12 months settlement run-off</div>
-       <div class="chart-well" style="height:220px;margin:2px 0 4px">${trendChart(hist,fcast,HIST_DAYS,{w:820,h:290,showMA:state.showMA,lineW:1,pad:34,botPad:46})}</div>
-       ${trendLegend(state.showMA)}
+       <div class="chart-well" style="height:220px;margin:2px 0 4px">${trendChart(hist,fcast,HIST_DAYS,{w:820,h:290,showMA:state.showMA,lineW:1,pad:34,botPad:46,showReserve:state.showReserve,fcastReserve:dRsv,reserveLabel:dRsvPeakM>0?fmtM(dRsvPeakM)+" reserved":""})}</div>
+       ${trendLegend(state.showMA,state.showReserve&&dRsvPeakM>0)}
        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
          <span class="kv">Avg <b>${fmtPct(s.avg)}</b> <small>${days}d</small></span><span class="kv">Max <b>${fmtPct(s.max)}</b> <small>${days}d</small></span><span class="kv">Min <b>${fmtPct(s.min)}</b> <small>${days}d</small></span>
          <span class="kv">Now <b class="${cur>1?'failc':cur>=0.9?'warnc':'passc'}">${fmtPct(cur)}</b></span>
          <span class="kv">Headroom <b class="${cur>=1?'failc':'passc'}">${fmtM(Math.max(0,c.limitM-Math.min(1,cur)*c.limitM))}</b></span>
+         ${dRsvPeakM>0?`<span class="kv" data-tip="Approved limit reserves held against this customer's carve-outs, at their busiest point over the next 12 months. Reserved capacity is not drawn, but it is not free either.">Reserved (peak) <b class="gold">${fmtM(dRsvPeakM)}</b></span>`:""}
        </div></div>
      ${hasCarve?`<div class="block"><div class="lbl">Carve-out allocation &amp; utilization</div>${allocBarRow(c,"country")}${allocBarRow(c,"limitType")}
        <div class="alloclegend" style="margin-bottom:0"><span><span class="lgd-split"></span>Solid = drawn · pale = unused headroom</span></div></div>`:""}
@@ -2722,7 +3076,8 @@ const DOC_SECTIONS=[
     {id:"d-data-txn", t:"5.5 Transactions"},
     {id:"d-data-carve", t:"5.6 Carve-outs"},
     {id:"d-data-req", t:"5.7 Limit increase requests"},
-    {id:"d-data-derived", t:"5.8 Derived measures"}]},
+    {id:"d-data-rsv", t:"5.8 Limit reserves"},
+    {id:"d-data-derived", t:"5.9 Derived measures"}]},
   {id:"d-controls", t:"6 · Global controls", kids:[
     {id:"d-controls-filters", t:"6.1 Filters"},
     {id:"d-controls-range", t:"6.2 Date range"},
@@ -2734,7 +3089,8 @@ const DOC_SECTIONS=[
     {id:"d-tab-rankings", t:"7.4 Rankings & Alerts"},
     {id:"d-tab-carveouts", t:"7.5 SR Carve-Outs"},
     {id:"d-tab-requests", t:"7.6 Limit Increase Requests"},
-    {id:"d-tab-docs", t:"7.7 Documentation"}]},
+    {id:"d-tab-reserves", t:"7.7 Limit Reserve Requests"},
+    {id:"d-tab-docs", t:"7.8 Documentation"}]},
   {id:"d-viz", t:"8 · Visual system", kids:[
     {id:"d-viz-tokens", t:"8.1 Colour tokens"},
     {id:"d-viz-heat", t:"8.2 Utilization ramp"},
@@ -2841,8 +3197,9 @@ function paneDocs(){
   <table><thead><tr><th style="width:13em">Term</th><th>As used on this site</th></tr></thead><tbody>
     <tr><td><b>Drawn / utilized</b></td><td>Current utilization <b>capped at 100%</b>, times the limit. Anything above the limit is reported separately as excess, never folded into drawn.</td></tr>
     <tr><td><b>Excess exposure</b></td><td>The portion above 100%. Held outside the pool and outside every utilization rate.</td></tr>
-    <tr><td><b>The pool</b></td><td>Approved customer limits <b>plus</b> the reserved buffer. Utilization percentages divide by approved limits only — see <a href="#d-data-derived">5.8</a>.</td></tr>
-    <tr><td><b>Reserved</b></td><td>An unallocated portfolio-level buffer, fixed here at 12% of approved limits. It drops to zero under any filter, because it cannot be attributed to a country or segment.</td></tr>
+    <tr><td><b>The pool</b></td><td>Approved customer limits <b>plus</b> the reserved buffer. Utilization percentages divide by approved limits only — see <a href="#d-data-derived">5.9</a>.</td></tr>
+    <tr><td><b>Reserved (buffer)</b></td><td>An unallocated portfolio-level buffer, fixed here at 12% of approved limits. It drops to zero under any filter, because it cannot be attributed to a country or segment. Distinct from a limit reserve, below.</td></tr>
+    <tr><td><b>Limit reserve</b></td><td>A hold a desk places on part of <i>one carve-out</i> for a deal it expects to book, over a date window. It does not change the approved limit and it is not drawn exposure — for the length of its window it removes headroom that would otherwise be free. See <a href="#d-data-rsv">5.8</a>.</td></tr>
     <tr><td><b>Utilization rate</b></td><td>Always limit-weighted: total drawn over total approved limits for the customers in scope, never an average of per-customer percentages.</td></tr>
     <tr><td><b>Risk bands</b></td><td>Fixed boundaries used by the rail, the histogram and the highlight: breach above 100%, critical 90–100%, watch 75–90%, dormant at 0%.</td></tr>
     <tr><td><b>Dormant</b></td><td>Current utilization at zero. Not "low" — exactly zero.</td></tr>
@@ -2861,7 +3218,7 @@ function paneDocs(){
     <tr><td>Rebuilding the site</td><td>Section 3, then section 5, then the checklist in section 12</td></tr>
     <tr><td>Learning the screens</td><td>Sections 7 and 9</td></tr>
     <tr><td>Changing the look</td><td>Sections 4 and 8</td></tr>
-    <tr><td>Questioning a number on a screen</td><td>Section 2.2, then 5.8, then the invariants in section 11</td></tr>
+    <tr><td>Questioning a number on a screen</td><td>Section 2.2, then 5.9, then the invariants in section 11</td></tr>
     <tr><td>Judging whether the mock data is realistic</td><td>Sections 5.3 to 5.5, then the limitations in section 13</td></tr>
   </tbody></table>
 
@@ -2932,7 +3289,9 @@ function paneDocs(){
     <tr><td><code>heatView</code>, <code>heatTop</code>, <code>heatSize</code>, <code>heatSort</code>, <code>heatHideNoSR</code></td><td>mixed</td><td>The heatmap and treemap controls. Defaults are treemap, All, large, sorted by total SR. See <a href="#d-tab-overview">7.1</a>.</td></tr>
     <tr><td><code>highlight</code></td><td>boolean</td><td>The Data Highlight master switch. On by default.</td></tr>
     <tr><td><code>expo</code></td><td>dir, n, seg</td><td>The exposure ranking: top or bottom, how many names, which segment.</td></tr>
-    <tr><td><code>reqFilters</code></td><td>object</td><td>The column filters on the requests table.</td></tr>
+    <tr><td><code>reqFilters</code></td><td>object</td><td>The column filters on the limit increase requests table.</td></tr>
+    <tr><td><code>rsvFilters</code></td><td>object</td><td>The column filters on the limit reserve table.</td></tr>
+    <tr><td><code>showReserve</code></td><td>boolean</td><td>Whether the reserve band is drawn on the forward half of the trend charts. On by default.</td></tr>
   </tbody></table>
 
   <h3 id="d-arch-storage">3.4 Persistence</h3>
@@ -2941,7 +3300,8 @@ function paneDocs(){
     <tr><td><code>sr-dash-theme-v2</code></td><td>light, dark or dbs</td><td>The suffix was bumped when light became the default, so an older saved choice cannot override it.</td></tr>
     <tr><td><code>sr-dash-fontsize</code></td><td>a position on the size scale</td><td>A saved position outside the current scale falls back to the default rather than leaving the page unsized.</td></tr>
     <tr><td><code>sr-dash-carveouts-v3</code></td><td>the full carve-out list</td><td>Written whenever one is added or removed. The suffix was bumped when customer ids were regenerated — a list saved against an older book cannot be matched to this one.</td></tr>
-    <tr><td><code>sr-dash-requests-v2</code></td><td>the full request list</td><td>Written on submit, approve and reject.</td></tr>
+    <tr><td><code>sr-dash-requests-v2</code></td><td>the full limit increase request list</td><td>Written on submit, approve and reject.</td></tr>
+    <tr><td><code>sr-dash-reserves-v1</code></td><td>the full limit reserve list</td><td>Written on submit, approve, reject and release.</td></tr>
   </tbody></table>
   <div class="note"><b>Rule</b>Every read and write is wrapped so that a failure cannot break the page. Private browsing and blocked site data must quietly fall back to the defaults. Bump the suffix on a key whenever the shape or the meaning of what is stored changes.</div>
 
@@ -3009,7 +3369,7 @@ function paneDocs(){
     ${DG.arrowR(514,53,32)}
     ${DG.box(552,26,150,54,"Trades",nf(TXNS.length)+" tickets")}
     ${DG.arrowR(708,53,32)}
-    ${DG.box(746,26,140,54,"Carve-outs + requests","seeded from the book")}
+    ${DG.box(746,26,140,54,"Carve-outs, requests","reserves ride on carve-outs")}
     <line x1="450" y1="86" x2="450" y2="104" stroke="var(--ink-3)" stroke-width="1.3"/>
     <path d="M450,110 l-4,-6 l8,0 z" fill="var(--ink-3)"/>
     ${DG.box(300,110,300,46,"Derived figures","drawn, headroom, averages, concentration","color-mix(in srgb, var(--run) 10%, var(--panel))")}
@@ -3172,7 +3532,70 @@ function paneDocs(){
   <p>There are ${REQUESTERS.length} relationship managers across six desks, and ${APPROVERS.length} credit officers across four roles. The requested increase is between 1.15 and 2.30 times the current limit. Roughly 52% are approved, 31% still pending and 17% rejected.</p>
   <div class="note"><b>The rules the data must obey</b>A pending request has no approver and no decision date. A decided request has both, and the decision always falls one to twelve days <i>after</i> submission, never before it. The effective window starts within ten days of submission and runs for 21 to 180 days.</div>
 
-  <h3 id="d-data-derived">5.8 Derived measures</h3>
+  <h3 id="d-data-rsv">5.8 Limit reserves</h3>
+  <p>A limit reserve is a hold a desk places on part of <b>one carve-out</b>, for a deal it expects to book but has not booked yet. It runs for a date window and then lapses.</p>
+  <div class="note warn"><b>Not the same thing as the Reserved buffer</b>Two different ideas share the word. The <b>Reserved</b> figure in the pool KPIs is capacity the bank never allocated to anyone. A <b>limit reserve</b> is a claim on capacity that <i>has</i> been allocated: it sits inside an approved carve-out, and it is neither drawn exposure nor free headroom. They never mix — the buffer is portfolio-level, a reserve belongs to one customer and one carve-out label.</div>
+  <figure><div class="figscroll"><svg viewBox="0 0 900 280" role="img" aria-label="A carve-out split into drawn exposure, a reserved hold and free headroom, and the same reserve shown as a band on the forward run-off">
+    <text x="14" y="18" font-size="10.5" font-weight="700" fill="var(--ink)">One carve-out, today</text>
+    <rect x="14" y="30" width="300" height="34" rx="5" fill="color-mix(in srgb, var(--fail) 26%, var(--panel))" stroke="var(--fail)"/>
+    <text x="164" y="52" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--ink)">Drawn</text>
+    <rect x="316" y="30" width="170" height="34" rx="5" fill="color-mix(in srgb, var(--gold) 34%, var(--panel))" stroke="var(--gold)"/>
+    <text x="401" y="52" text-anchor="middle" font-size="10.5" font-weight="700" fill="var(--ink)">Reserved</text>
+    <rect x="488" y="30" width="220" height="34" rx="5" fill="color-mix(in srgb, var(--pass) 22%, var(--panel))" stroke="var(--pass)"/>
+    <text x="598" y="52" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--ink)">Free to trade</text>
+    <line x1="14" y1="76" x2="708" y2="76" stroke="var(--ink-3)"/>
+    <line x1="14" y1="72" x2="14" y2="80" stroke="var(--ink-3)"/><line x1="708" y1="72" x2="708" y2="80" stroke="var(--ink-3)"/>
+    ${DG.cap(361,92,"the carve-out")}
+    ${DG.cap(401,110,"approved, not drawn, and not available to anything else")}
+    <line x1="14" y1="128" x2="886" y2="128" stroke="var(--hair)"/>
+    <text x="14" y="150" font-size="10.5" font-weight="700" fill="var(--ink)">The same reserve on the forward run-off</text>
+    <polyline points="60,172 180,172 180,188 300,188 300,198 420,198 420,210 560,210 560,218 700,218 700,224 870,224" fill="none" stroke="var(--pass)" stroke-width="2" stroke-dasharray="5 4"/>
+    <polygon points="180,166 300,166 300,176 420,176 420,188 560,188 560,210 420,210 420,198 300,198 300,188 180,188" fill="var(--gold)" opacity=".28"/>
+    <polyline points="180,166 300,166 300,176 420,176 420,188 560,188" fill="none" stroke="var(--gold)" stroke-width="1.6" stroke-dasharray="3 3"/>
+    <line x1="180" y1="160" x2="180" y2="194" stroke="var(--gold)" stroke-width="1" stroke-dasharray="2 2"/>
+    <line x1="560" y1="182" x2="560" y2="216" stroke="var(--gold)" stroke-width="1" stroke-dasharray="2 2"/>
+    ${DG.cap(174,163,"window opens","end")}
+    ${DG.cap(566,181,"window closes","start")}
+    ${DG.cap(62,188,"run-off falls as trades settle","start")}
+    ${DG.cap(700,240,"capacity is back, and free again")}
+    <line x1="14" y1="250" x2="886" y2="250" stroke="var(--hair)"/>
+    ${DG.cap(450,266,"The run-off says how much capacity comes back. The band says how much of it is already spoken for.")}
+  </svg></div><figcaption>A reserve does not move the run-off line. It sits on top of it, so the gap left to the 100% limit is the capacity genuinely free to trade.</figcaption></figure>
+  <pre><code>{
+  id:"RSV-0001",
+  carveoutId:"CO-0123", customerId:"C001",
+  scope:"country" or "limitType", label:"Hong Kong Branch",
+  amountM:120,                     // held out of that carve-out
+  fromDay:14, toDay:96,            // days from today, negative = already open
+  from:"13 Aug 2026", to:"03 Nov 2026",
+  purpose:"Block equity cross",
+  requester:"Amanda Chok", requesterDesk:"GFM Sales",
+  approver:"Gerald Ma",   approverRole:"Senior Credit Officer",
+  notes:"...", status:"Pending" / "Approved" / "Rejected",
+  created:"29 Jul 2026", decided:"30 Jul 2026"
+}</code></pre>
+  <h4>Seeding</h4>
+  <p><b>${nf(RESERVES.length)}</b> reserves are generated, one per carve-out at most. They are drawn from carve-outs that still have headroom, weighted hard towards the largest — a desk reserves capacity ahead of a big deal, not against a $2M slice. Each takes 28% to 82% of what is free on its carve-out.</p>
+  <p>Most windows are near-dated, opening anywhere from 25 days ago to 105 days out and running 14 to 130 days. About a fifth are programme trades phased over two or three quarters, opening up to 230 days out and running as long as 220 days.</p>
+  <p><b>Live:</b> ${nf(RESERVES.filter(r=>r.status==="Approved").length)} approved, ${nf(RESERVES.filter(r=>r.status==="Pending").length)} pending, ${nf(RESERVES.filter(r=>r.status==="Rejected").length)} rejected. ${nf(RESERVES.filter(rsvHoldsToday).length)} are holding capacity today, worth <b>${fmtM(RESERVES.filter(rsvHoldsToday).reduce((a,r)=>a+r.amountM,0))}</b>.</p>
+  <h4>Two states, not one</h4>
+  <p>A reserve has a <b>status</b> — the workflow state, Pending, Approved or Rejected — and separately a <b>window</b>, derived from today's date against its dates.</p>
+  <table><thead><tr><th style="width:10em">Window</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><b>Active</b></td><td>Approved, and the window is open right now. This reserve is holding capacity.</td></tr>
+    <tr><td><b>Scheduled</b></td><td>Approved, but the window has not opened yet. It will hold capacity later.</td></tr>
+    <tr><td><b>Expired</b></td><td>Approved, but the window has closed. The capacity has already gone back.</td></tr>
+    <tr><td><b>Awaiting</b></td><td>Still pending. Deliberately excluded from every chart — nobody has agreed to it.</td></tr>
+  </tbody></table>
+  <h4>What a reserve does and does not touch</h4>
+  <table><thead><tr><th style="width:18em">Figure</th><th>Effect of an approved reserve</th></tr></thead><tbody>
+    <tr><td>Approved limit, the pool, Utilized, Available</td><td><b>None.</b> A reserve is not exposure and does not change any limit. Every pool identity in <a href="#d-invariants">section 11</a> holds unchanged.</td></tr>
+    <tr><td>Carve-out free headroom</td><td><b>Reduced</b> while the window is open. This is what stops two desks reserving the same capacity — the form offers the carve-out less what is drawn <i>and</i> less what is already held.</td></tr>
+    <tr><td>Forward run-off charts</td><td><b>Shown as a band</b> on top of the run-off, for the days its window covers.</td></tr>
+    <tr><td>Carve-out tab</td><td>A <b>Reserved</b> column and a figure in the allocation bar tooltip.</td></tr>
+  </tbody></table>
+  <div class="note why"><b>Why the band sits on top rather than being subtracted</b>Subtracting a reserve from the run-off would say capacity has already gone. It has not — the deal is expected, not booked. Stacking it says something more useful and more honest: this much is coming back, and this much of it is already claimed. The distance from the top of the band to the 100% line is then the capacity a desk can actually sell.</div>
+
+  <h3 id="d-data-derived">5.9 Derived measures</h3>
   <p>Nothing on the screens is stored — every figure is worked out from the book at the moment it is drawn. This diagram is the one to keep in mind, because most questions about a number come back to it.</p>
   <figure><div class="figscroll"><svg viewBox="0 0 900 240" role="img" aria-label="Anatomy of a limit: drawn and headroom make up the approved limit, excess sits above it, reserved sits outside it">
     <text x="14" y="20" font-size="10.5" font-weight="700" fill="var(--ink)">A healthy customer</text>
@@ -3207,6 +3630,7 @@ function paneDocs(){
     <tr><td>Peak utilization</td><td>The highest rate reached inside the selected date range.</td></tr>
     <tr><td>Dormant capital</td><td>The limits of every customer currently drawing nothing at all.</td></tr>
     <tr><td>Top-5 / top-10 concentration</td><td>The share of all drawn exposure held by the five or ten largest names.</td></tr>
+    <tr><td>Reserved capacity</td><td>Approved limit reserves whose window covers a given day, summed over the customers in scope. It is reported alongside the pool figures, never inside them — see <a href="#d-data-rsv">5.8</a>.</td></tr>
   </tbody></table>
   <h4>One denominator, everywhere</h4>
   <div class="note"><b>Deliberate rule</b>Every utilization percentage on the site divides by <b>approved limits</b>. The reserved buffer is capacity nobody has been given yet; folding it into the denominator would make the book look less busy than it is. The pool donut is the one deliberate exception — it is a picture of the whole pool and has to add up to 100%, which is why its slices are labelled <i>share of pool</i> rather than utilization.</div>
@@ -3245,7 +3669,7 @@ function paneDocs(){
   <ul>
     <li><b>Exposure ranking</b> — the top or bottom N customers by drawn exposure. The count is selectable (${EXPO_COUNTS.join(" / ")}), it can be narrowed to one segment, and the list scrolls inside a fixed-height tile so the row stays level with its neighbours. When several names are tied at zero drawn, the largest approved limit wins — so a Bottom ranking surfaces the biggest idle limits rather than an alphabetical accident.</li>
     <li><b>Concentration by country</b> — approved limit, drawn and rate for each booking centre.</li>
-    <li><b>Concentration by limit type</b> — the same three figures per product, using the split described in <a href="#d-data-derived">5.8</a>.</li>
+    <li><b>Concentration by limit type</b> — the same three figures per product, using the split described in <a href="#d-data-derived">5.9</a>.</li>
   </ul>
   <h4>Customer heatmap and treemap</h4>
   <p>One tile per customer, covering every name currently in view. The controls above it:</p>
@@ -3261,6 +3685,7 @@ function paneDocs(){
   <div class="note why"><b>One ranking, not two</b>The same criterion decides both which names make the cut and what order they appear in, with the customer name breaking ties. Ranking by one measure and displaying by another means raising the count reshuffles what is already on screen instead of appending to the end of it.</div>
   <h4>Utilization trend and capacity run-off</h4>
   <p>Full width at the foot of the tab. It shows eighteen months of actual daily utilization, an optional three-month moving average, and twelve months of forward settlement run-off, with a marked line at today and the forward half lightly shaded.</p>
+  <p>A gold band sits on top of the run-off wherever approved <b>limit reserves</b> are holding capacity, with its peak called out in words. A <b>Reserves</b> checkbox turns it off. At portfolio scale the band is only a few percent of the axis — that is the true proportion, so it is annotated rather than exaggerated. On a single customer it is usually much thicker. See <a href="#d-data-rsv">5.8</a>.
   <p>The horizontal axis is a real calendar: a small tick every Monday, a taller tick and a gridline on the first of each month, month names underneath, and the year printed under each January. Month names thin themselves out automatically when they would otherwise collide.</p>
   <div class="note"><b>The forward line can only fall</b>It is not a forecast. It is the run-off of exposure <b>already on the book</b>, worked out from how long each live trade still has to run. Future trades cannot be known, so the line steps down as today's book matures and never rises. It is a staircase rather than a curve because settlement happens on value dates, in lumps.</div>
 
@@ -3289,7 +3714,24 @@ function paneDocs(){
   <p>The table carries the request id, the customer with their segment and country, the type, current and requested limits, the uplift as a percentage, the effective window, the requester with their desk, the approver with their role, the submitted and decision dates, and the status. Every column sorts, and dates sort on their real timestamps rather than on the text shown. A filter row under the headers gives free text over id and customer name, plus dropdowns for type, requester, approver and status, a Clear filters button and a count of how many matched.</p>
   <p>Approve and Reject act on a pending request, stamp the deciding officer and the date, and save. They act on the request's <b>id</b>, never on its position in the table — a handler keyed to position approves the wrong request the moment the table can be sorted or filtered.</p>
 
-  <h3 id="d-tab-docs">7.7 Documentation</h3>
+  <h3 id="d-tab-reserves">7.7 Limit Reserve Requests</h3>
+  <p>Where a desk asks to hold part of a carve-out for a deal it expects to book. The workflow mirrors <a href="#d-tab-requests">7.6</a>, but the thing being asked for is different: an increase changes the limit, a reserve holds capacity that already exists. See <a href="#d-data-rsv">5.8</a> for the model.</p>
+  <h4>Summary strip</h4>
+  <p>Four figures, all answering to the rail filters: <b>Active reserves</b> holding capacity today, <b>Scheduled</b> windows that have not opened yet, <b>Awaiting approval</b>, and the <b>Peak forward hold</b> — the busiest single day over the next twelve months, which is the high-water mark of the band on the run-off chart.</p>
+  <h4>Reserved capacity over the next 12 months</h4>
+  <p>The same daily series the trend chart draws as a band, shown here at its own scale so the shape is readable. Each step is a window opening or closing. It decays because reserves are mostly near-dated; the long tail is the programme trades.</p>
+  <h4>The request form</h4>
+  <p>It cascades: pick a customer, pick a scope, and the carve-out list fills with that customer's carve-outs in that scope, each showing how much of it is free. Two things are refused before submission:</p>
+  <ul>
+    <li>An amount above the free headroom — the carve-out less what is drawn <b>and</b> less what is already reserved on it, so two desks cannot hold the same capacity twice.</li>
+    <li>A window that ends on or before it starts.</li>
+  </ul>
+  <p>A submitted reserve arrives as Pending and holds nothing until someone approves it.</p>
+  <h4>The table</h4>
+  <p>Reserve id, customer with segment and country, scope, carve-out label, amount, share of the customer's limit, window state with its dates, length in days, expected deal, requester with desk, approver with role, submitted date and status. Every column sorts; the filter row gives free text over id, customer name and carve-out label, plus dropdowns for scope, window, expected deal, requester, approver and status.</p>
+  <p>Pending rows carry <b>Approve</b> and <b>Reject</b>. Approved rows whose window has not yet closed carry <b>Release</b>, which hands the capacity back immediately after a confirmation naming the reserve. As on the requests table, all three act on the reserve <b>id</b> rather than the row position.</p>
+
+  <h3 id="d-tab-docs">7.8 Documentation</h3>
   <p>This tab. The topic tree on the left follows the reader down the page: on each scroll it finds the last heading that has passed a line just below the top of the window, and highlights that entry, scrolling the tree itself if the entry has drifted out of sight.</p>
   <div class="note why"><b>Why not the obvious approach</b>The first attempt watched for headings entering a band near the top of the window. That fails inside a long section, because once the heading has scrolled past, no heading is in the band at all and the tree goes blank. Tracking the last heading that has gone by never has that gap.</div>
   <p>The tree and the page are generated from a single list of sections, and the wiring writes a console warning if any entry in that list points at a heading that no longer exists — so the tree cannot silently rot as sections are edited.</p>
@@ -3316,6 +3758,7 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
     <tr><td>Trend and run-off</td><td>SVG polylines</td><td>Actual, moving average and run-off, over a real calendar axis.</td></tr>
     <tr><td>Heatmap</td><td>A CSS grid of buttons</td><td>Columns fill automatically to a minimum width per size, and detail is shed by CSS at each size.</td></tr>
     <tr><td>Treemap</td><td>Positioned buttons</td><td>Squarified layout in two levels: segments first, then customers inside each segment.</td></tr>
+    <tr><td>Reserve profile</td><td>SVG area plus polyline</td><td>Reserved capacity by forward day on the Limit Reserve Requests tab, at its own scale.</td></tr>
     <tr><td>Mini bars</td><td>Nested elements</td><td>Concentration rows, carve-out fills and allocation bars.</td></tr>
   </tbody></table>
 
@@ -3474,6 +3917,10 @@ repeat up to 6 times, while anything remains:
     <tr><td>16</td><td>Pending requests carry no approver and no decision date; decided requests carry both, and no decision predates its submission.</td></tr>
     <tr><td>17</td><td>Every trade's status agrees with its maturity — nothing is settled before its value date.</td></tr>
     <tr><td>18</td><td>The blotter honours the selected date range.</td></tr>
+    <tr><td>19</td><td>No limit reserve exceeds the free headroom of the carve-out it sits on.</td></tr>
+    <tr><td>20</td><td>Every reserve window ends after it starts, and no reserve is raised or decided in the future.</td></tr>
+    <tr><td>21</td><td>Only approved reserves appear in the forward band; pending and rejected ones contribute nothing.</td></tr>
+    <tr><td>22</td><td>Reserves change no pool figure: invariants 1 to 4 hold identically with reserves present or removed.</td></tr>
   </tbody></table>
   <h4>Rendering checks</h4>
   <ul>
@@ -3494,7 +3941,8 @@ repeat up to 6 times, while anything remains:
     <li><b>Derived figures</b> — drawn, headroom, averages, the water-filled product split. Check invariants 1 to 8.</li>
     <li><b>Filters and rail</b> — the shared checkbox panel, the date range, the rail figures.</li>
     <li><b>Overview</b> — headline strip, the two rows of three panels, then the heatmap, then the treemap, then the trend chart.</li>
-    <li><b>Remaining tabs</b> — Customers, Blotter, Rankings, Carve-outs, Requests.</li>
+    <li><b>Remaining tabs</b> — Customers, Blotter, Rankings, Carve-outs, Limit Increase Requests.</li>
+    <li><b>Limit reserves</b> — the reserve model, the forward overlay, the band on the trend charts, then the tab. It comes after carve-outs because a reserve has no meaning without one. Assert invariants 19 to 22.</li>
     <li><b>Interactions</b> — the sorting mechanism, the drawer, drill-down, and Data Highlight last, because it depends on tags emitted by every other panel.</li>
     <li><b>Persistence</b> — the four storage keys, each read and written safely.</li>
     <li><b>This document</b> — update it in the same change as the behaviour it describes.</li>
@@ -3505,7 +3953,9 @@ repeat up to 6 times, while anything remains:
     <tr><td>Drawing cost at full scale</td><td>The heatmap set to All draws ${nf(CUSTOMERS.length)} tiles and takes roughly a second to paint. A production build over a book this size would need to draw only what is on screen, or aggregate on a server. Here, the Top-N control is the answer.</td></tr>
     <tr><td>The portfolio line is smoother than any single name</td><td>This is genuine diversification, not a shortcut. Averaging ${nf(WITH_LIMIT.length)} books damps the block-trade spikes that are obvious on one customer. It was deliberately left alone.</td></tr>
     <tr><td>The treemap leaves out names with nothing to measure</td><td>A name with no limit — or nothing drawn, when sizing by utilized — has no area and cannot be drawn. The heatmap is where those names are visible.</td></tr>
-    <tr><td>Reserved disappears under a filter</td><td>The reserved buffer is a portfolio-level number and cannot honestly be attributed to a country or segment, so it drops to zero whenever a filter is on. See <a href="#d-controls-rail">6.3</a>.</td></tr>
+    <tr><td>The reserve band is thin at portfolio scale</td><td>Approved reserves peak at ${fmtPct(Math.max.apply(null,reserveOverlay(null,FWD_DAYS,WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),"doclim")),2)} of approved limits, so on the portfolio chart the band is a few pixels. That is the honest proportion; it is annotated with its peak in words rather than inflated. The per-customer charts and the reserve tab's own chart show it at a readable scale.</td></tr>
+    <tr><td>Reserves are not netted against expected drawings</td><td>When the anticipated deal is actually booked, a real system would release the reserve as the exposure lands. Here a reserve simply lapses at the end of its window, so for a short period a booked deal and its reserve can both be counted against headroom.</td></tr>
+    <tr><td>Reserved buffer disappears under a filter</td><td>The reserved buffer is a portfolio-level number and cannot honestly be attributed to a country or segment, so it drops to zero whenever a filter is on. See <a href="#d-controls-rail">6.3</a>.</td></tr>
     <tr><td>Carve-out storage size</td><td>Around ${nf(CARVEOUTS.length)} seeded carve-outs come to roughly a megabyte when saved. The write is wrapped safely, so hitting the browser's storage quota fails quietly instead of breaking the page.</td></tr>
     <tr><td>One device only</td><td>Everything is saved in a single browser's local storage. Nothing is shared, synced or recoverable.</td></tr>
     <tr><td>No accessibility audit</td><td>Roles and keyboard focus are handled in places, but the build has not been tested with a screen reader, and the heatmap in particular carries its meaning in colour.</td></tr>
@@ -3520,13 +3970,14 @@ repeat up to 6 times, while anything remains:
 /* ============================================================
    Top-level render
 ============================================================ */
-const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests,docs:paneDocs};
+const PANES={overview:paneOverview,customers:paneCustomers,blotter:paneBlotter,rankings:paneRankings,carveouts:paneCarveouts,requests:paneRequests,reserves:paneReserves,docs:paneDocs};
 function render(){
   renderSidebarStats();
   renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
   document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
   if(state.tab==="requests") wireRequestForm();
+  if(state.tab==="reserves") wireReserveForm();
   if(state.tab==="carveouts") wireCarveoutForm();
   if(state.tab==="docs") wireDocs();
   // Repaint the pinned selection AFTER the pane is rebuilt — the rows it marks
@@ -3589,6 +4040,25 @@ document.addEventListener("click",e=>{
   const reqapprove=e.target.closest("[data-reqapprove]"); if(reqapprove){rqDecide(reqapprove.dataset.reqapprove,"Approved");return;}
   const reqreject=e.target.closest("[data-reqreject]"); if(reqreject){rqDecide(reqreject.dataset.reqreject,"Rejected");return;}
   const rqclear=e.target.closest("#rq-clearfilters"); if(rqclear){state.reqFilters={customer:"",type:"",requester:"",approver:"",status:""};render();return;}
+  const rsvDecide=(id,status)=>{
+    const r=RESERVES.find(x=>x.id===id); if(!r) return;
+    r.status=status;
+    if(status!=="Pending" && !r.approver){ const [n,role]=choice(APPROVERS); r.approver=n; r.approverRole=role; }
+    const now=new Date(); r.decided=fmtDate(now); r.decidedTs=now.getTime();
+    saveLS("sr-dash-reserves-v1",RESERVES); rsvDirty(); render();
+  };
+  const rsvap=e.target.closest("[data-rsvapprove]"); if(rsvap){rsvDecide(rsvap.dataset.rsvapprove,"Approved");return;}
+  const rsvrj=e.target.closest("[data-rsvreject]"); if(rsvrj){rsvDecide(rsvrj.dataset.rsvreject,"Rejected");return;}
+  const rsvrel=e.target.closest("[data-rsvrelease]");
+  if(rsvrel){
+    const id=rsvrel.dataset.rsvrelease, r=RESERVES.find(x=>x.id===id);
+    if(r) askConfirm("Release reserve",
+      `Release <b>${esc(r.id)}</b> — ${fmtM(r.amountM)} held on <b>${esc(r.label)}</b> for ${esc((CUST_BY_ID[r.customerId]||{}).name||r.customerId)}? The capacity returns to headroom immediately and the forward charts will redraw without it.`,
+      "Release",
+      ()=>{ RESERVES=RESERVES.filter(x=>x.id!==id); saveLS("sr-dash-reserves-v1",RESERVES); rsvDirty(); render(); });
+    return;
+  }
+  const rvclear=e.target.closest("#rv-clearfilters"); if(rvclear){state.rsvFilters={customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""};render();return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
   if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
 });
@@ -3606,6 +4076,11 @@ document.addEventListener("input",e=>{
     requestAnimationFrame(()=>{const el=$("#rqf-customer");if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}});
     return;
   }
+  if(e.target.id==="rvf-customer"){
+    state.rsvFilters.customer=e.target.value; render();
+    requestAnimationFrame(()=>{const el=$("#rvf-customer");if(el){el.focus();el.selectionStart=el.selectionEnd=el.value.length;}});
+    return;
+  }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
     const found=WITH_LIMIT.find(c=>c.name===name);
@@ -3620,12 +4095,15 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
+  if(e.target.id==="ov-resv"){ state.showReserve=e.target.checked; render(); return; }
   if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
   if(e.target.id==="hm-sort"){ state.heatSort=e.target.value; render(); return; }
   if(e.target.id==="expo-n"){ state.expo.n=+e.target.value; render(); return; }
   if(e.target.id==="expo-seg"){ state.expo.seg=e.target.value; render(); return; }
   const RQF={"rqf-type":"type","rqf-requester":"requester","rqf-approver":"approver","rqf-status":"status"};
   if(RQF[e.target.id]){ state.reqFilters[RQF[e.target.id]]=e.target.value; render(); return; }
+  const RVF={"rvf-scope":"scope","rvf-window":"window","rvf-purpose":"purpose","rvf-requester":"requester","rvf-approver":"approver","rvf-status":"status"};
+  if(RVF[e.target.id]){ state.rsvFilters[RVF[e.target.id]]=e.target.value; render(); return; }
   if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
   if(e.target.id==="ov-cust-search"){
     const name=e.target.value.trim();
@@ -3634,6 +4112,72 @@ document.addEventListener("change",e=>{
     if(newView!==state.customerView){ state.customerView=newView; render(); }
   }
 });
+
+/* The reserve form cascades: customer -> scope -> carve-out -> free headroom.
+   Free headroom is the carve-out less what is drawn AND less what is already
+   reserved on it, so two desks cannot quietly reserve the same capacity. */
+function wireReserveForm(){
+  const f=$("#reserve-form"); if(!f) return;
+  const cust=()=>$("#rv-customer").value;
+  const scope=()=>f.querySelector('input[name="rv-scope"]:checked').value;
+  const freeOf=id=>{ const co=CARVEOUTS.find(x=>x.id===id); if(!co) return 0;
+    return Math.max(0, co.amountM-carveDrawn(co)-carveReservedM(co)); };
+  function syncCarve(){
+    const sel=$("#rv-carve");
+    const opts=rsvCarveOptions(cust(),scope(),"");
+    sel.innerHTML = cust() ? (opts||'<option value="">No carve-outs in this scope</option>') : '<option value="">Select a customer first…</option>';
+    syncFree();
+  }
+  function syncFree(){
+    const id=$("#rv-carve").value, note=$("#rv-free");
+    if(!id){ note.textContent=""; return; }
+    const co=CARVEOUTS.find(x=>x.id===id);
+    const held=carveReservedM(co);
+    note.textContent="Free to reserve: "+fmtM(freeOf(id))+" of a "+fmtM(co.amountM)+" carve-out"+(held>0?" ("+fmtM(held)+" already held)":"");
+    validate();
+  }
+  function validate(){
+    const id=$("#rv-carve").value, amt=+$("#rv-amount").value||0, warn=$("#rv-warn");
+    const from=$("#rv-from").value, to=$("#rv-to").value;
+    let msg="";
+    if(id && amt>freeOf(id)) msg="Amount exceeds the free headroom on this carve-out.";
+    else if(from && to && new Date(to)<=new Date(from)) msg="The hold must end after it starts.";
+    warn.textContent=msg;
+    warn.className="fieldnote"+(msg?" failc":"");
+    return !msg;
+  }
+  $("#rv-customer").addEventListener("change",syncCarve);
+  f.querySelectorAll('input[name="rv-scope"]').forEach(r=>r.addEventListener("change",syncCarve));
+  $("#rv-carve").addEventListener("change",syncFree);
+  ["rv-amount","rv-from","rv-to"].forEach(id=>$("#"+id).addEventListener("input",validate));
+  // Default the window to a sensible month starting next week.
+  const d1=new Date(TODAY.getTime()+7*dayMs), d2=new Date(TODAY.getTime()+45*dayMs);
+  const iso=d=>d.toISOString().slice(0,10);
+  if(!$("#rv-from").value) $("#rv-from").value=iso(d1);
+  if(!$("#rv-to").value) $("#rv-to").value=iso(d2);
+  syncCarve();
+  f.addEventListener("submit",e=>{
+    e.preventDefault();
+    if(!validate()) return;
+    const co=CARVEOUTS.find(x=>x.id===$("#rv-carve").value); if(!co) return;
+    const from=new Date($("#rv-from").value), to=new Date($("#rv-to").value);
+    const dayOf=d=>Math.round((d.getTime()-TODAY.getTime())/dayMs);
+    const now=new Date();
+    RESERVES.unshift({
+      id:"RSV-"+String(RSVID++).padStart(4,"0"),
+      carveoutId:co.id, customerId:co.customerId, scope:co.scope, label:co.label,
+      amountM:+$("#rv-amount").value,
+      fromDay:dayOf(from), toDay:dayOf(to),
+      from:fmtDate(from), to:fmtDate(to),
+      purpose:$("#rv-purpose").value,
+      requester:"You", requesterDesk:"Submitted from this dashboard",
+      approver:"", approverRole:"",
+      notes:$("#rv-notes").value, status:"Pending",
+      created:fmtDate(now), createdTs:now.getTime(), decided:"", decidedTs:0,
+    });
+    saveLS("sr-dash-reserves-v1",RESERVES); rsvDirty(); render();
+  });
+}
 
 function wireCarveoutForm(){
   const search=$("#co-cust-search");
