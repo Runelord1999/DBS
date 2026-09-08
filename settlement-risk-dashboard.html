@@ -322,6 +322,7 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .t-run{background:color-mix(in srgb,var(--run) 16%,transparent);color:var(--run)}
 .t-violet{background:color-mix(in srgb,var(--violet) 16%,transparent);color:var(--violet)}
 .t-muted{background:color-mix(in srgb,var(--ink-3) 16%,transparent);color:var(--ink-3)}
+.t-gold{background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
 .muted{color:var(--ink-3)}
 .foot{padding:10px 16px;border-top:1px solid var(--hair);font-size:0.6875rem;color:var(--ink-3);line-height:1.55}
 .foot b{color:var(--gold)}
@@ -1537,12 +1538,39 @@ function carveoutsFor(custId){ return carveIndex().get(custId)||[]; }
    forward run-off charts have to show it — the run-off says how much capacity
    comes back, and a reserve says how much of that is already spoken for.
 ============================================================ */
-const RSV_PURPOSES=[
-  "Block equity cross","Jumbo bond settlement","Term repo programme",
-  "FX hedging mandate","Index rebalance flow","M&A funding leg",
-  "Sovereign issuance settlement","Option expiry cluster",
-  "ETF creation basket","Cross-currency swap unwind",
+/* Deal events. A jumbo issue, an index rebalance or an M&A settlement is not one
+   counterparty — many desks reserve capacity for the SAME window, so reserves
+   cluster on event dates instead of scattering. That clustering is what puts real
+   steps in the reserve line: it jumps when an event opens and drops when it
+   closes, on its own dates.
+
+   Those dates are deliberately OFF the month-end grid. Trades with a tenor of 30
+   days or more roll their maturity to month-end (see the transactions section), so
+   the run-off steps down on the 1st. If reserves expired there too, every move in
+   the reserve line would coincide with a move in the run-off and you could never
+   tell a reserve expiring from a batch of trades settling. Day offsets below are
+   chosen to land mid-month; a check in the audit script fails if any of them
+   drifts onto a month boundary. */
+const RSV_EVENTS=[
+  // Majors first: they take the largest carve-outs, so an event is genuinely big.
+  // `top` is how far down the ranked carve-out pool the event draws from.
+  {name:"Index rebalance flow",          from:14,  to:78,  n:42, size:[0.82,0.96], top:110},
+  {name:"ETF creation basket",           from:45,  to:108, n:38, size:[0.80,0.95], top:130},
+  {name:"Block equity cross",            from:108, to:170, n:34, size:[0.70,0.92], top:200},
+  {name:"Sovereign issuance settlement", from:-22, to:41,  n:30, size:[0.72,0.92], top:180},
+  {name:"M&A funding leg",               from:27,  to:140, n:20, size:[0.45,0.80], top:420},
+  {name:"Jumbo bond settlement",         from:78,  to:200, n:18, size:[0.40,0.78], top:520},
+  {name:"Cross-currency swap unwind",    from:140, to:232, n:16, size:[0.35,0.70], top:700},
+  {name:"Term repo programme",           from:170, to:262, n:18, size:[0.35,0.72], top:700},
+  {name:"Option expiry cluster",         from:200, to:292, n:14, size:[0.30,0.68], top:900},
 ];
+/* Routine holds, deliberately a different list from the event names so the
+   "Expected deal" filter separates the big clustered events from background flow. */
+const RSV_ROUTINE=[
+  "FX hedging mandate","Client flow buffer","Quarter-end roll",
+  "Seasonal settlement peak","Prime brokerage ramp","Collateral substitution",
+];
+const RSV_PURPOSES=RSV_EVENTS.map(e=>e.name).concat(RSV_ROUTINE);
 const RSV_NOTES=[
   "Client has indicated a large ticket landing inside this window; holding capacity so the desk is not blocked on the day.",
   "Mandate awarded but not yet dated. Reserving against the carve-out rather than asking for a permanent uplift.",
@@ -1555,33 +1583,20 @@ const RSV_NOTES=[
 ];
 let RSVID=1;
 function seedReserves(){
-  /* Reserves ride on carve-outs that still have headroom, weighted hard towards
-     the largest — a desk reserves capacity ahead of a big deal, not against a
-     $2M slice. The bias exponent is what keeps the aggregate visible on the
-     portfolio chart instead of vanishing into a $600B pool. */
+  /* Reserves ride on carve-outs that still have headroom, largest first — a desk
+     reserves capacity ahead of a big deal, not against a $2M slice. Events take
+     the biggest carve-outs so an event is genuinely large; routine holds take
+     what is left. */
   const pool=SEED_CARVEOUTS
     .map(co=>({co, free: co.amountM-carveDrawn(co)}))
     .filter(x=>x.free>=10)
     .sort((a,b)=>b.free-a.free)
     .slice(0,4200);
   const out=[];
-  for(let i=0;i<900 && pool.length;i++){
-    const k=Math.min(pool.length-1, Math.floor(Math.pow(rng(),2.2)*pool.length));
-    const pick=pool.splice(k,1)[0];
+  const mk=(pick,purpose,fromDay,toDay,frac)=>{
     const co=pick.co;
-    /* A jumbo hold now and then. Without a fat tail the aggregate is a smooth
-       hump; the point of the chart is to show a reserve opening and closing, and
-       that only reads if some individual holds are big enough to see. */
-    const jumbo=rng()<0.14;
-    const amountM=Math.max(1,Math.round(pick.free*(jumbo?rand(0.80,0.97):rand(0.30,0.80))));
-    /* Days from today, positive = future. Most reserves are near-dated because
-       a desk reserves against a deal it can see; a minority are programme trades
-       phased over two or three quarters, which is what puts a tail on the
-       forward profile instead of a cliff at four months. */
-    const programme=rng()<0.22;
-    const fromDay=Math.round(programme?rand(-25,230):rand(-25,105));
-    const toDay=fromDay+(programme?randInt(70,220):randInt(14,130));
-    const status=weightedChoice([["Approved",0.62],["Pending",0.26],["Rejected",0.12]]);
+    const amountM=Math.max(1,Math.round(pick.free*frac));
+    const status=weightedChoice([["Approved",0.66],["Pending",0.23],["Rejected",0.11]]);
     const createdDay=Math.min(-1, fromDay-randInt(5,45));      // never raised in the future
     const decidedDay=status==="Pending"?null:Math.min(0, createdDay+randInt(1,10));
     const [rqName,rqDesk]=choice(REQUESTERS);
@@ -1591,7 +1606,7 @@ function seedReserves(){
       carveoutId:co.id, customerId:co.customerId, scope:co.scope, label:co.label,
       amountM, fromDay, toDay,
       from:fmtDate(dateAt(-fromDay)), to:fmtDate(dateAt(-toDay)),
-      purpose:choice(RSV_PURPOSES),
+      purpose,
       requester:rqName, requesterDesk:rqDesk,
       approver:status==="Pending"?"":apName, approverRole:status==="Pending"?"":apRole,
       notes:choice(RSV_NOTES), status,
@@ -1599,6 +1614,26 @@ function seedReserves(){
       decided:decidedDay===null?"":fmtDate(dateAt(-decidedDay)),
       decidedTs:decidedDay===null?0:dateAt(-decidedDay).getTime(),
     });
+  };
+  /* Event reserves. Most sit on the event's exact dates, because a settlement
+     event has a known public date and every desk reserves to it — that sharp edge
+     is what makes the reserve line step rather than drift. A minority reserve
+     early or run late, which softens the corner without dissolving it. */
+  const jit=()=>rng()<0.78?0:randInt(-4,4);
+  RSV_EVENTS.forEach(ev=>{
+    for(let i=0;i<ev.n && pool.length;i++){
+      const k=Math.min(pool.length-1, Math.floor(Math.pow(rng(),2.0)*Math.min(pool.length,ev.top)));
+      const fromDay=ev.from+jit();
+      const toDay=Math.max(fromDay+7, ev.to+jit());
+      mk(pool.splice(k,1)[0], ev.name, fromDay, toDay, rand(ev.size[0],ev.size[1]));
+    }
+  });
+  // Routine background flow: independent windows, smaller, spread across the year.
+  for(let i=0;i<260 && pool.length;i++){
+    const k=Math.min(pool.length-1, Math.floor(Math.pow(rng(),1.8)*pool.length));
+    const fromDay=Math.round(rand(-30,250));
+    const toDay=fromDay+randInt(20,150);
+    mk(pool.splice(k,1)[0], choice(RSV_ROUTINE), fromDay, toDay, rand(0.20,0.62));
   }
   return out.sort((a,b)=>b.createdTs-a.createdTs);
 }
@@ -2823,6 +2858,8 @@ function paneReserves(){
       <td class="r num">${fmtM(r.free*denom)}<div class="sub2">${fmtPct(r.free)}</div></td></tr>`).join("")}</tbody></table></div>
     <div class="foot">Released and Still on the book are the two halves of the run-off — what has matured away by that date, and what is left. Held by reserves is capacity that has come back but is already claimed, so it is subtracted from Free to trade rather than added to it.</div></div>
 
+  ${rsvEventSummary(scoped)}
+
   <div class="panel mt14"><div class="panel-hd"><h3>Request a limit reserve</h3><span class="slo">hold part of a carve-out for an expected deal</span></div>
     <div class="panel-body">
       <form id="reserve-form">
@@ -2851,6 +2888,38 @@ function paneReserves(){
       </form>
     </div></div>
   ${reservesTable()}`;
+}
+/* The steps in the reserve line are deal events — many desks reserving for the
+   same window. Listing them makes each step on the chart explainable instead of
+   looking like noise. */
+function rsvEventSummary(scoped){
+  const names=new Set(RSV_EVENTS.map(e=>e.name));
+  const g=new Map();
+  scoped.filter(r=>r.status==="Approved" && names.has(r.purpose) && r.toDay>=0).forEach(r=>{
+    if(!g.has(r.purpose)) g.set(r.purpose,[]);
+    g.get(r.purpose).push(r);
+  });
+  if(!g.size) return "";
+  const rows=[...g.entries()].map(([name,rs])=>({
+    name, n:rs.length,
+    amt:rs.reduce((a,r)=>a+r.amountM,0),
+    from:Math.min(...rs.map(r=>r.fromDay)),
+    to:Math.max(...rs.map(r=>r.toDay)),
+  })).sort((a,b)=>a.from-b.from);
+  const total=rows.reduce((a,r)=>a+r.amt,0);
+  return `<div class="panel mt14"><div class="panel-hd"><h3>Deal events behind the steps<i class="info" data-tip="A large settlement event has a known date, and many desks reserve capacity for the same window. Each row is one such cluster — that is what makes the reserve line step up when the window opens and drop when it closes. These dates sit mid-month on purpose, away from the month-end value dates the trade book settles on, so a reserve expiring never hides inside a batch of trades maturing.">i</i></h3>
+    <span class="slo">${rows.length} events · ${fmtM(total)} held across ${rows.reduce((a,r)=>a+r.n,0)} approved reserves</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Expected deal</th><th>Window</th><th class="r">Days</th><th class="r">Reserves</th><th class="r">Capacity held</th><th class="r">Share of limits</th></tr></thead>
+    <tbody>${rows.map(r=>{
+      const live=r.from<=0;
+      return `<tr class="clickable" data-rsvevent="${esc(r.name)}" data-tip="Filter the table below to this event">
+        <td><b>${esc(r.name)}</b>${live?` <span class="tag t-gold">Open</span>`:""}</td>
+        <td class="muted">${fmtDate(dateAt(-r.from))} → ${fmtDate(dateAt(-r.to))}</td>
+        <td class="r num muted">${r.to-r.from}</td>
+        <td class="r num">${r.n}</td>
+        <td class="r num gold">${fmtM(r.amt)}</td>
+        <td class="r num muted">${fmtPct(r.amt/(WITH_LIMIT.reduce((a,c)=>a+c.limitM,0)),2)}</td></tr>`;
+    }).join("")}</tbody></table></div></div>`;
 }
 function rvOptions(field,sel){
   const vals=[...new Set(RESERVES.map(r=>r[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
@@ -3582,10 +3651,16 @@ function paneDocs(){
   notes:"...", status:"Pending" / "Approved" / "Rejected",
   created:"29 Jul 2026", decided:"30 Jul 2026"
 }</code></pre>
-  <h4>Seeding</h4>
-  <p><b>${nf(RESERVES.length)}</b> reserves are generated, at most one per carve-out. They are drawn from carve-outs that still have headroom, weighted hard towards the largest — a desk reserves capacity ahead of a big deal, not against a $2M slice. Each takes 30% to 80% of what is free on its carve-out, and about one in seven is a jumbo hold taking up to 97%.</p>
-  <div class="note"><b>On the size of the reserve book</b>Approved reserves peak at <b>${fmtPct(Math.max.apply(null,reserveOverlay(null,FWD_DAYS,WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),"docsize")),1)}</b> of approved limits — around a third of what is still on the book at that point. That is a deliberately busy pipeline. An earlier build seeded roughly a fifth as much, and the result was a reserve line that sat on the run-off line and looked like a rendering fault: the effect the tab exists to show was invisible at portfolio scale. The volume here is chosen so the two lines separate. It is not a claim about how much capacity a bank typically reserves.</div>
-  <p>Most windows are near-dated, opening anywhere from 25 days ago to 105 days out and running 14 to 130 days. About a fifth are programme trades phased over two or three quarters, opening up to 230 days out and running as long as 220 days.</p>
+  <h4>Seeding: deal events, not scattered dates</h4>
+  <p><b>${nf(RESERVES.length)}</b> reserves are generated, at most one per carve-out, drawn from carve-outs that still have headroom and weighted hard towards the largest.</p>
+  <p>They are not independently dated. A jumbo issue, an index rebalance or an M&amp;A settlement is not one counterparty — <b>many desks reserve capacity for the same window</b>, because the settlement date is known and public. So reserves cluster on ${RSV_EVENTS.length} <b>deal events</b>, each with its own dates, plus a background of routine holds on independent dates.</p>
+  <table><thead><tr><th>Event</th><th>Window (days from today)</th><th class="r">Reserves</th><th>Draws from</th></tr></thead><tbody>
+    ${RSV_EVENTS.map(e=>`<tr><td>${e.name}</td><td class="muted">${e.from} → ${e.to}</td><td class="r num">${e.n}</td><td class="muted">top ${e.top} carve-outs, ${Math.round(e.size[0]*100)}–${Math.round(e.size[1]*100)}% of free</td></tr>`).join("")}
+  </tbody></table>
+  <p>About three-quarters of an event's reserves sit on its exact dates; the rest run a few days early or late. That sharp edge is deliberate — it is what makes the reserve line <b>step</b> when a window opens or closes rather than drift.</p>
+  <div class="note why"><b>Why event dates avoid month-ends</b>Trades with a tenor of 30 days or more roll their maturity to month-end (<a href="#d-data-txn">5.5</a>), so the run-off steps down on the 1st. If reserve windows expired there too, every move in the reserve line would coincide with a move in the run-off, and a reserve expiring would be indistinguishable from a batch of trades settling — the two lines would appear to mirror each other for no reason. Every event window is therefore placed mid-month, and <a href="#d-invariants">invariant 25</a> fails the build if one drifts onto a month boundary.</div>
+  <p>The result is two forward series that move on different days. Live figures: the largest run-off steps are ${(function(){const PT=portfolioTrend(WITH_LIMIT);const d=[];for(let i=1;i<FWD_DAYS;i++)d.push({i,v:PT.fcast[i]-PT.fcast[i-1]});return d.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)).slice(0,3).map(x=>fmtDate(dateAt(-(x.i+1)))).join(", ");})()}; the largest reserve steps are ${(function(){const L=WITH_LIMIT.reduce((a,c)=>a+c.limitM,0);const ov=reserveOverlay(null,FWD_DAYS,L,"docsteps");const d=[];for(let i=1;i<FWD_DAYS;i++)d.push({i,v:ov[i]-ov[i-1]});return d.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)).slice(0,3).map(x=>fmtDate(dateAt(-(x.i+1)))).join(", ");})()}.</p>
+  <div class="note"><b>On the size of the reserve book</b>Approved reserves peak at <b>${fmtPct(Math.max.apply(null,reserveOverlay(null,FWD_DAYS,WITH_LIMIT.reduce((a,c)=>a+c.limitM,0),"docsize")),1)}</b> of approved limits. That is a deliberately busy pipeline, chosen so the two forward lines visibly separate; it is not a claim about how much capacity a bank typically reserves. An earlier build seeded a fifth as much and the reserve line sat invisibly on the run-off line.</div>
   <p><b>Live:</b> ${nf(RESERVES.filter(r=>r.status==="Approved").length)} approved, ${nf(RESERVES.filter(r=>r.status==="Pending").length)} pending, ${nf(RESERVES.filter(r=>r.status==="Rejected").length)} rejected. ${nf(RESERVES.filter(rsvHoldsToday).length)} are holding capacity today, worth <b>${fmtM(RESERVES.filter(rsvHoldsToday).reduce((a,r)=>a+r.amountM,0))}</b>.</p>
   <h4>Two states, not one</h4>
   <p>A reserve has a <b>status</b> — the workflow state, Pending, Approved or Rejected — and separately a <b>window</b>, derived from today's date against its dates.</p>
@@ -3737,6 +3812,8 @@ function paneDocs(){
     <tr><td>Free to trade</td><td>What is genuinely available: everything not still drawn and not reserved.</td></tr>
   </tbody></table>
   <p>Reserves are <b>subtracted</b> from Free to trade rather than added to it. That is the whole point of the tab: run-off alone overstates what a desk can sell.</p>
+  <h4>Deal events behind the steps</h4>
+  <p>Each step in the reserve line is a cluster of desks reserving for the same settlement event. The panel lists those events with their windows, how many approved reserves each carries and how much capacity it holds, so every jump on the chart is traceable to a named event rather than looking like noise. Clicking a row filters the table below to that event's approved reserves.</p>
   <h4>The request form</h4>
   <p>It cascades: pick a customer, pick a scope, and the carve-out list fills with that customer's carve-outs in that scope, each showing how much of it is free. Two things are refused before submission:</p>
   <ul>
@@ -3939,6 +4016,8 @@ repeat up to 6 times, while anything remains:
     <tr><td>22</td><td>Reserves change no pool figure: invariants 1 to 4 hold identically with reserves present or removed.</td></tr>
     <tr><td>23</td><td>The Overview trend chart and the reserve tab's trend chart draw identical paths for the same filters.</td></tr>
     <tr><td>24</td><td>On the horizon readout, released plus still-on-the-book equals current utilization, and still-on-the-book plus reserved plus free equals 100%.</td></tr>
+    <tr><td>25</td><td>No deal event window opens or closes on a month boundary, where the run-off already steps.</td></tr>
+    <tr><td>26</td><td>The largest steps in the reserve series and the largest steps in the run-off fall on different days.</td></tr>
   </tbody></table>
   <h4>Rendering checks</h4>
   <ul>
@@ -3960,7 +4039,7 @@ repeat up to 6 times, while anything remains:
     <li><b>Filters and rail</b> — the shared checkbox panel, the date range, the rail figures.</li>
     <li><b>Overview</b> — headline strip, the two rows of three panels, then the heatmap, then the treemap, then the trend chart.</li>
     <li><b>Remaining tabs</b> — Customers, Blotter, Rankings, Carve-outs, Limit Increase Requests.</li>
-    <li><b>Limit reserves</b> — the reserve model, the forward overlay, the band on the trend charts, then the tab. It comes after carve-outs because a reserve has no meaning without one. Assert invariants 19 to 22.</li>
+    <li><b>Limit reserves</b> — the reserve model with its deal events, the forward overlay, the second line on the trend charts, then the tab. It comes after carve-outs because a reserve has no meaning without one. Assert invariants 19 to 26.</li>
     <li><b>Interactions</b> — the sorting mechanism, the drawer, drill-down, and Data Highlight last, because it depends on tags emitted by every other panel.</li>
     <li><b>Persistence</b> — the four storage keys, each read and written safely.</li>
     <li><b>This document</b> — update it in the same change as the behaviour it describes.</li>
@@ -4076,6 +4155,8 @@ document.addEventListener("click",e=>{
       ()=>{ RESERVES=RESERVES.filter(x=>x.id!==id); saveLS("sr-dash-reserves-v1",RESERVES); rsvDirty(); render(); });
     return;
   }
+  const rvev=e.target.closest("[data-rsvevent]");
+  if(rvev){ state.rsvFilters.purpose=rvev.dataset.rsvevent; state.rsvFilters.status="Approved"; render(); return; }
   const rvclear=e.target.closest("#rv-clearfilters"); if(rvclear){state.rsvFilters={customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""};render();return;}
   if(e.target.closest("#d-close")||e.target.id==="scrim"){closeDrawer();}
   if(openMselKey && !e.target.closest(".msel-panel") && !e.target.closest(".msel-btn")){ closeMsel(); }
