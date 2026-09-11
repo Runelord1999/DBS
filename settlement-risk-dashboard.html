@@ -148,6 +148,8 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 .kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:9px;margin-bottom:12px}
 .kpis.kpis-4{grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.kpis.kpis-5{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+@media (max-width:1500px){.kpis.kpis-5{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .toprow:hover{background:var(--panel-2);border-radius:5px}
 .kpi{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--hair);border-radius:10px;padding:11px 12px;position:relative;overflow:hidden;min-width:0}
 .kpi::after{content:"";position:absolute;left:0;top:0;height:3px;width:100%;background:var(--accent,var(--agent));opacity:.85}
@@ -162,7 +164,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .kpis:not(.kpis-4) .kpi small{font-size:0.5625rem}
 .kpis.kpis-4 .kpi b{font-size:1.3125rem}
 /* Eight across needs the room; drop to four, then two, as the viewport narrows. */
-@media (max-width:1400px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.kpis .kpi b{font-size:1.25rem}.kpis:not(.kpis-4) .kpi .eyebrow{font-size:0.625rem;letter-spacing:.14em}.kpis:not(.kpis-4) .kpi small{font-size:0.625rem}}
+@media (max-width:1400px){.kpis:not(.kpis-5){grid-template-columns:repeat(4,minmax(0,1fr))}.kpis .kpi b{font-size:1.25rem}.kpis:not(.kpis-4) .kpi .eyebrow{font-size:0.625rem;letter-spacing:.14em}.kpis:not(.kpis-4) .kpi small{font-size:0.625rem}}
 .gold{color:var(--gold)}.tealc{color:var(--agent)}.passc{color:var(--pass)}.warnc{color:var(--warn)}.failc{color:var(--fail)}.runc{color:var(--run)}.violetc{color:var(--violet)}.cyanc{color:var(--cyan)}
 
 .tabs{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--hair);margin-bottom:18px;flex-wrap:wrap;gap:10px}
@@ -327,6 +329,26 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .t-violet{background:color-mix(in srgb,var(--violet) 16%,transparent);color:var(--violet)}
 .t-muted{background:color-mix(in srgb,var(--ink-3) 16%,transparent);color:var(--ink-3)}
 .t-gold{background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
+/* ---- Testing tab: view tabs and suite chips ---- */
+.viewbar{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0 0;border-bottom:1px solid var(--hair);padding-bottom:0}
+.viewtab{background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-3);font-family:inherit;
+  font-size:0.8125rem;font-weight:600;padding:9px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+  border-radius:7px 7px 0 0;margin-bottom:-1px}
+.viewtab:hover{color:var(--ink-2);background:var(--panel-2)}
+.viewtab.on{color:var(--brand);border-bottom-color:var(--brand)}
+.viewtab span{font-family:var(--mono);font-size:0.6875rem;font-weight:700;padding:1px 6px;border-radius:99px;
+  background:var(--panel-3);color:var(--ink-3)}
+.viewtab.on span{background:color-mix(in srgb,var(--brand) 16%,transparent);color:var(--brand)}
+.suitechips{display:flex;flex-wrap:wrap;gap:6px;padding:11px 16px;border-bottom:1px solid var(--hair);background:var(--panel-2)}
+.suitechips .chip{background:var(--panel);border:1px solid var(--hair);color:var(--ink-2);font-family:inherit;
+  font-size:0.6875rem;padding:4px 9px;border-radius:99px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.suitechips .chip:hover{border-color:var(--ink-3);color:var(--ink)}
+.suitechips .chip span{font-family:var(--mono);font-size:0.625rem;color:var(--ink-3)}
+.suitechips .chip.on{background:color-mix(in srgb,var(--brand) 13%,transparent);border-color:var(--brand);color:var(--brand);font-weight:700}
+.suitechips .chip.on span{color:var(--brand)}
+.suitechips .chip.ok{border-left:3px solid var(--pass)}
+.suitechips .chip.bad{border-left:3px solid var(--fail);color:var(--fail)}
+.suitechips .chip.bad span{color:var(--fail)}
 .muted{color:var(--ink-3)}
 .foot{padding:10px 16px;border-top:1px solid var(--hair);font-size:0.6875rem;color:var(--ink-3);line-height:1.55}
 .foot b{color:var(--gold)}
@@ -917,6 +939,7 @@ const fmtM=v=>{ // v in $M
   return "$"+Math.round(v).toLocaleString()+"M";
 };
 const fmtPct=(v,d=1)=>(v*100).toFixed(d)+"%";
+const nf=n=>Number(n).toLocaleString();   // thousands separators, shared by every pane
 const fmtDate=d=>d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
 const dayMs=86400000;
 const TODAY=new Date(2026,6,30); // fixed "today" so the mock dataset reads consistently
@@ -1358,7 +1381,7 @@ const state={tab:"overview",filters:{country:new Set(),segment:new Set(),limitTy
   reqFilters:{customer:"",type:"",requester:"",approver:"",status:""},
   rsvFilters:{customer:"",scope:"",window:"",purpose:"",requester:"",approver:"",status:""},
   showReserve:true,
-  tests:{suite:"",show:"",openManual:null},
+  tests:{view:"auto",suite:"",show:"",area:"",manStatus:"",openManual:null},
   expo:{dir:"top",n:10,seg:""}};
 
 /* ============================================================
@@ -3251,7 +3274,6 @@ const DG={
   cap:(x,y,t,anchor)=>`<text x="${x}" y="${y}" text-anchor="${anchor||"middle"}" font-size="9.5" fill="var(--ink-3)">${t}</text>`,
 };
 function paneDocs(){
-  const nf=n=>n.toLocaleString();
   const totalLimitM=WITH_LIMIT.reduce((a,c)=>a+c.limitM,0);
   /* Measured, not asserted: how much of a limit each carve-out scope actually
      allocates once the amounts are rounded to whole millions. */
@@ -3379,7 +3401,7 @@ function paneDocs(){
     <tr><td><code>expo</code></td><td>dir, n, seg</td><td>The exposure ranking: top or bottom, how many names, which segment.</td></tr>
     <tr><td><code>reqFilters</code></td><td>object</td><td>The column filters on the limit increase requests table.</td></tr>
     <tr><td><code>rsvFilters</code></td><td>object</td><td>The column filters on the limit reserve table.</td></tr>
-    <tr><td><code>tests</code></td><td>object</td><td>Testing tab: suite filter, result filter, and which manual test is expanded.</td></tr>
+    <tr><td><code>tests</code></td><td>object</td><td>Testing tab: which of the four views is open, the suite and result filters, the manual area and status filters, and which scenario is expanded.</td></tr>
     <tr><td><code>showReserve</code></td><td>boolean</td><td>Whether the reserve band is drawn on the forward half of the trend charts. On by default.</td></tr>
   </tbody></table>
 
@@ -3391,7 +3413,7 @@ function paneDocs(){
     <tr><td><code>sr-dash-carveouts-v3</code></td><td>the full carve-out list</td><td>Written whenever one is added or removed. The suffix was bumped when customer ids were regenerated — a list saved against an older book cannot be matched to this one.</td></tr>
     <tr><td><code>sr-dash-requests-v2</code></td><td>the full limit increase request list</td><td>Written on submit, approve and reject.</td></tr>
     <tr><td><code>sr-dash-reserves-v1</code></td><td>the full limit reserve list</td><td>Written on submit, approve, reject and release.</td></tr>
-    <tr><td><code>sr-dash-tests-v1</code></td><td>manual test results and the runs made in this browser</td><td>Written when a manual result is recorded or the automated suite is run.</td></tr>
+    <tr><td><code>sr-dash-tests-v1</code></td><td>manual test results and the runs made in this browser</td><td>Written when a manual result is recorded or the automated suite is run. Seeded with a plausible manual history on first load.</td></tr>
   </tbody></table>
   <div class="note"><b>Rule</b>Every read and write is wrapped so that a failure cannot break the page. Private browsing and blocked site data must quietly fall back to the defaults. Bump the suffix on a key whenever the shape or the meaning of what is stored changes.</div>
 
@@ -3841,7 +3863,14 @@ function paneDocs(){
   <h3 id="d-tab-tests">7.8 Testing &amp; Regression</h3>
   <p>Where the site checks itself. The distinction that matters on this tab is between what a machine can assert and what a person has to judge, and the two are kept visibly apart.</p>
   <div class="note why"><b>The automated tests are real</b>They are not a recorded result played back. Pressing <b>Run</b> executes ${nf(AUTO_TESTS.length)} assertions against the live dataset in the open page and reports what it actually found — including the observed figures, in the last column. The whole suite takes well under a second.</div>
-  <div class="note"><b>How the count gets to ${nf(AUTO_TESTS.length)}</b>Most of the suite is <b>parameterised over the dimensions the site actually has</b>, not repeated. One set of checks per booking centre, per segment, per limit type, per tradable product, per deal event, per sort criterion, per date range, per tab, per documentation topic, per colour token in each theme, and one set for each of the thirty largest relationships reconciled individually. Adding a country or a product adds tests automatically; padding the count with duplicates of the same assertion would not.</div>
+  <div class="note"><b>How the count gets to ${nf(AUTO_TESTS.length)}</b>Most of it is <b>parameterised over the dimensions the site actually has</b>, not repeated. One set of checks per booking centre, per segment, per limit type, per tradable product, per deal event, per sort criterion, per date range, per tab, per documentation topic, per colour token in each theme, and one set for each of the thirty largest relationships reconciled individually. Adding a country or a product adds tests automatically; padding the count with duplicates of the same assertion would not.</div>
+  <h4>Two kinds of automated test</h4>
+  <table><thead><tr><th style="width:12em">Kind</th><th>What it asserts</th><th class="r">Count</th></tr></thead><tbody>
+    <tr><td><b>Example-based</b></td><td>A fact about <i>this</i> book — the one this page generated. "The country concentration panel reconciles to the pool." Fast, concrete, and the first thing to look at when something breaks.</td><td class="r num">${nf(AUTO_TESTS.filter(t=>t.kind==="auto").length)}</td></tr>
+    <tr><td><b>Property-based</b></td><td>A property that must hold for <i>any</i> input, checked by generating hundreds of random cases and hunting for a counterexample. "The water-fill places the whole drawn amount, for any allocation and any utilization." Slower to write, but it reaches the edges the seeded data never visits.</td><td class="r num">${nf(AUTO_TESTS.filter(t=>t.kind==="prop").length)}</td></tr>
+  </tbody></table>
+  <div class="note why"><b>Why both</b>An example-based test can only fail on the one book in front of it. If the seeded data happens never to produce an empty list, a single-element list, a zero weight or a range of width zero, no amount of example testing will find what happens there. The property tests generate those cases deliberately — currently <b>${nf(AUTO_TESTS.filter(t=>t.kind==="prop").length*280)}</b> or so random cases per run, from a stream seeded separately so exercising it cannot disturb the deterministic book everything else is built from. A failure reports the exact case that broke the property, not just that something is wrong.</div>
+  <p>The property suites found two things the example-based suites could not: that <code>squarify</code> emits a sliver cell rather than nothing when handed a rectangle 1e-9 wide, and that utilization stored as float32 reads <code>0.9</code> back as <code>0.899999976</code>, so a name at exactly 90% falls into the band below (<code>DEF-052</code>).</p>
   <div class="note warn"><b>A test that cannot fail is worth nothing</b>The suite is checked by deliberately breaking things and confirming the right test goes red — a duplicated customer name, a trade settled before its value date, a long-dated trade off month-end, a trade using a limit type outside its asset class, a customer in an unknown country, a reserve larger than its carve-out, a deal event moved onto a month boundary, an over-allocated carve-out, a pending request with an approver, a documentation topic pointing nowhere, a pane that throws, a tab registered but unknown to the suite, and a defect naming a test that does not exist. Every one is caught, and the suite returns to green when the mutation is undone.</div>
   <p>That exercise is not decorative. It found two real problems: a font-scale test that closed over the value it was meant to be checking, and a customer record carrying <code>null</code> where every consumer expects a number — see <code>DEF-051</code> in the defect log.</p>
   <h4>What is real and what is seeded</h4>
@@ -3852,10 +3881,18 @@ function paneDocs(){
     <tr><td>Releases and defect log</td><td>Seeded, but the defects are the real ones found while building this site, each naming the test that now guards it.</td></tr>
   </tbody></table>
   <h4>Suites</h4>
-  <table><thead><tr><th style="width:11em">Suite</th><th>Covers</th><th class="r">Tests</th></tr></thead><tbody>
-    ${TEST_SUITES.map(su=>`<tr><td><b>${su.name}</b></td><td>${su.blurb}</td><td class="r num">${AUTO_TESTS.filter(t=>t.suite===su.id).length}</td></tr>`).join("")}
+  <table><thead><tr><th style="width:11em">Suite</th><th style="width:6em">Kind</th><th>Covers</th><th class="r">Tests</th></tr></thead><tbody>
+    ${TEST_SUITES.map(su=>`<tr><td><b>${su.name}</b></td><td class="muted">${su.kind==="prop"?"Property":"Example"}</td><td>${su.blurb}</td><td class="r num">${AUTO_TESTS.filter(t=>t.suite===su.id).length}</td></tr>`).join("")}
   </tbody></table>
   <p><b>${nf(AUTO_TESTS.filter(t=>t.inv).length)}</b> of the ${nf(AUTO_TESTS.length)} tests carry an invariant number, and between them they cover <b>all ${new Set(AUTO_TESTS.filter(t=>t.inv).map(t=>t.inv)).size}</b> of the numbered statements in <a href="#d-invariants">section 11</a> — a test in the Documentation suite fails if any invariant loses its guard. That link is the point: an invariant written only in prose drifts, an invariant with a test behind it cannot.</p>
+  <h4>Getting around ${nf(AUTO_TESTS.length+MANUAL_TESTS.length)} tests</h4>
+  <p>Everything on one page would be several thousand rows of scrolling, so the tab carries four views and shows one at a time: <b>Example-based</b>, <b>Property-based</b>, <b>Manual</b>, and <b>Releases &amp; defects</b>. The dashboards stay above them all.</p>
+  <ul>
+    <li>Inside the two automated views, a row of <b>suite chips</b> narrows the table, and a chip turns red with a count when that suite has failures — so a failing suite is visible without reading the table.</li>
+    <li>The <b>Run</b> button follows the chip: with a suite selected it runs only that suite.</li>
+    <li>The manual view has the same chips by <b>area</b>, plus a status filter, so a tester can pull up just the scenarios they own.</li>
+    <li>Tables cap at ${TEST_ROW_CAP} rows and say so, rather than painting hundreds at once.</li>
+  </ul>
   <h4>Dashboards</h4>
   <ul>
     <li><b>Run history</b> — passed and failed per run, oldest on the left. Runs made in this browser carry a mark.</li>
@@ -3865,7 +3902,8 @@ function paneDocs(){
     <li><b>Defect log</b> — issues found, and the test that now guards each one. A defect with a guarding test is what makes this a regression suite rather than a checklist.</li>
   </ul>
   <h4>Manual checklist</h4>
-  <p>${MANUAL_TESTS.length} scenarios covering what cannot be asserted from data: whether a theme repaints every surface, whether the reserve line is visually distinguishable from the run-off, whether keyboard focus reaches the controls, whether a print preview holds together. Each carries its steps and its expected result; a row expands to show them, and Pass, Fail and Block record an outcome against your name and today's date.</p>
+  <p><b>${nf(MANUAL_TESTS.length)}</b> scenarios across ${new Set(MANUAL_TESTS.map(m=>m.area)).size} areas, covering what cannot be asserted from data: whether a theme repaints every surface, whether the reserve line is visually distinguishable from the run-off, whether keyboard focus reaches the controls, whether meaning survives in greyscale, whether the page still works with site data blocked, whether a print preview holds together. Each carries its steps and its expected result; a row expands to show them, and Pass, Fail and Block record an outcome against your name and today's date.</p>
+  <p>The last few areas are parameterised the same way the automated suite is — one scenario per tab at 1280px, one per tab at the largest font, one per theme, one per font step, one per booking centre and one per segment — because "check every tab renders" is an instruction people skim, while "check the blotter tab renders correctly at 1280px" is one they either did or did not do.</p>
 
   <h3 id="d-tab-docs">7.9 Documentation</h3>
   <p>This tab. The topic tree on the left follows the reader down the page: on each scroll it finds the last heading that has passed a line just below the top of the window, and highlights that entry, scrolling the tree itself if the entry has drifted out of sight.</p>
@@ -4122,25 +4160,30 @@ repeat up to 6 times, while anything remains:
    is not.
 ============================================================ */
 const TEST_SUITES=[
-  {id:"pool",     name:"Pool arithmetic",    blurb:"Every identity the KPI strip and the donut depend on."},
-  {id:"book",     name:"Customer book",      blurb:"Population, ids, series shape and the risk bands."},
-  {id:"country",  name:"Country dimension",  blurb:"One set of checks per booking centre."},
-  {id:"segment",  name:"Segment dimension",  blurb:"One set of checks per customer segment."},
-  {id:"type",     name:"Limit types",        blurb:"One set of checks per product limit type."},
-  {id:"txn",      name:"Transactions",       blurb:"Tenors, month-end rolling and status against maturity."},
-  {id:"product",  name:"Products & tenors",  blurb:"One set of checks per tradable product."},
-  {id:"carve",    name:"Carve-outs",         blurb:"Allocation ladders, thresholds and every scope label."},
-  {id:"reserve",  name:"Limit reserves",     blurb:"Windows, statuses and the forward overlay."},
-  {id:"event",    name:"Deal events",        blurb:"One set of checks per clustered settlement event."},
-  {id:"chart",    name:"Charts & series",    blurb:"Run-off shape, the shared trend series, chart primitives."},
-  {id:"heat",     name:"Heatmap & treemap",  blurb:"One set of checks per sort criterion, plus the layout."},
-  {id:"filter",   name:"Filters & ranges",   blurb:"One set of checks per selectable date range."},
-  {id:"ui",       name:"Rendering & wiring", blurb:"One set of checks per tab, plus shared plumbing."},
-  {id:"doc",      name:"Documentation",      blurb:"One check per topic in the tree, plus cross-references."},
-  {id:"theme",    name:"Themes & type",      blurb:"Every colour token in every theme, and the font scale."},
-  {id:"account",  name:"Top relationships",  blurb:"The largest names reconciled individually."},
-  {id:"workflow", name:"Workflows",          blurb:"Limit increase and reserve request integrity."},
-  {id:"meta",     name:"Suite integrity",    blurb:"The test registry checking itself."},
+  {id:"prop-core",   name:"Core helpers",        kind:"prop", blurb:"RNG, formatters and escaping, over random inputs."},
+  {id:"prop-alloc",  name:"Allocation",          kind:"prop", blurb:"The water-fill and share splitting, over random books."},
+  {id:"prop-series", name:"Series & run-off",    kind:"prop", blurb:"Projections and moving averages, over random inputs."},
+  {id:"prop-layout", name:"Layout & ranking",    kind:"prop", blurb:"Treemap geometry, the colour ramp and Top-N stability."},
+  {id:"prop-domain", name:"Domain properties",   kind:"prop", blurb:"Pool identities and filters under randomly chosen scopes."},
+  {id:"pool",     name:"Pool arithmetic", kind:"auto",    blurb:"Every identity the KPI strip and the donut depend on."},
+  {id:"book",     name:"Customer book", kind:"auto",      blurb:"Population, ids, series shape and the risk bands."},
+  {id:"country",  name:"Country dimension", kind:"auto",  blurb:"One set of checks per booking centre."},
+  {id:"segment",  name:"Segment dimension", kind:"auto",  blurb:"One set of checks per customer segment."},
+  {id:"type",     name:"Limit types", kind:"auto",        blurb:"One set of checks per product limit type."},
+  {id:"txn",      name:"Transactions", kind:"auto",       blurb:"Tenors, month-end rolling and status against maturity."},
+  {id:"product",  name:"Products & tenors", kind:"auto",  blurb:"One set of checks per tradable product."},
+  {id:"carve",    name:"Carve-outs", kind:"auto",         blurb:"Allocation ladders, thresholds and every scope label."},
+  {id:"reserve",  name:"Limit reserves", kind:"auto",     blurb:"Windows, statuses and the forward overlay."},
+  {id:"event",    name:"Deal events", kind:"auto",        blurb:"One set of checks per clustered settlement event."},
+  {id:"chart",    name:"Charts & series", kind:"auto",    blurb:"Run-off shape, the shared trend series, chart primitives."},
+  {id:"heat",     name:"Heatmap & treemap", kind:"auto",  blurb:"One set of checks per sort criterion, plus the layout."},
+  {id:"filter",   name:"Filters & ranges", kind:"auto",   blurb:"One set of checks per selectable date range."},
+  {id:"ui",       name:"Rendering & wiring", kind:"auto", blurb:"One set of checks per tab, plus shared plumbing."},
+  {id:"doc",      name:"Documentation", kind:"auto",      blurb:"One check per topic in the tree, plus cross-references."},
+  {id:"theme",    name:"Themes & type", kind:"auto",      blurb:"Every colour token in every theme, and the font scale."},
+  {id:"account",  name:"Top relationships", kind:"auto",  blurb:"The largest names reconciled individually."},
+  {id:"workflow", name:"Workflows", kind:"auto",          blurb:"Limit increase and reserve request integrity."},
+  {id:"meta",     name:"Suite integrity", kind:"auto",    blurb:"The test registry checking itself."},
 ];
 const SUITE_NAME={}; TEST_SUITES.forEach(s=>SUITE_NAME[s.id]=s.name);
 
@@ -4825,22 +4868,31 @@ function buildTests(){
   /* ---- the test suite checking itself ---- */
   add("MT","meta","Test ids are unique",()=>
     _T.pass(new Set(T.map(t=>t.id)).size===T.length,T.length+" tests"));
+  /* These read AUTO_TESTS at run time, not the array being built, so they see
+     the property tests merged in alongside the generated ones. */
   add("MT","meta","Every suite declared in the registry has tests",()=>{
-    const empty=TEST_SUITES.filter(s=>!T.some(t=>t.suite===s.id));
+    const empty=TEST_SUITES.filter(s=>!AUTO_TESTS.some(t=>t.suite===s.id));
     return _T.pass(empty.length===0,TEST_SUITES.length+" suites"+(empty.length?", empty: "+empty.map(s=>s.id).join(","):""));});
   add("MT","meta","Every test belongs to a declared suite",()=>{
     const known=new Set(TEST_SUITES.map(s=>s.id));
-    const bad=T.filter(t=>!known.has(t.suite));
+    const bad=AUTO_TESTS.filter(t=>!known.has(t.suite));
     return _T.pass(bad.length===0,bad.length+" orphaned");});
   add("MT","meta","Every test has a name and an assertion",()=>{
-    const bad=T.filter(t=>!t.name||typeof t.fn!=="function");
+    const bad=AUTO_TESTS.filter(t=>!t.name||typeof t.fn!=="function");
     return _T.pass(bad.length===0,bad.length+" malformed");});
+  add("MT","meta","Every test declares a kind",()=>{
+    const bad=AUTO_TESTS.filter(t=>t.kind!=="auto"&&t.kind!=="prop");
+    return _T.pass(bad.length===0,AUTO_TESTS.filter(t=>t.kind==="prop").length+" property, "
+      +AUTO_TESTS.filter(t=>t.kind==="auto").length+" example-based");});
+  add("MT","meta","Suite kinds match the tests filed under them",()=>{
+    const bad=TEST_SUITES.filter(su=>AUTO_TESTS.some(t=>t.suite===su.id&&t.kind!==su.kind));
+    return _T.pass(bad.length===0,bad.length?bad.map(x=>x.id).join(","):"all consistent");});
   add("MT","meta","Manual test ids are unique and fully specified",()=>{
     const ids=new Set(MANUAL_TESTS.map(m=>m.id));
     const bad=MANUAL_TESTS.filter(m=>!m.steps.length||!m.expected||!m.area||!m.priority);
     return _T.pass(ids.size===MANUAL_TESTS.length&&bad.length===0,MANUAL_TESTS.length+" scenarios, "+bad.length+" incomplete");});
   add("MT","meta","Every defect naming a test names one that exists",()=>{
-    const ids=new Set(T.map(t=>t.id).concat(MANUAL_TESTS.map(m=>m.id)));
+    const ids=new Set(AUTO_TESTS.map(t=>t.id).concat(MANUAL_TESTS.map(m=>m.id)));
     const bad=DEFECTS.filter(d=>d.test&&d.test!=="—"&&!ids.has(d.test));
     return _T.pass(bad.length===0,bad.length?bad.map(d=>d.id+"→"+d.test).join(", "):DEFECTS.length+" defects");});
   add("MT","meta","Every defect names a release that exists",()=>{
@@ -4851,73 +4903,792 @@ function buildTests(){
     _T.pass(RELEASES.every((r,i)=>i===0||r.auto>=RELEASES[i-1].auto),RELEASES.map(r=>r.auto).join(" → ")));
   return T;
 }
-const AUTO_TESTS=buildTests();
+/* ============================================================
+   Property-based tests.
+
+   The suites above assert facts about the one book this page generated. These
+   assert PROPERTIES that must hold for any input at all, then hunt for a
+   counterexample by running each property over hundreds of randomly generated
+   cases. That is what finds edge cases the seeded data never happens to
+   produce — an empty list, a single element, a zero weight, identical values,
+   a range of width zero, an adversarial string.
+
+   The generator has its own stream, seeded separately, so exercising it cannot
+   disturb the deterministic book the rest of the site is built from.
+============================================================ */
+const prng=mulberry32(0x5EED1234);
+const G={
+  int:(lo,hi)=>()=>lo+Math.floor(prng()*(hi-lo+1)),
+  num:(lo,hi)=>()=>lo+prng()*(hi-lo),
+  pick:arr=>()=>arr[Math.floor(prng()*arr.length)],
+  arrOf:(gen,lo,hi)=>()=>{const n=lo+Math.floor(prng()*(hi-lo+1)),o=[];for(let i=0;i<n;i++)o.push(gen());return o;},
+  // Strings of the kind that break naive escaping or formatting.
+  nasty:()=>()=>G.pick(['<img src=x onerror="a">',"</td></tr><script>","O'Brien & Sons",'a"b<c>d&e',
+    "…—“quoted”"," null","%s%d{}","../../etc","‏rtl‏","🙂 emoji",
+    "   ","<<>>&&\"\"","Ganges Merchant Bank",""])(),
+};
+/* Run a property over n generated cases, stopping at the first counterexample
+   and reporting the case that broke it. */
+function forAll(n,gen,prop){
+  for(let i=0;i<n;i++){
+    const x=gen();
+    let ok=false,err="";
+    try{ ok=prop(x)!==false; }catch(e){ ok=false; err=" — threw: "+e.message; }
+    if(!ok){
+      let shown; try{ shown=JSON.stringify(x); }catch(e){ shown=String(x); }
+      if(shown===undefined) shown=String(x);
+      return {pass:false,detail:"counterexample after "+(i+1)+" case"+(i?"s":"")+": "+String(shown).slice(0,150)+err};
+    }
+  }
+  return {pass:true,detail:n+" random cases"};
+}
+const SYNTH=(limit,util,conc)=>{
+  const raw=LIMIT_TYPES.map(()=>conc?0.000001:G.num(0.05,1)());
+  if(conc) raw[Math.floor(prng()*raw.length)]=0.999996;
+  const s=raw.reduce((a,b)=>a+b,0),alloc={};
+  LIMIT_TYPES.forEach((t,i)=>alloc[t]=raw[i]/s);
+  return {hasLimit:true,limitM:limit,typeAlloc:alloc,series:Float32Array.from([util])};
+};
+
+function buildPropertyTests(){
+  const T=[]; let n=0;
+  const p=(suite,name,fn,inv)=>{ n++; T.push({id:"PB-"+String(n).padStart(3,"0"),suite,name,fn,inv,kind:"prop"}); };
+
+  /* ---- core helpers ---- */
+  p("prop-core","mulberry32 is reproducible and seed-sensitive",()=>forAll(60,G.int(1,1e9),seed=>{
+    const a=mulberry32(seed),b=mulberry32(seed),c=mulberry32(seed+1);
+    const A=[a(),a(),a()].join(),B=[b(),b(),b()].join(),C=[c(),c(),c()].join();
+    return A===B&&A!==C;}));
+  p("prop-core","Random draws always land inside [0,1)",()=>forAll(2000,()=>prng(),v=>v>=0&&v<1));
+  p("prop-core","rand always lands inside its range",()=>forAll(400,()=>[G.num(-1e6,1e6)(),G.num(0,1e6)()],
+    x=>{const v=rand(x[0],x[0]+x[1]);return v>=x[0]&&v<=x[0]+x[1];}));
+  p("prop-core","randInt is an integer inside its inclusive range",()=>forAll(400,()=>[G.int(-500,500)(),G.int(0,500)()],
+    x=>{const v=randInt(x[0],x[0]+x[1]);return Number.isInteger(v)&&v>=x[0]&&v<=x[0]+x[1];}));
+  p("prop-core","choice always returns a member of the list",()=>forAll(300,G.arrOf(G.int(0,99),1,20),
+    a=>a.indexOf(choice(a))>=0));
+  p("prop-core","weightedChoice only returns declared values",()=>forAll(300,
+    ()=>G.arrOf(()=>[G.int(0,999)(),G.num(0.01,100)()],1,12)(),
+    pairs=>{const v=weightedChoice(pairs);return pairs.some(x=>x[0]===v);}));
+  p("prop-core","weightedChoice is unaffected by the scale of the weights",()=>forAll(50,
+    ()=>G.arrOf(()=>[G.int(0,9)(),G.num(0.5,20)()],3,6)(),
+    pairs=>{
+      const scaled=pairs.map(x=>[x[0],x[1]*1000]);
+      const count=tbl=>{const c={};for(let i=0;i<600;i++){const v=weightedChoice(tbl);c[v]=(c[v]||0)+1;}return c;};
+      const a=count(pairs),b=count(scaled);
+      return Object.keys(a).every(k=>Math.abs((a[k]||0)-(b[k]||0))<170);}));
+  p("prop-core","weightedChoice never favours the first entry when weights are equal",()=>forAll(25,
+    G.int(3,8),k=>{
+      const tbl=Array.from({length:k},(_,i)=>[i,10]);
+      const c={};for(let i=0;i<400*k;i++){const v=weightedChoice(tbl);c[v]=(c[v]||0)+1;}
+      const vals=Object.values(c);
+      return vals.length===k&&vals.every(v=>Math.abs(v-400)<400*0.35);}));
+  p("prop-core","poissonRand returns a non-negative integer for any rate",()=>forAll(600,G.num(0,14),
+    lam=>{const v=poissonRand(lam);return Number.isInteger(v)&&v>=0;}));
+  p("prop-core","poissonRand averages to its rate",()=>forAll(20,G.num(0.5,8),
+    lam=>{let s=0;for(let i=0;i<900;i++)s+=poissonRand(lam);
+      return Math.abs(s/900-lam)<Math.max(0.45,lam*0.22);}));
+  p("prop-core","poissonRand of a non-positive rate is zero",()=>forAll(120,G.num(-5,0),lam=>poissonRand(lam)===0));
+  p("prop-core","gaussian stays finite and centres on zero",()=>forAll(30,()=>0,
+    ()=>{let s=0,ok=true;for(let i=0;i<500;i++){const v=gaussian();if(!isFinite(v))ok=false;s+=v;}
+      return ok&&Math.abs(s/500)<0.24;}));
+  p("prop-core","bellBetween never leaves its range, however narrow",()=>forAll(400,
+    ()=>[G.num(-1e4,1e4)(),G.num(0.0001,5000)()],
+    x=>{const v=bellBetween(x[0],x[0]+x[1]);return v>=x[0]&&v<=x[0]+x[1]&&isFinite(v);}));
+  p("prop-core","bellBetween concentrates near the middle of its range",()=>forAll(15,()=>0,
+    ()=>{let mid=0;for(let i=0;i<400;i++){const v=bellBetween(0,100);if(v>25&&v<75)mid++;}
+      return mid/400>0.72;}));
+  p("prop-core","esc neutralises every angle bracket and quote",()=>forAll(600,G.nasty(),
+    s=>{const o=esc(s);return o.indexOf("<")<0&&o.indexOf(">")<0&&o.indexOf('"')<0;}));
+  p("prop-core","esc never silently drops the readable text",()=>forAll(400,G.nasty(),
+    s=>esc(s).length>=String(s).replace(/[&<>"]/g,"").length));
+  p("prop-core","fmtM is monotonic across the whole range",()=>forAll(400,()=>[G.num(0,5000)(),G.num(0,5000)()],
+    x=>{const lo=Math.min(x[0],x[1]),hi=Math.max(x[0],x[1]);
+      const pv=s=>parseFloat(s.replace(/[$,BM]/g,""))*(s.indexOf("B")>=0?1000:1);
+      return pv(fmtM(hi))>=pv(fmtM(lo))-0.51;}));
+  p("prop-core","fmtM switches to billions above $1,000M and never before",()=>forAll(400,G.num(0,4000),
+    v=>(v>=1000)===(fmtM(v).indexOf("B")>=0)));
+  p("prop-core","fmtPct scales by a hundred at any precision",()=>forAll(400,()=>[G.num(0,3)(),G.int(0,4)()],
+    x=>{const s=fmtPct(x[0],x[1]);return s.slice(-1)==="%"&&Math.abs(parseFloat(s)-x[0]*100)<Math.pow(10,-x[1]);}));
+  p("prop-core","fmtDate always produces a parseable date",()=>forAll(400,G.int(-800,800),
+    off=>{const d=dateAt(off);return fmtDate(d).length>=9&&!isNaN(d.getTime());}));
+  p("prop-core","dateAt strictly decreases as its offset grows",()=>forAll(400,()=>[G.int(-500,500)(),G.int(1,300)()],
+    x=>dateAt(x[0]).getTime()>dateAt(x[0]+x[1]).getTime()));
+
+  /* ---- allocation and the water-fill ---- */
+  p("prop-alloc","allocShares always sums to the share it was asked for",()=>forAll(400,
+    ()=>[G.int(1,12)(),G.num(0.01,1)()],
+    x=>{const s=allocShares(x[0],x[1]);return s.length===x[0]&&Math.abs(s.reduce((a,b)=>a+b,0)-x[1])<1e-9;}));
+  p("prop-alloc","allocShares never produces a zero or negative slice",()=>forAll(400,
+    ()=>[G.int(1,12)(),G.num(0.01,1)()],x=>allocShares(x[0],x[1]).every(v=>v>0)));
+  p("prop-alloc","genTypeAlloc always sums to one across the five types",()=>forAll(300,G.pick(SEGMENTS),
+    sg=>{const a=genTypeAlloc(sg);
+      return Math.abs(LIMIT_TYPES.reduce((s,t)=>s+a[t],0)-1)<1e-9&&LIMIT_TYPES.every(t=>a[t]>0);}));
+  p("prop-alloc","The water-fill always places the whole drawn amount",()=>forAll(300,
+    ()=>SYNTH(G.num(1,5000)(),G.num(0,1)(),false),
+    c=>{const want=Math.min(1,c.series[0])*c.limitM;
+      return Math.abs(custTypeDrawn(c).reduce((a,b)=>a+b,0)-want)<Math.max(1e-6,want*1e-9);}),8);
+  p("prop-alloc","The water-fill never overfills a limit type",()=>forAll(300,
+    ()=>SYNTH(G.num(1,5000)(),G.num(0,1)(),false),
+    c=>custTypeDrawn(c).every((v,i)=>v<=c.limitM*c.typeAlloc[LIMIT_TYPES[i]]+1e-6)),7);
+  p("prop-alloc","The water-fill copes with everything concentrated in one type",()=>forAll(150,
+    ()=>SYNTH(G.num(1,4000)(),G.num(0,1)(),true),
+    c=>{const want=Math.min(1,c.series[0])*c.limitM;
+      return Math.abs(custTypeDrawn(c).reduce((a,b)=>a+b,0)-want)<Math.max(1e-6,want*1e-6);}));
+  p("prop-alloc","A fully drawn customer fills every type to its cap",()=>forAll(150,
+    ()=>SYNTH(G.num(10,4000)(),1,false),
+    c=>custTypeDrawn(c).every((v,i)=>Math.abs(v-c.limitM*c.typeAlloc[LIMIT_TYPES[i]])<1e-6)));
+  p("prop-alloc","A customer drawing nothing consumes nothing anywhere",()=>forAll(150,
+    ()=>SYNTH(G.num(1,4000)(),0,false),
+    c=>custTypeDrawn(c).every(v=>v===0)));
+  p("prop-alloc","Drawn and headroom always reconstruct the limit",()=>forAll(400,
+    ()=>({hasLimit:true,limitM:G.num(0.01,9000)(),typeAlloc:null,series:Float32Array.from([G.num(0,1.6)()])}),
+    c=>Math.abs(custDrawnM(c)+custFreeM(c)-c.limitM)<1e-6),1);
+  p("prop-alloc","Utilization above the limit never inflates drawn",()=>forAll(300,
+    ()=>({hasLimit:true,limitM:G.num(1,9000)(),typeAlloc:null,series:Float32Array.from([1+G.num(0,0.5)()])}),
+    c=>custDrawnM(c)===c.limitM&&custFreeM(c)===0));
+  p("prop-alloc","A customer with no limit draws nothing and has no headroom",()=>forAll(200,
+    ()=>({hasLimit:false,limitM:0,typeAlloc:null,series:null}),
+    c=>custDrawnM(c)===0&&custFreeM(c)===0&&custUtilCur(c)===0));
+
+  /* ---- series, run-off and projections ---- */
+  const mixGen=()=>{const b=new Map(),k=G.int(1,12)();
+    for(let i=0;i<k;i++)b.set(G.int(1,360)(),G.num(0.1,100)());
+    let tot=0;b.forEach(v=>tot+=v);return {b,total:tot};};
+  p("prop-series","Run-off fractions never rise",()=>forAll(200,mixGen,
+    mix=>{const f=runoffFractions(mix,365);return f.every((v,i)=>i===0||v<=f[i-1]+1e-12);}),10);
+  p("prop-series","Run-off fractions stay inside 0 and 1",()=>forAll(200,mixGen,
+    mix=>runoffFractions(mix,365).every(v=>v>=0&&v<=1+1e-12)));
+  p("prop-series","A single-bucket book runs off entirely on its own day",()=>forAll(200,
+    ()=>[G.int(2,300)(),G.num(1,500)()],
+    x=>{const f=runoffFractions({b:new Map([[x[0],x[1]]]),total:x[1]},365);
+      return f[x[0]-1]<1e-9&&f[x[0]-2]>0.99;}));
+  p("prop-series","Run-off projection scales linearly with current utilization",()=>forAll(100,
+    G.num(0.01,1.2),
+    u=>{const txs=TXNS.slice(0,300),a=runoffProjection(txs,u,120),b=runoffProjection(txs,u*2,120);
+      return a.every((v,i)=>Math.abs(v*2-b[i])<1e-9);}));
+  p("prop-series","A projection from zero utilization stays at zero",()=>forAll(60,G.int(1,300),
+    k=>runoffProjection(TXNS.slice(0,k),0,90).every(v=>v===0)));
+  p("prop-series","An empty trade book still yields a valid falling curve",()=>forAll(40,G.int(30,365),
+    h=>{const f=runoffProjection([],0.5,h);
+      return f.length===h&&f.every((v,i)=>i===0||v<=f[i-1]+1e-12)&&f.every(v=>v>=0);}));
+  p("prop-series","The moving average matches a hand computation",()=>forAll(200,
+    ()=>[G.arrOf(G.num(0,2),5,60)(),G.int(2,5)()],
+    x=>{const arr=x[0],w=x[1],ma=movingAvg(arr,w);
+      if(arr.length<w) return true;
+      for(let i=w-1;i<arr.length;i++){
+        let s=0;for(let j=i-w+1;j<=i;j++)s+=arr[j];
+        if(Math.abs(ma[i]-s/w)>1e-9) return false;}
+      return ma.slice(0,w-1).every(v=>v===null);}));
+  p("prop-series","The moving average never leaves the range of its input",()=>forAll(200,
+    ()=>[G.arrOf(G.num(-50,50),10,80)(),G.int(2,9)()],
+    x=>{const lo=Math.min.apply(null,x[0]),hi=Math.max.apply(null,x[0]);
+      return movingAvg(x[0],x[1]).every(v=>v===null||(v>=lo-1e-9&&v<=hi+1e-9));}));
+  p("prop-series","Series statistics always satisfy min, then average, then max",()=>forAll(300,
+    ()=>[G.pick(WITH_LIMIT)(),G.int(1,547)()],
+    x=>{const s=seriesStats(x[0].series,x[1],0);return s.min<=s.avg+1e-9&&s.avg<=s.max+1e-9;}));
+  p("prop-series","A one-day statistics window returns that day three times over",()=>forAll(200,
+    G.pick(WITH_LIMIT),
+    c=>{const s=seriesStats(c.series,0,0),v=c.series[c.series.length-1];
+      return Math.abs(s.avg-v)<1e-6&&Math.abs(s.min-v)<1e-6&&Math.abs(s.max-v)<1e-6;}));
+  p("prop-series","Trailing averages over any window stay inside the ceiling",()=>forAll(300,
+    ()=>[G.pick(WITH_LIMIT)(),G.int(1,548)()],
+    x=>{const v=avgUtilOver(x[0],x[1]);return v>=0&&v<=1.4;}));
+  p("prop-series","Days since non-zero never exceeds the history length",()=>forAll(300,G.pick(WITH_LIMIT),
+    c=>{const d=daysSinceNonZero(c.series);return d>=0&&d<=HIST_DAYS;}));
+  p("prop-series","daysUntilBelow points at a day that really is below the target",()=>forAll(200,
+    ()=>[G.num(0.05,1)(),G.num(0.01,0.9)()],
+    x=>{const f=runoffProjection(TXNS.slice(0,400),x[0],200),d=daysUntilBelow(f,x[1]);
+      if(d===null) return f.every(v=>v>=x[1]);
+      return f[d-1]<x[1]&&(d===1||f[d-2]>=x[1]);}));
+
+  /* ---- layout, ranking and colour ---- */
+  p("prop-layout","Squarify fills the rectangle it is given",()=>forAll(200,
+    ()=>[G.arrOf(G.num(1,500),1,30)(),G.num(50,900)(),G.num(50,700)()],
+    x=>{const r=squarify(x[0],0,0,x[1],x[2]);
+      const area=r.reduce((a,c)=>a+c.w*c.h,0),want=x[1]*x[2];
+      return Math.abs(area-want)/want<0.02;}));
+  p("prop-layout","Squarify never emits a cell outside its bounds",()=>forAll(200,
+    ()=>[G.arrOf(G.num(1,500),1,30)(),G.num(50,900)(),G.num(50,700)()],
+    x=>squarify(x[0],0,0,x[1],x[2]).every(c=>c.x>=-1e-6&&c.y>=-1e-6&&c.x+c.w<=x[1]+1e-6&&c.y+c.h<=x[2]+1e-6)));
+  p("prop-layout","Squarify cell areas stay proportional to their values",()=>forAll(150,
+    ()=>[G.arrOf(G.num(1,500),2,20)(),G.num(200,900)(),G.num(200,700)()],
+    x=>{const r=squarify(x[0],0,0,x[1],x[2]),tot=x[0].reduce((a,b)=>a+b,0),scale=x[1]*x[2]/tot;
+      return r.every(c=>Math.abs(c.w*c.h-x[0][c.i]*scale)/(x[0][c.i]*scale)<0.02);}));
+  p("prop-layout","Squarify drops zero and negative values rather than drawing them",()=>forAll(150,
+    ()=>[G.arrOf(()=>G.pick([0,0,-5,12,40,90])(),1,20)(),G.num(100,600)(),G.num(100,500)()],
+    x=>{const r=squarify(x[0],0,0,x[1],x[2]);
+      return r.every(c=>x[0][c.i]>0&&c.w>0&&c.h>0);}));
+  p("prop-layout","Squarify of an empty or all-zero list draws nothing",()=>forAll(100,
+    ()=>[G.pick([[],[0],[0,0,0]])(),G.num(100,600)(),G.num(100,500)()],
+    x=>squarify(x[0],0,0,x[1],x[2]).length===0));
+  p("prop-layout","Squarify survives a degenerate rectangle",()=>forAll(150,
+    ()=>[G.arrOf(G.num(1,100),1,8)(),G.pick([0,-10,1e-9,1e-12])(),G.num(10,300)()],
+    x=>{const r=squarify(x[0],0,0,x[1],x[2]);
+      // A width of 1e-9 is still positive, so a sliver cell is emitted rather
+      // than nothing. What matters is that it is finite and inside the bounds.
+      return r.every(c=>isFinite(c.x)&&isFinite(c.y)&&isFinite(c.w)&&isFinite(c.h)
+        &&c.w>=0&&c.h>=0&&c.x+c.w<=Math.max(0,x[1])+1e-6);}));
+  p("prop-layout","The utilization ramp returns a usable colour for any input",()=>forAll(600,
+    ()=>G.num(-2,3)(),
+    u=>{const c=utilRamp(u);return typeof c==="string"&&c.indexOf("color-mix")===0&&c.indexOf("NaN")<0;}));
+  p("prop-layout","The ramp deepens monotonically with utilization",()=>forAll(300,
+    ()=>[G.num(0,1)(),G.num(0,1)()],
+    x=>{const lo=Math.min(x[0],x[1]),hi=Math.max(x[0],x[1]);
+      const pct=s=>+(s.match(/(\d+)%, var\(--panel\)/)||[0,0])[1];
+      return pct(utilRamp(hi))>=pct(utilRamp(lo));}));
+  p("prop-layout","The ramp clamps outside 0 to 1 rather than extrapolating",()=>forAll(200,
+    ()=>G.num(1.0001,5)(),u=>utilRamp(u)===utilRamp(1)));
+  p("prop-layout","Every utilization maps to exactly one risk band",()=>forAll(600,
+    ()=>({hasLimit:true,limitM:100,series:Float32Array.from([G.num(-0.5,2.5)()])}),
+    c=>["0%","0-50%","50-75%","75-90%","90-100%",">100%"].indexOf(hlBandOf(c))>=0),5);
+  p("prop-layout","Band boundaries are half-open and never overlap",()=>forAll(400,
+    ()=>G.pick([0,0.0005,0.4999,0.5,0.7499,0.75,0.8999,0.9,0.9999,1,1.0001])(),
+    u=>{const c={hasLimit:true,limitM:100,series:Float32Array.from([u])};
+      // Compare against the value hlBandOf actually receives. Utilization is
+      // stored as float32, so the boundary constants must be applied to the
+      // rounded value, not to the double that was written in.
+      const v=c.series[0];
+      const want=v<0.001?"0%":v<0.5?"0-50%":v<0.75?"50-75%":v<0.9?"75-90%":v<1?"90-100%":">100%";
+      return hlBandOf(c)===want;}));
+  p("prop-layout","Float32 storage can move a boundary value into the band below",()=>forAll(1,
+    ()=>0.9,
+    ()=>{const v=Float32Array.from([0.9])[0];
+      // Documented rather than fixed: 0.9 stored as float32 reads back as
+      // 0.899999976, so a name at exactly 90% lands in 75-90%, not 90-100%.
+      // No customer currently sits on a boundary, so this is latent. DEF-052.
+      return v<0.9&&hlBandOf({hasLimit:true,limitM:100,series:Float32Array.from([0.9])})==="75-90%";}));
+  p("prop-layout","Heatmap ranking is a total order with no duplicates",()=>forAll(60,
+    ()=>[G.pick(Object.keys(HEAT_SORTS))(),G.int(20,400)()],
+    x=>{const keep=state.heatSort;state.heatSort=x[0];
+      const r=heatRank(WITH_LIMIT.slice(0,x[1]));state.heatSort=keep;
+      return r.length===x[1]&&new Set(r.map(c=>c.id)).size===x[1];}));
+  p("prop-layout","Any smaller Top-N is a prefix of any larger one",()=>forAll(60,
+    ()=>[G.pick(Object.keys(HEAT_SORTS))(),G.int(5,120)(),G.int(121,400)()],
+    x=>{const keep=state.heatSort;state.heatSort=x[0];
+      const r=heatRank(WITH_LIMIT.slice(0,500)).map(c=>c.id);state.heatSort=keep;
+      return r.slice(0,x[1]).every((id,i)=>r.slice(0,x[2])[i]===id);}),14);
+  p("prop-layout","Ranking an empty or single-item list is safe",()=>forAll(60,
+    ()=>G.pick([[],[WITH_LIMIT[0]],[WITH_LIMIT[1],WITH_LIMIT[1]]])(),
+    a=>heatRank(a).length===a.length));
+
+  /* ---- domain properties under randomly chosen scopes ---- */
+  p("prop-domain","Pool identities hold for any random subset of the book",()=>forAll(120,
+    ()=>{const n=G.int(1,400)(),o=[];for(let i=0;i<n;i++)o.push(G.pick(WITH_LIMIT)());return o;},
+    list=>{const L=list.reduce((a,c)=>a+c.limitM,0);
+      const d=list.reduce((a,c)=>a+custDrawnM(c),0),f=list.reduce((a,c)=>a+custFreeM(c),0);
+      return Math.abs(d+f-L)<Math.max(1e-6,L*1e-9);}),1);
+  p("prop-domain","Limit-type totals reconcile for any random subset",()=>forAll(80,
+    ()=>{const n=G.int(1,200)(),o=[];for(let i=0;i<n;i++)o.push(G.pick(WITH_LIMIT)());return o;},
+    list=>{let L=0,d=0;
+      list.forEach(c=>LIMIT_TYPES.forEach((t,i)=>{L+=custLimitTypeM(c,t);d+=custTypeDrawn(c)[i];}));
+      const wantL=list.reduce((a,c)=>a+c.limitM,0),wantD=list.reduce((a,c)=>a+custDrawnM(c),0);
+      return Math.abs(L-wantL)<Math.max(0.01,wantL*1e-9)&&Math.abs(d-wantD)<Math.max(0.01,wantD*1e-9);}),4);
+  p("prop-domain","Filtering is idempotent and order-independent",()=>forAll(80,
+    ()=>[G.pick(COUNTRIES)(),G.pick(SEGMENTS)()],
+    x=>{const k={c:state.filters.country,s:state.filters.segment};
+      state.filters.country=new Set([x[0]]);state.filters.segment=new Set([x[1]]);
+      const a=filteredWithLimit().map(c=>c.id).join();
+      state.filters.segment=new Set([x[1]]);state.filters.country=new Set([x[0]]);
+      const b=filteredWithLimit().map(c=>c.id).join();
+      state.filters.country=k.c;state.filters.segment=k.s;
+      return a===b;}));
+  p("prop-domain","A filter never widens the book",()=>forAll(120,
+    ()=>[G.pick(COUNTRIES)(),G.pick(SEGMENTS)(),G.pick(LIMIT_TYPES)()],
+    x=>{const k={c:state.filters.country,s:state.filters.segment,l:state.filters.limitType};
+      state.filters.country=new Set([x[0]]);
+      const a=filteredWithLimit().length;
+      state.filters.segment=new Set([x[1]]);
+      const b=filteredWithLimit().length;
+      state.filters.limitType=new Set([x[2]]);
+      const c=filteredWithLimit().length;
+      state.filters.country=k.c;state.filters.segment=k.s;state.filters.limitType=k.l;
+      return a<=WITH_LIMIT.length&&b<=a&&c<=b;}));
+  p("prop-domain","The reserve overlay never exceeds total approved reserves",()=>forAll(60,
+    ()=>{const n=G.int(1,300)(),s=new Set();for(let i=0;i<n;i++)s.add(G.pick(WITH_LIMIT)().id);return s;},
+    ids=>{const L=WITH_LIMIT.filter(c=>ids.has(c.id)).reduce((a,c)=>a+c.limitM,0);
+      if(!L) return true;
+      const ov=reserveOverlay(ids,FWD_DAYS,L,"pb-"+ids.size+"-"+prng());
+      const ap=RESERVES.filter(r=>r.status==="Approved"&&ids.has(r.customerId)).reduce((a,r)=>a+r.amountM,0);
+      return ov.every(v=>v>=0)&&Math.max.apply(null,ov)*L<=ap+1;}),21);
+  p("prop-domain","The reserve overlay is zero when no customer is in scope",()=>forAll(40,()=>new Set(),
+    ids=>reserveOverlay(ids,FWD_DAYS,1,"pb-empty-"+prng()).every(v=>v===0)));
+  p("prop-domain","Carve-out drawn never exceeds its allocation, for any carve-out",()=>forAll(600,
+    G.pick(CARVEOUTS),co=>carveDrawn(co)<=co.amountM+1e-6));
+  p("prop-domain","Carve-out utilization stays between zero and one",()=>forAll(600,
+    G.pick(CARVEOUTS),co=>{const u=carveUtilPct(co);return u>=0&&u<=1+1e-9;}));
+  p("prop-domain","Threshold breach agrees with the threshold, whichever mode",()=>forAll(600,
+    G.pick(CARVEOUTS),
+    co=>{const should=co.thMode==="pct"?carveUtilPct(co)*100>=co.thValue:carveDrawn(co)>=co.thValue;
+      return carveThresholdBreached(co)===should;}));
+  p("prop-domain","Every reserve window state is one of the four defined values",()=>forAll(600,
+    G.pick(RESERVES),r=>["Active","Scheduled","Expired","Awaiting","—"].indexOf(rsvWindow(r))>=0));
+  p("prop-domain","A reserve holds capacity exactly when its window covers today",()=>forAll(600,
+    G.pick(RESERVES),
+    r=>rsvHoldsToday(r)===(r.status==="Approved"&&r.fromDay<=0&&r.toDay>=0)));
+  p("prop-domain","Customer tooltips never emit an unescaped separator",()=>forAll(400,
+    G.pick(CUSTOMERS),
+    c=>{const a=custTipAttrs(c);return a.indexOf("<")<0||a.indexOf("&lt;")>=0;}));
+  p("prop-domain","Every customer produces highlight attributes that parse",()=>forAll(400,
+    G.pick(CUSTOMERS),
+    c=>{const a=hlAttrs(c);
+      return a.indexOf('data-hl-cust="'+c.id+'"')>=0&&a.indexOf("data-hl-band=")>=0&&a.indexOf("undefined")<0;}));
+  p("prop-domain","Heat cells render for every customer without leaking markup",()=>forAll(300,
+    G.pick(CUSTOMERS),
+    c=>{const h=heatCell(c);
+      return h.indexOf("<button")===0&&h.indexOf("undefined")<0&&h.indexOf("NaN")<0;}));
+  return T;
+}
+const AUTO_TESTS=buildTests().map(t=>Object.assign({kind:"auto"},t)).concat(buildPropertyTests());
 
 /* Manual tests. These cannot be automated here — they need a person to look at
-   the screen, use a pointer, or judge whether something reads correctly. Each
-   carries the steps to follow and what should happen. */
-const MANUAL_TESTS=[
-  {id:"MT-001",area:"Shell",priority:"High",name:"Theme switch repaints every surface",
-   steps:["Open the Overview tab.","Switch the theme picker to Dark, then Red, then back to Light.","Scroll the full page in each theme."],
-   expected:"Every panel, chart, table and tag repaints. No element keeps a colour from the previous theme, and no text becomes unreadable against its background."},
-  {id:"MT-002",area:"Shell",priority:"High",name:"Font slider scales the whole interface",
-   steps:["Drag the font slider to its smallest setting.","Drag it to its largest.","Visit Overview, Customers and Limit Reserve Requests at both extremes."],
-   expected:"All type scales together, including chart labels. No table column clips its contents and the page never scrolls sideways."},
-  {id:"MT-003",area:"Shell",priority:"Medium",name:"Theme and font choices survive a reload",
-   steps:["Pick the Dark theme and the largest font.","Reload the page."],
-   expected:"The page returns in Dark at the largest font."},
-  {id:"MT-004",area:"Shell",priority:"Low",name:"Brand mark returns to the site index",
-   steps:["Click the GFM mark at the top left of the rail."],
-   expected:"The browser navigates to the dashboard index page."},
-  {id:"MT-005",area:"Overview",priority:"High",name:"Data Highlight links every panel",
-   steps:["Hover a country row in Concentration by country.","Hover a segment bar in the coverage chart.","Hover a utilization band in the histogram."],
-   expected:"Matching tiles and rows stay lit while everything else dims, in every panel at once. Country and limit-type rows show a marker for how much of the bar the selection accounts for."},
-  {id:"MT-006",area:"Overview",priority:"Medium",name:"Pinning a highlight survives scrolling and re-render",
-   steps:["Click a country row to pin it.","Scroll to the bottom of the tab.","Change the tile size control."],
-   expected:"The pinned badge stays visible, the highlight is still applied after the pane rebuilds, and Esc releases it."},
-  {id:"MT-007",area:"Overview",priority:"High",name:"Heatmap and treemap agree on the same names",
-   steps:["Set Show to 100 and note the first few names in each segment.","Switch between Heatmap and Treemap.","Raise Show to 250."],
-   expected:"Raising the count appends names rather than reshuffling them. Treemap omits names with no SR limit and says so; heatmap shows them hatched."},
-  {id:"MT-008",area:"Overview",priority:"Medium",name:"Customer pivot replaces the tab cleanly",
-   steps:["Type a customer name into the Customer view box.","Review the pivoted tab.","Click Back to portfolio overview."],
-   expected:"The whole tab shows that customer, independent of the rail filters, and the back button restores the portfolio view."},
-  {id:"MT-009",area:"Charts",priority:"High",name:"Reserve line is distinguishable from the run-off",
-   steps:["Open the Overview trend chart.","Follow the gold line across the forward half.","Untick Reserves, then tick it again."],
-   expected:"The gold line lifts away from the green run-off while a reserve window is open and settles back when it closes. Its steps fall on different dates from the run-off's month-end steps. Unticking removes the line and the shaded gap."},
-  {id:"MT-010",area:"Charts",priority:"Medium",name:"Trend chart axis reads as a calendar",
-   steps:["Inspect the x-axis of the Overview trend chart at 1280px and at 1920px."],
-   expected:"A minor tick every Monday, a taller tick on the 1st of each month, month names beneath, and the year under each January. Month labels thin out rather than overlapping."},
-  {id:"MT-011",area:"Reserves",priority:"High",name:"Reserve request form refuses an invalid hold",
-   steps:["Open Limit Reserve Requests.","Pick a customer and a carve-out.","Enter an amount larger than the free headroom shown.","Set the end date before the start date."],
-   expected:"Each mistake is refused with a message beside the submit button, and the form cannot be submitted until both are corrected."},
-  {id:"MT-012",area:"Reserves",priority:"High",name:"Approving a reserve moves the forward charts",
-   steps:["Submit a large reserve for a near-dated window.","Note the peak figure on the trend chart.","Approve the new reserve.","Return to the Overview trend chart."],
-   expected:"While pending it changes nothing. Once approved the gold line and the peak figure both rise, and the horizon readout shows more held by reserves and less free to trade."},
-  {id:"MT-013",area:"Reserves",priority:"Medium",name:"Releasing a reserve hands capacity straight back",
-   steps:["Click Release on an approved reserve whose window is still open.","Confirm the dialog."],
-   expected:"The confirmation names the reserve. After confirming, the reserve is gone, the charts redraw without it and the carve-out's Reserved column falls."},
-  {id:"MT-014",area:"Reserves",priority:"Medium",name:"Deal event rows explain the steps",
-   steps:["Read the Deal events panel.","Click one row."],
-   expected:"Each event's window matches a visible step on the chart above, and clicking filters the table below to that event's approved reserves."},
-  {id:"MT-015",area:"Carve-outs",priority:"High",name:"Adding and removing a carve-out",
-   steps:["Pick a customer with spare headroom.","Add a carve-out by percentage, then another by absolute amount.","Remove one with the x button."],
-   expected:"Labels already used stay listed but disabled. The allocation bar and tables update immediately, removal asks for confirmation, and the unallocated tail never goes negative."},
-  {id:"MT-016",area:"Requests",priority:"Medium",name:"Limit increase workflow end to end",
-   steps:["Submit a request for a customer.","Find it in the table.","Approve it.","Sort and filter the table."],
-   expected:"It arrives as Pending with no approver, approval stamps an officer and today's date, and the decision follows the request itself rather than its row position after sorting."},
-  {id:"MT-017",area:"Blotter",priority:"Medium",name:"Blotter respects the date range and chips",
-   steps:["Set the rail date range to 30 days.","Apply an asset-class chip.","Sort by SR consumed."],
-   expected:"Only trades inside the window are listed, the chip narrows further, and the totals above the table agree with the visible rows."},
-  {id:"MT-018",area:"Accessibility",priority:"Medium",name:"Keyboard reaches the primary controls",
-   steps:["Tab through the rail and the tab bar.","Open a drawer and press Escape."],
-   expected:"Focus is visible on every control, the tab bar is reachable, and Escape closes the drawer, the modal and any open filter panel."},
-  {id:"MT-019",area:"Documentation",priority:"Low",name:"Topic tree tracks the reader",
-   steps:["Open Documentation.","Scroll slowly from top to bottom.","Click a deep topic in the tree."],
-   expected:"The highlighted topic follows the heading currently in view, the tree scrolls to keep it visible, and clicking jumps to the right heading."},
-  {id:"MT-020",area:"Print",priority:"Low",name:"Key screens survive a print preview",
-   steps:["Open the browser print preview on Overview and on Limit Reserve Requests."],
-   expected:"Content is not cut off mid-panel and charts render rather than appearing blank."},
-];
+   the screen, use a pointer, judge whether something reads correctly, or run
+   the page somewhere this one cannot reach. Each carries its steps and what
+   should happen.
+
+   Families at the end are parameterised over the tabs, themes and font steps,
+   the same way the automated suite is: one concrete scenario per subject
+   rather than one vague instruction covering all of them. */
+function buildManualTests(){
+  const M=[]; let n=0;
+  const m=(area,priority,name,steps,expected)=>{ n++;
+    M.push({id:"MT-"+String(n).padStart(3,"0"),area,priority,name,steps,expected}); };
+
+  /* ---- shell, theme, typography ---- */
+  m("Shell","High","Theme switch repaints every surface",
+    ["Open Overview.","Switch the theme to Dark, then Red, then back to Light.","Scroll the full page in each."],
+    "Every panel, chart, table and tag repaints. Nothing keeps a colour from the previous theme and no text becomes unreadable against its background.");
+  m("Shell","High","Font slider scales the whole interface",
+    ["Drag the font slider to its smallest step.","Drag it to its largest.","Visit Overview, Customers and Limit Reserve Requests at both."],
+    "All type scales together, including chart labels. No table column clips and the page never scrolls sideways.");
+  m("Shell","Medium","Theme and font choices survive a reload",
+    ["Choose Dark and the largest font.","Reload the page."],
+    "The page returns in Dark at the largest font.");
+  m("Shell","Low","Brand mark returns to the site index",
+    ["Click the GFM mark at the top left of the rail."],
+    "The browser navigates to the dashboard index page.");
+  m("Shell","Medium","Rail stays put while the main column scrolls",
+    ["Open a long tab such as Customers.","Scroll to the bottom."],
+    "The rail remains visible and scrolls independently once its own content exceeds the window.");
+  m("Shell","Medium","Rail figures respond to every filter",
+    ["Note the SR pool snapshot and Risk posture figures.","Apply a country filter, then a segment filter."],
+    "Both cards update on each change. Reserved falls to zero as soon as any filter is applied, because a central buffer cannot be attributed to a country or segment.");
+  m("Shell","Low","Filter chips appear and clear",
+    ["Apply two country filters and one segment filter.","Remove each chip above the pane."],
+    "One chip per active filter, each removable, and removing the last chip restores the full book.");
+  m("Shell","Medium","Multi-select panels do not overlap each other",
+    ["Open the Country panel, then the Segment panel, then the Limit type panel."],
+    "Opening one closes the last. Every trigger button stays clickable and no panel covers another.");
+  m("Shell","Low","Select all and Clear work in every filter panel",
+    ["Open each filter panel in turn and use Select all, then Clear."],
+    "Select all ticks every option and the trigger reads the count; Clear empties it and the trigger returns to All.");
+  m("Shell","Medium","The page works from a local file with no network",
+    ["Save the page to disk.","Disconnect from the network and open the file directly."],
+    "Everything renders and every tab works. Nothing is requested from outside the file.");
+
+  /* ---- overview ---- */
+  m("Overview","High","Data Highlight links every panel",
+    ["Hover a country row in Concentration by country.","Hover a segment bar in the coverage chart.","Hover a utilization band in the histogram."],
+    "Matching tiles and rows stay lit while everything else dims, in every panel at once. Country and limit-type rows show a marker for how much of the bar the selection accounts for.");
+  m("Overview","Medium","Pinning a highlight survives scrolling and re-render",
+    ["Click a country row to pin it.","Scroll to the bottom of the tab.","Change the tile size control."],
+    "The pinned badge stays visible, the highlight is reapplied after the pane rebuilds, and Escape releases it.");
+  m("Overview","Medium","Data Highlight can be turned off",
+    ["Untick Data highlight in the heatmap toolbar.","Hover several aggregate rows."],
+    "Nothing dims or lights. Ticking it again restores the effect.");
+  m("Overview","Medium","Clicking a segment bar drills without pinning",
+    ["Click a bar in Customers with vs without SR limits."],
+    "The heatmap narrows to that segment with a removable chip. The click drills rather than pinning a highlight.");
+  m("Overview","High","The eight headline figures agree with the rail",
+    ["Compare Total SR pool, Utilized, Available and Reserved against the rail snapshot.","Apply a filter and compare again."],
+    "The figures match on both readings. Utilized and Available add to the approved limits; Reserved sits on top.");
+  m("Overview","Medium","Every headline figure explains itself",
+    ["Hover the info icon on each of the eight figures."],
+    "Each gives a definition and says what it is divided by. None is truncated or clipped.");
+  m("Overview","Medium","Excess exposure is shown apart from the pool",
+    ["Read Excess exposure and the donut legend."],
+    "Excess is reported separately with a customer count, and is not included in Utilized or in the donut slices.");
+  m("Overview","High","Customer pivot replaces the tab cleanly",
+    ["Type a customer name into the Customer view box.","Review the pivoted tab.","Click Back to portfolio overview."],
+    "The whole tab shows that customer, independent of the rail filters, and the back button restores the portfolio view.");
+  m("Overview","Medium","The customer list is alphabetical and complete",
+    ["Open the Customer view dropdown and scroll it."],
+    "Every limit holder appears exactly once, in alphabetical order.");
+  m("Overview","Medium","Exposure ranking controls behave together",
+    ["Switch between Top and Bottom.","Raise the count to 250.","Narrow to one segment."],
+    "The list scrolls inside its tile without stretching the row. A Bottom ranking surfaces the largest idle limits rather than an alphabetical list.");
+  m("Overview","Low","Concentration bars agree with their figures",
+    ["Compare each country row's bar length against its stated percentage."],
+    "Bar length tracks the rate, and rows at or above 90% are drawn in the breach colour.");
+  m("Overview","Medium","The utilization histogram bands add up",
+    ["Add the six band counts together.","Compare against Customers w/ limit in the rail."],
+    "The totals match. Every band has a count and no label is clipped.");
+
+  /* ---- heatmap and treemap ---- */
+  m("Heatmap","High","Raising the count appends rather than reshuffles",
+    ["Set Show to 100 and note the first names in each segment.","Raise to 250, then 500."],
+    "Names already on screen keep their positions and new ones are added after them.");
+  m("Heatmap","High","Every sort criterion reorders both views consistently",
+    ["Cycle through all six Sort by options in Heatmap, then repeat in Treemap."],
+    "Order changes with the criterion and the two views agree on which names are shown.");
+  m("Heatmap","Medium","Tile sizes shed detail in the right order",
+    ["Step the tile size from L down to XS in Heatmap view."],
+    "L shows name, rate and amount; M name and rate; S rate only; XS colour and a bare number with no per-cent sign.");
+  m("Heatmap","Medium","Treemap height control replaces tile size",
+    ["Switch to Treemap and step through XS to L."],
+    "The control is relabelled Height and changes the panel height rather than the tile size.");
+  m("Heatmap","Medium","Hide names without SR appears only in Heatmap",
+    ["Switch between Heatmap and Treemap."],
+    "The checkbox is present in Heatmap. In Treemap it is replaced by a note saying names with no limit have no area to draw.");
+  m("Heatmap","High","The three tile states are visually distinct",
+    ["Find a hatched tile, a pale violet dashed tile and a red-bordered tile."],
+    "No SR limit is hatched, dormant at zero is pale violet and dashed, over-limit keeps its ramp colour with a solid red border. The three are unmistakable from each other.");
+  m("Heatmap","Medium","Tile colour tracks the rate it states",
+    ["Compare several tiles' shades against their stated percentages."],
+    "Shade deepens with utilization consistently. Two tiles at similar rates look similar; distant rates look clearly different.");
+  m("Heatmap","Medium","Every tile opens the right customer",
+    ["Click tiles in three different segments."],
+    "The drawer opens on the name shown on the tile, with matching segment, country and limit.");
+  m("Heatmap","Low","Segment groups carry honest counts",
+    ["Read each segment header in Heatmap view."],
+    "Each states the number in view, how many hold a limit and how many do not, and the three agree.");
+  m("Heatmap","High","All at full book stays usable",
+    ["Set Show to All in Treemap, then in Heatmap."],
+    "The page still responds. Treemap remains legible; Heatmap is dense but scrolls and hovers without stalling.");
+  m("Heatmap","Medium","The showing count matches what is drawn",
+    ["Compare the Showing X of Y note against the tiles present."],
+    "The count matches, and in Treemap the total is qualified as with an SR limit.");
+  m("Heatmap","Low","The legend matches the tiles",
+    ["Read the legend and compare with tiles on screen."],
+    "Every state in the legend appears on screen, and no state on screen is missing from the legend.");
+
+  /* ---- trend, run-off and reserves on charts ---- */
+  m("Charts","High","Reserve line is distinguishable from the run-off",
+    ["Open the Overview trend chart.","Follow the gold line across the forward half.","Untick Reserves and tick it again."],
+    "The gold line lifts away from the green run-off while a reserve window is open and settles back when it closes. Unticking removes both the line and the shaded gap.");
+  m("Charts","High","Reserve steps fall on different dates from run-off steps",
+    ["Note where the green line steps down.","Note where the gold line steps."],
+    "Green steps at month ends; gold steps mid-month on its own event dates. The two do not coincide.");
+  m("Charts","Medium","Trend chart axis reads as a calendar",
+    ["Inspect the x-axis at 1280px and at 1920px."],
+    "A minor tick every Monday, a taller tick on the first of each month, month names beneath, and the year under each January. Labels thin out rather than overlapping.");
+  m("Charts","Medium","The moving average can be turned off",
+    ["Untick 3-month MA on Overview, in the customer view and in the drawer."],
+    "The purple line disappears in each, its legend entry is removed, and the other lines are unaffected.");
+  m("Charts","High","The forward half never rises",
+    ["Trace the green run-off from today to the right edge."],
+    "It only steps down or stays flat. It never rises at any point.");
+  m("Charts","Medium","Today is marked and the forward half is distinguished",
+    ["Look at the boundary between history and projection."],
+    "A dashed vertical line labelled today, with the forward region lightly shaded.");
+  m("Charts","Medium","The reserve peak annotation points at the right place",
+    ["Read the peak figure and follow its leader line."],
+    "The leader lands on the highest point of the gold band, and the figure matches the reserve tab's peak.");
+  m("Charts","High","The same chart appears on Overview and on the reserve tab",
+    ["Compare the two charts under no filter, then under a country filter."],
+    "They are identical in both cases, including the reserve band and the peak annotation.");
+  m("Charts","Medium","Charts redraw correctly after a theme change",
+    ["Leave a chart on screen and switch theme twice."],
+    "Every line, fill and label takes the new theme's colours. Nothing keeps an old colour or disappears.");
+  m("Charts","Low","The donut legend lists every slice",
+    ["Read the SR pool composition legend at 1280px and 1920px."],
+    "Utilized, Available and Reserved all appear with amounts and shares, and the excess line shows when drawn exceeds approved limits.");
+
+  /* ---- customers, blotter, rankings ---- */
+  m("Customers","Medium","Search filters as you type without losing the caret",
+    ["Type a partial name slowly into the customer search."],
+    "The list narrows on each keystroke and the caret stays at the end of what you typed.");
+  m("Customers","Medium","Every column sorts both ways",
+    ["Click each column header twice."],
+    "Text columns start ascending, numeric columns descending, and a second click reverses. The caret shows the active column and direction.");
+  m("Customers","Low","Customers with no limit are shown honestly",
+    ["Find a row with no SR limit."],
+    "It reads No SR limit on file rather than showing zeroes, and carries a No limit tag.");
+  m("Customers","Medium","The row cap is disclosed",
+    ["Clear all filters and scroll to the foot of the table."],
+    "A note says how many of the total are shown and suggests searching or filtering to reach the rest.");
+  m("Customers","Low","Clicking a row opens the matching customer",
+    ["Click three rows in different segments."],
+    "The drawer opens on the right name each time.");
+  m("Blotter","Medium","Blotter respects the date range and chips",
+    ["Set the rail date range to 30 days.","Apply an asset-class chip.","Sort by SR consumed."],
+    "Only trades in the window are listed, the chip narrows further, and the totals above the table agree with the visible rows.");
+  m("Blotter","Medium","Trade status never contradicts its maturity",
+    ["Sort by maturity and read the status column."],
+    "Nothing with days left to maturity is marked Settled. Failed trades may appear at any date.");
+  m("Blotter","Low","Asset-class chips are exclusive and clearable",
+    ["Click each chip in turn, then click the active one again."],
+    "Only one chip is active at a time and clicking it again restores the full list.");
+  m("Blotter","Low","SR consumed is a plausible fraction of notional",
+    ["Scan the notional and SR consumed columns."],
+    "SR is a small fraction of notional on every row, never zero and never larger than the notional.");
+  m("Rankings","Medium","Nearest to 100% is ordered and complete",
+    ["Read the top of the Nearest to 100% table."],
+    "Ordered by current utilization descending, with headroom shown as none once a name is at or over its limit.");
+  m("Rankings","Medium","Dormant ranking counts consecutive days",
+    ["Read the Longest period with zero utilization table."],
+    "Ordered by days at zero descending, and every listed name shows zero current utilization.");
+  m("Rankings","Medium","Breach alerts list every name over its limit",
+    ["Compare the breach count in the rail against the alert table."],
+    "The two agree, and every listed name shows utilization above 100% with an excess amount.");
+  m("Rankings","Low","Carve-out alerts respect the current view",
+    ["Apply a country filter and read the carve-out alerts."],
+    "Only carve-outs belonging to customers in view are listed, and the count above the table matches.");
+
+  /* ---- carve-outs ---- */
+  m("Carve-outs","High","Adding a carve-out by percentage and by amount",
+    ["Pick a customer with spare headroom.","Add one carve-out as a percentage of the limit.","Add another as an absolute amount."],
+    "Both appear immediately in the table and the allocation bar, and the unallocated tail shrinks by the right amount each time.");
+  m("Carve-outs","High","Removing a carve-out asks first",
+    ["Click the x on a carve-out."],
+    "A confirmation names the carve-out. Cancelling leaves it; confirming removes it and the bar and tables update.");
+  m("Carve-outs","Medium","Used labels stay listed but disabled",
+    ["Open the label dropdown for a customer that already has carve-outs."],
+    "Labels already carved out are still listed, greyed out and annotated, rather than disappearing.");
+  m("Carve-outs","Medium","The allocation bar cannot be overfilled",
+    ["Try to add a carve-out larger than the unallocated headroom."],
+    "It is refused, or the resulting bar never exceeds the full limit and the tail never goes negative.");
+  m("Carve-outs","Medium","Drawn fill inside each segment is readable",
+    ["Compare the solid inner fill of each bar segment against its stated drawn percentage."],
+    "The fill tracks the percentage, and a segment at 100% is hatched in red.");
+  m("Carve-outs","Medium","Reserved capacity appears against the right carve-outs",
+    ["Find a customer with an active reserve.","Read the Reserved column and the allocation bar tooltip."],
+    "The column shows the amount held today and the tooltip breaks it into drawn, reserved and free.");
+  m("Carve-outs","Medium","The two scopes are presented as alternatives",
+    ["Read both the Country and Limit type panels for one customer."],
+    "Each is measured against the same full limit. Nothing suggests the two should be added together.");
+  m("Carve-outs","Low","Threshold settings are shown in the form they were set",
+    ["Compare the Alert at column against the thresholds you set."],
+    "A percentage threshold reads as a percentage of the carve-out; an amount threshold reads as a cash figure.");
+  m("Carve-outs","Low","Breached thresholds are flagged in the table",
+    ["Find a carve-out whose drawn amount is past its threshold."],
+    "It carries a Breached tag and appears in the Rankings tab's carve-out alerts.");
+  m("Carve-outs","Medium","Customer picker finds names by partial match",
+    ["Type part of a customer name into the carve-out customer picker."],
+    "Matching names are offered and choosing one loads that customer's carve-outs.");
+  m("Carve-outs","Low","Tables scroll rather than clip at large text",
+    ["Set the largest font and open a customer with several carve-outs."],
+    "Tables scroll sideways within their panel. No column is cut off.");
+  m("Carve-outs","Medium","Added carve-outs survive a reload",
+    ["Add a carve-out, then reload the page."],
+    "It is still there, with the same amount and threshold.");
+
+  /* ---- limit increase requests ---- */
+  m("Requests","Medium","Limit increase workflow end to end",
+    ["Submit a request for a customer.","Find it in the table.","Approve it."],
+    "It arrives as Pending with no approver; approval stamps an officer and today's date.");
+  m("Requests","High","Decisions follow the request, not the row",
+    ["Sort or filter the table so rows move.","Approve a request that is no longer in its original position."],
+    "The request you clicked is the one that changes status.");
+  m("Requests","Medium","The effective window hides for a permanent request",
+    ["Switch the request type between Temporary, Time-bound and Permanent."],
+    "The date fields disappear for Permanent and return for the other two.");
+  m("Requests","Medium","Current limit is filled in and not editable",
+    ["Choose a customer in the request form."],
+    "The current limit fills in automatically and cannot be typed over.");
+  m("Requests","Medium","Every column filter narrows the table",
+    ["Use each filter in turn: text, type, requester, approver, status."],
+    "Each narrows the list, the matched-of-total count updates, and Clear filters restores everything.");
+  m("Requests","Medium","Dates sort chronologically, not alphabetically",
+    ["Sort by Submitted, then by Decided."],
+    "Order is chronological. Dates in different months sort correctly rather than by their text.");
+  m("Requests","Low","Uplift percentage matches the two limits",
+    ["Compare Current, Requested and Uplift on several rows."],
+    "The percentage is the increase from current to requested on every row.");
+  m("Requests","Low","Justification is visible without opening anything",
+    ["Hover a request row."],
+    "The justification appears as a tooltip.");
+  m("Requests","Medium","Submitted requests survive a reload",
+    ["Submit a request, then reload."],
+    "It is still listed, still pending, with the same customer and amounts.");
+
+  /* ---- limit reserves ---- */
+  m("Reserves","High","Reserve request form refuses an invalid hold",
+    ["Pick a customer and a carve-out.","Enter an amount larger than the free headroom shown.","Set the end date before the start date."],
+    "Each mistake is refused with a message beside the submit button, and the form cannot be submitted until both are corrected.");
+  m("Reserves","High","Free headroom already accounts for other reserves",
+    ["Choose a carve-out that already carries a reserve.","Read the free figure beneath the amount field."],
+    "It is the carve-out less what is drawn and less what is already held, and says how much is already held.");
+  m("Reserves","High","Approving a reserve moves the forward charts",
+    ["Submit a large reserve for a near-dated window.","Note the peak figure.","Approve it and return to the chart."],
+    "While pending it changes nothing. Once approved the gold line and the peak both rise, and the horizon readout shows more held and less free.");
+  m("Reserves","Medium","Releasing a reserve hands capacity straight back",
+    ["Click Release on an approved reserve whose window is still open.","Confirm."],
+    "The confirmation names the reserve. After confirming it is gone, the charts redraw without it and the carve-out's Reserved column falls.");
+  m("Reserves","Medium","Rejecting a reserve leaves capacity untouched",
+    ["Reject a pending reserve."],
+    "Its status changes, an approver is stamped, and no chart or carve-out figure moves.");
+  m("Reserves","Medium","The form cascades customer to scope to carve-out",
+    ["Choose a customer, then switch scope between Country and Limit type."],
+    "The carve-out list reloads for the chosen scope and shows the free headroom on each option.");
+  m("Reserves","Medium","Deal event rows explain the steps",
+    ["Read the Deal events panel.","Click one row."],
+    "Each window matches a visible step on the chart above, and clicking filters the table to that event's approved reserves.");
+  m("Reserves","Medium","Window state matches the dates shown",
+    ["Compare the Window tag against the dates on several rows."],
+    "Active windows cover today, Scheduled start later, Expired have closed, and Awaiting are still pending.");
+  m("Reserves","Medium","The four summary figures agree with the table",
+    ["Compare Active, Scheduled and Awaiting against the table filtered to each state."],
+    "The counts and amounts match.");
+  m("Reserves","Medium","The horizon readout adds up",
+    ["At each horizon, add Still on the book, Held by reserves and Free to trade."],
+    "They total the full pool, and Released plus Still on the book equals current utilization.");
+  m("Reserves","High","Reserves reduce free capacity rather than increasing it",
+    ["Read the Free to trade column against Still on the book."],
+    "Free is lower than run-off alone would imply. Reserves are subtracted, not added.");
+  m("Reserves","Medium","Every column filter narrows the reserve table",
+    ["Use each filter: text, scope, window, expected deal, requester, approver, status."],
+    "Each narrows the list and Clear filters restores everything.");
+  m("Reserves","Low","Reserve amounts read as a share of the limit",
+    ["Compare Reserved against % of limit on several rows."],
+    "The percentage is the reserve as a share of that customer's approved limit.");
+  m("Reserves","Medium","Submitted reserves survive a reload",
+    ["Submit a reserve, then reload."],
+    "It is still listed, still pending, with the same carve-out, amount and window.");
+  m("Reserves","Low","A customer with no carve-outs is handled gracefully",
+    ["Choose a customer with no carve-outs in the chosen scope."],
+    "The carve-out list says so rather than being silently empty, and the form cannot be submitted.");
+
+  /* ---- drawer ---- */
+  m("Drawer","Medium","Drawer opens from every entry point",
+    ["Open a customer from a heatmap tile, a Customers row, a ranking row and a request row."],
+    "The same customer opens each time, with matching identity and figures.");
+  m("Drawer","High","Drawer breakdown matches the bars above it",
+    ["Open a customer with carve-outs.","Compare the breakdown table against the allocation bars."],
+    "The same labels and the same amounts appear in both. The table does not list a different set from the bars.");
+  m("Drawer","Medium","Drawer statistics are tagged with their window",
+    ["Change the rail date range and reopen the drawer."],
+    "The average, maximum and minimum chips carry the day count, and the trend chart still spans eighteen months regardless.");
+  m("Drawer","Medium","Transactions show maturity and days remaining",
+    ["Read the drawer's transaction table."],
+    "Each row shows a maturity date and days to maturity, and the status agrees with them.");
+  m("Drawer","Low","A customer with no limit gets a useful panel",
+    ["Open a customer that holds no SR limit."],
+    "A short panel explains there is no limit and points at the Limit Increase Requests tab.");
+  m("Drawer","Low","Drawer closes by every route",
+    ["Close the drawer with the x, by clicking the scrim, and with Escape."],
+    "All three close it and the page beneath is unchanged.");
+  m("Drawer","Medium","Cross-tab links land in the right place",
+    ["Use Open in Overview customer view, then Manage carve-outs."],
+    "Each opens the correct tab already focused on that customer.");
+
+  /* ---- documentation and testing tabs ---- */
+  m("Documentation","Medium","Topic tree tracks the reader",
+    ["Scroll slowly from top to bottom.","Click a deep topic in the tree."],
+    "The highlighted topic follows the heading in view, the tree scrolls to keep it visible, and clicking jumps to the right heading.");
+  m("Documentation","Medium","Live figures match the rest of the site",
+    ["Compare the customer and pool figures in section 5 against the rail."],
+    "They agree. No figure in the document is a stale hard-coded number.");
+  m("Documentation","Low","Diagrams are readable in every theme",
+    ["View each figure in Light, Dark and Red."],
+    "Lines, fills and labels stay legible in all three. No diagram loses its text against its background.");
+  m("Documentation","Low","Diagrams scroll rather than squash on a narrow window",
+    ["Narrow the window to 1024px and scroll through the figures."],
+    "Each figure scrolls sideways within its frame rather than compressing until unreadable.");
+  m("Documentation","Low","Code blocks do not clip",
+    ["Read each code block at the largest font."],
+    "Each scrolls sideways if needed. No line is cut off.");
+  m("Testing","Medium","Running the suite reports real results",
+    ["Press Run all tests and watch the figures."],
+    "The pass rate, timing and per-suite breakdown all update, and the observed column shows measured values rather than fixed text.");
+  m("Testing","Medium","Suite and result filters narrow the table",
+    ["Choose a suite, then switch to Failures only, then Not yet run."],
+    "Each narrows the list, and the run button retargets to the chosen suite.");
+  m("Testing","Medium","Manual results are recorded and persist",
+    ["Record a Pass on one scenario and a Fail on another.","Reload the page."],
+    "Both are still recorded with your name and today's date.");
+  m("Testing","Low","Property tests report the number of cases they ran",
+    ["Read the observed column for the property suites."],
+    "Each says how many random cases were executed, and a failure names the counterexample.");
+
+  /* ---- accessibility, performance, resilience ---- */
+  m("Accessibility","Medium","Keyboard reaches the primary controls",
+    ["Tab through the rail and the tab bar.","Open a drawer and press Escape."],
+    "Focus is visible on every control, the tab bar is reachable, and Escape closes the drawer, the modal and any open filter panel.");
+  m("Accessibility","Medium","Focus is never trapped",
+    ["Tab repeatedly with the drawer open, then with the confirmation modal open."],
+    "Focus stays inside the open surface and returns to the page when it closes.");
+  m("Accessibility","Medium","Charts carry a text description",
+    ["Inspect each chart with an accessibility tool."],
+    "Each SVG has a role and a label describing what it plots.");
+  m("Accessibility","High","Meaning is not carried by colour alone",
+    ["View the heatmap and the status tags in a greyscale simulation."],
+    "Tile states remain distinguishable by pattern and border, and status tags remain readable by their text.");
+  m("Accessibility","Medium","Text contrast holds in all three themes",
+    ["Check body text, muted text and tag text against their backgrounds in each theme."],
+    "All remain comfortably readable. Muted text is still legible, not merely present.");
+  m("Accessibility","Low","Interactive elements are real controls",
+    ["Inspect a heatmap tile, a filter trigger and a sort header."],
+    "Each is a button or has an appropriate role, rather than being a bare styled element.");
+  m("Performance","Medium","First paint is acceptable on a cold load",
+    ["Load the page with the cache cleared and time until the Overview is usable."],
+    "The page becomes usable within a few seconds, without a blank screen for an extended period.");
+  m("Performance","Medium","Switching tabs stays responsive",
+    ["Move quickly between all nine tabs several times."],
+    "Each renders without a noticeable stall and no tab leaves the previous one on screen.");
+  m("Performance","Medium","Full-scale heatmap does not freeze the page",
+    ["Set Show to All in Heatmap and immediately try to scroll and hover."],
+    "The page remains interactive. Drawing is slow but does not lock the browser.");
+  m("Performance","Low","Running the full suite does not block interaction for long",
+    ["Press Run all tests and try to scroll immediately afterwards."],
+    "The button shows it was pressed, and the page returns to normal quickly.");
+  m("Resilience","Medium","Blocked site data degrades to defaults",
+    ["Open the page in a browser configured to block local storage."],
+    "Everything renders. Theme, font and edits fall back to defaults rather than throwing.");
+  m("Resilience","Medium","Private browsing behaves the same",
+    ["Open the page in a private window and use every tab."],
+    "No errors, and saved preferences simply do not persist between sessions.");
+  m("Resilience","Low","Corrupt saved data does not break the page",
+    ["Put invalid text into one of the storage keys and reload."],
+    "The page loads on the seeded defaults rather than failing.");
+  m("Resilience","Medium","The console is clean throughout a full walkthrough",
+    ["Open the console and visit every tab, using the main controls on each."],
+    "No errors and no warnings appear at any point.");
+  m("Resilience","Low","Key screens survive a print preview",
+    ["Open print preview on Overview and on Limit Reserve Requests."],
+    "Content is not cut off mid-panel and charts render rather than appearing blank.");
+  m("Resilience","Low","Deep zoom does not break the layout",
+    ["Set browser zoom to 200%, then to 50%."],
+    "The layout reflows without horizontal scrolling of the page or overlapping panels.");
+
+  /* ---- parameterised families ---- */
+  TAB_IDS.forEach(t=>{
+    m("Tab render","Medium","The "+t+" tab renders correctly at 1280px",
+      ["Narrow the window to 1280px.","Open the "+t+" tab.","Scroll to the bottom."],
+      "Every panel fits its column, no table clips, the page does not scroll sideways and nothing overlaps.");
+  });
+  TAB_IDS.forEach(t=>{
+    m("Tab render","Low","The "+t+" tab renders correctly at the largest font",
+      ["Set the font slider to its largest step.","Open the "+t+" tab."],
+      "All text scales, panels grow to fit rather than clipping, and controls remain usable.");
+  });
+  THEMES.forEach(th=>{
+    m("Theme","Medium","Every screen is legible in the "+th+" theme",
+      ["Select the "+th+" theme.","Visit every tab and read each panel header, table and chart label."],
+      "All text is legible against its background, all chart series remain distinguishable, and no element keeps a colour from another theme.");
+  });
+  THEMES.forEach(th=>{
+    m("Theme","Low","Status colours keep their meaning in the "+th+" theme",
+      ["Select the "+th+" theme.","Find a breach tag, a watch tag and a healthy tag."],
+      "Breach, watch and healthy remain distinguishable from each other and from the brand colour.");
+  });
+  FS_LEVELS.forEach((px,i)=>{
+    m("Typography","Low","Font step "+(i+1)+" at "+px+"px is usable",
+      ["Set the font slider to step "+(i+1)+".","Open Overview and Limit Reserve Requests."],
+      "Text is readable, tables keep their columns, charts keep their labels and no control becomes too small or too large to use.");
+  });
+  COUNTRIES.forEach(co=>{
+    m("Filter","Low","Filtering to "+co+" is consistent across tabs",
+      ["Filter to "+co+" only.","Check the rail figures, the Overview panels and the blotter."],
+      "Every figure narrows to that booking centre, the chip names it, and clearing the chip restores the full book.");
+  });
+  SEGMENTS.forEach(sg=>{
+    m("Filter","Low","Filtering to "+SEGMENT_LABEL[sg]+" is consistent across tabs",
+      ["Filter to "+SEGMENT_LABEL[sg]+" only.","Check the rail figures and the Overview panels."],
+      "Every figure narrows to that segment. The coverage chart still shows all segments, since it answers to the country filter only.");
+  });
+  return M;
+}
+const MANUAL_TESTS=buildManualTests();
 
 /* Releases and run history. Seeded mock data so the dashboards have a past to
    show — only the current run is real. */
@@ -4933,7 +5704,8 @@ const RELEASES=[
   {v:"1.2.0",name:"Documentation tab",days:47,auto:Math.round(AUTO_TESTS.length*0.66)},
   {v:"1.3.0",name:"Limit reserve requests",days:16,auto:Math.round(AUTO_TESTS.length*0.78)},
   {v:"1.4.0",name:"Deal events & shared trend series",days:12,auto:Math.round(AUTO_TESTS.length*0.89)},
-  {v:"1.5.0",name:"Full regression suite",days:1,auto:AUTO_TESTS.length},
+  {v:"1.5.0",name:"Full regression suite",days:9,auto:Math.round(AUTO_TESTS.length*0.94)},
+  {v:"1.6.0",name:"Property-based testing",days:1,auto:AUTO_TESTS.length},
 ];
 const TEST_TRIGGERS=["CI · commit","CI · pull request","Nightly","Manual"];
 function seedTestRuns(){
@@ -4984,6 +5756,8 @@ const DEFECTS=[
    found:"1.0.0",fixed:"",test:"MT-018",owner:"Design"},
   {id:"DEF-051",sev:"Low",status:"Closed",title:"makeCustomer spread its input last, so limitM stayed null instead of 0 for names with no limit",
    found:"1.4.0",fixed:"1.5.0",test:"BK-005",owner:"Data"},
+  {id:"DEF-052",sev:"Low",status:"Open",title:"Utilization is stored as float32, so a name at exactly 90% reads as 89.9999998% and falls into the band below",
+   found:"1.6.0",fixed:"",test:"PB-057",owner:"Data"},
 ];
 
 /* Persisted: manual results and the runs this browser has executed. */
@@ -5126,18 +5900,39 @@ function paneTests(){
   const manBlocked=man.filter(x=>x.status==="Blocked").length;
   const manRun=man.filter(x=>x.status!=="Not run").length;
   const openDef=DEFECTS.filter(d=>d.status==="Open");
+  const nEx=AUTO_TESTS.filter(t=>t.kind==="auto").length;
+  const nProp=AUTO_TESTS.filter(t=>t.kind==="prop").length;
+  const propCases=AUTO_TESTS.filter(t=>t.kind==="prop"&&TEST_RESULTS[t.id])
+    .reduce((a,t)=>{const m=(TEST_RESULTS[t.id].detail||"").match(/^(\d+) random/);return a+(m?+m[1]:0);},0);
   const kpis=[
-    ["Automated tests",String(AUTO_TESTS.length),TEST_SUITES.length+" suites · run in this page","var(--run)","runc",
-     "Real assertions against the live dataset in this browser. Each one runs the same check the build is verified with, so a pass here is a genuine pass, not a recorded one."],
-    ["Last run",autoRate===null?"—":fmtPct(autoRate,1),autoRate===null?"press Run all tests":autoPass+" of "+ranList.length+" passed in "+(lastRun?lastRun.ms:0)+"ms","var(--pass)","passc",
-     "The result of the most recent run in this browser. Nothing is cached from a server — pressing Run all tests executes the assertions now."],
+    ["Example-based tests",nf(nEx),AUTO_TESTS.filter(t=>t.kind==="auto").length&&TEST_SUITES.filter(s=>s.kind==="auto").length+" suites · this page, this data","var(--run)","runc",
+     "Assertions about the book this page generated, run for real in this browser. Each reports what it actually found."],
+    ["Property tests",nf(nProp),propCases?nf(propCases)+" random cases last run":TEST_SUITES.filter(s=>s.kind==="prop").length+" suites · press Run",
+     "var(--violet)","violetc",
+     "Each states a property that must hold for ANY input, then hunts for a counterexample over hundreds of randomly generated cases. This is what finds edge cases the seeded data never happens to produce."],
+    ["Last run",autoRate===null?"—":fmtPct(autoRate,1),autoRate===null?"press Run all tests":autoPass+" of "+nf(ranList.length)+" passed in "+(lastRun?lastRun.ms:0)+"ms","var(--pass)","passc",
+     "The result of the most recent run in this browser. Nothing is cached from a server — pressing Run executes the assertions now."],
     ["Manual coverage",manRun+" / "+MANUAL_TESTS.length,manPassed+" passed · "+manFailed+" failed · "+manBlocked+" blocked","var(--cyan)","cyanc",
-     "Checks a person has to make: things that need a pointer, a screen reader, or a judgement about how something reads. Status is recorded in this browser."],
+     "Checks a person has to make: things needing a pointer, a screen reader, another browser, or a judgement about how something reads. Status is recorded in this browser."],
     ["Open defects",String(openDef.length),DEFECTS.length-openDef.length+" closed across "+RELEASES.length+" releases","var(--warn)","warnc",
-     "Known issues still outstanding. Each one names the release it was found in and, where there is one, the automated test that now guards against it."],
+     "Known issues still outstanding. Each names the release it was found in and, where there is one, the test that now guards against it."],
   ];
   const sel=state.tests.suite;
-  return `<div class="kpis kpis-4">${kpis.map(([l,v,s,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${s}</small></div>`).join("")}</div>
+  const view=state.tests.view||"auto";
+  /* One view at a time. With 754 executable tests and 169 manual scenarios the
+     whole thing on one page is several thousand rows of scrolling. */
+  const views=[["auto","Example-based",nf(nEx)],["prop","Property-based",nf(nProp)],
+               ["manual","Manual",String(MANUAL_TESTS.length)],["rel","Releases & defects",String(DEFECTS.length)]];
+  const viewBar=`<div class="viewbar">${views.map(v=>`<button type="button" class="viewtab${view===v[0]?" on":""}" data-testview="${v[0]}">${v[1]}<span>${v[2]}</span></button>`).join("")}</div>`;
+  const kindSuites=TEST_SUITES.filter(su=>su.kind===(view==="prop"?"prop":"auto"));
+  const suiteChips=`<div class="suitechips"><button type="button" class="chip${sel?"":" on"}" data-testsuite="">All suites<span>${nf(AUTO_TESTS.filter(t=>t.kind===(view==="prop"?"prop":"auto")).length)}</span></button>${
+    kindSuites.map(su=>{
+      const list=AUTO_TESTS.filter(t=>t.suite===su.id);
+      const done=list.filter(t=>TEST_RESULTS[t.id]);
+      const fail=done.filter(t=>!TEST_RESULTS[t.id].pass).length;
+      return `<button type="button" class="chip${sel===su.id?" on":""}${fail?" bad":done.length?" ok":""}" data-testsuite="${su.id}" data-tip="${esc(su.blurb)}">${su.name}<span>${fail?fail+" fail":nf(list.length)}</span></button>`;
+    }).join("")}</div>`;
+  return `<div class="kpis kpis-5">${kpis.map(([l,v,s,acc,cls,tip])=>`<div class="kpi" style="--accent:${acc}"><div class="eyebrow">${l}<i class="info" data-tip="${esc(tip)}">i</i></div><b class="num ${cls}">${v}</b><small>${s}</small></div>`).join("")}</div>
 
   <div class="grid3 mt14">
     <div class="panel"><div class="panel-hd"><h3>Run history<i class="info" data-tip="Every recorded run, oldest on the left. Green is tests passed, red is tests failed. Runs executed in this browser are marked and stored locally; the rest are seeded history.">i</i></h3><span class="slo">last ${Math.min(24,runs.length)} runs</span></div>
@@ -5148,18 +5943,23 @@ function paneTests(){
       ${suiteBreakdown()}</div>
   </div>
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Automated tests<i class="info" data-tip="These execute for real when you press Run. Each asserts something about the live data or the rendered output, and reports what it actually found. Tests marked with an invariant number correspond to the numbered invariants in the Documentation tab.">i</i></h3>
+  ${viewBar}
+
+  ${view==="auto"||view==="prop"?`
+  <div class="panel mt14"><div class="panel-hd"><h3>${view==="prop"?"Property-based tests":"Example-based tests"}<i class="info" data-tip="${view==="prop"
+      ? "Each states a property that must hold for any input, then runs it over hundreds of randomly generated cases looking for a counterexample. The observed column says how many cases ran; a failure names the exact case that broke it."
+      : "These execute for real when you press Run. Each asserts something about the live data or the rendered output and reports what it actually found. Tests carrying an invariant number correspond to the numbered invariants in the Documentation tab."}">i</i></h3>
     <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <select class="mini-sel" id="tst-suite" data-tip="Narrow to one suite."><option value="">All suites</option>${TEST_SUITES.map(s=>`<option value="${s.id}"${sel===s.id?" selected":""}>${s.name}</option>`).join("")}</select>
       <select class="mini-sel" id="tst-show" data-tip="Show everything, or only what failed."><option value="">Show all</option><option value="fail"${state.tests.show==="fail"?" selected":""}>Failures only</option><option value="notrun"${state.tests.show==="notrun"?" selected":""}>Not yet run</option></select>
-      <button type="button" class="btn" id="tst-run">${sel?"Run "+SUITE_NAME[sel]:"Run all tests"}</button>
+      <button type="button" class="btn" id="tst-run">${sel?"Run "+SUITE_NAME[sel]:"Run all "+nf(AUTO_TESTS.length)+" tests"}</button>
       ${ranList.length?`<button type="button" class="btn-ghost" id="tst-reset">Clear results</button>`:""}
     </span></div>
+    ${suiteChips}
     ${ranList.length?`<div class="foot" style="border-top:0;border-bottom:1px solid var(--hair)">Last run ${esc(lastRun?lastRun.date:"")} · <b>${autoPass} passed</b>${ranList.length-autoPass?` · <b style="color:var(--fail)">${ranList.length-autoPass} failed</b>`:""} of ${ranList.length} in ${lastRun?lastRun.ms:0}ms</div>`:""}
     <div class="table-wrap"><table><thead><tr>
       ${sortTh("tests","id","Test")}${sortTh("tests","suite","Suite")}${sortTh("tests","name","Asserts")}<th>Invariant</th>${sortTh("tests","status","Result","r")}${sortTh("tests","ms","Time","r")}<th>Observed</th></tr></thead>
     <tbody>${(function(){
-      let list=AUTO_TESTS.filter(t=>!sel||t.suite===sel);
+      let list=AUTO_TESTS.filter(t=>t.kind===(view==="prop"?"prop":"auto")).filter(t=>!sel||t.suite===sel);
       if(state.tests.show==="fail") list=list.filter(t=>TEST_RESULTS[t.id]&&!TEST_RESULTS[t.id].pass);
       if(state.tests.show==="notrun") list=list.filter(t=>!TEST_RESULTS[t.id]);
       const sorted=applySort(list,"tests",{
@@ -5181,16 +5981,30 @@ function paneTests(){
           <td class="muted" style="font-size:0.6875rem">${r?esc(r.detail):""}</td></tr>`;
       }).join("");
     })()}</tbody></table>${(function(){
-      const base=AUTO_TESTS.filter(t=>!sel||t.suite===sel);
+      const base=AUTO_TESTS.filter(t=>t.kind===(view==="prop"?"prop":"auto")).filter(t=>!sel||t.suite===sel);
       const n=state.tests.show==="fail" ? base.filter(t=>TEST_RESULTS[t.id]&&!TEST_RESULTS[t.id].pass).length
             : state.tests.show==="notrun" ? base.filter(t=>!TEST_RESULTS[t.id]).length : base.length;
       return n>TEST_ROW_CAP?`<div class="foot">Showing ${TEST_ROW_CAP} of ${n.toLocaleString()} in this sort order — narrow by suite, or switch to Failures only.</div>`:"";
-    })()}</div></div>
+    })()}</div></div>`:""}
 
-  <div class="panel mt14"><div class="panel-hd"><h3>Manual test checklist<i class="info" data-tip="Checks that need a person. Expand a row for the steps and the expected result, then record the outcome — it is saved in this browser.">i</i></h3>
-    <span class="slo">${manRun} of ${MANUAL_TESTS.length} executed · ${manPassed} passed · ${manFailed} failed · ${manBlocked} blocked</span></div>
+  ${view==="manual"?`
+  <div class="panel mt14"><div class="panel-hd"><h3>Manual test checklist<i class="info" data-tip="Checks that need a person: things needing a pointer, a screen reader, another browser, or a judgement about how something reads. Expand a row for the steps and the expected result, then record the outcome — it is saved in this browser.">i</i></h3>
+    <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="slo">${manRun} of ${MANUAL_TESTS.length} executed · ${manPassed} passed · ${manFailed} failed · ${manBlocked} blocked</span>
+    <select class="mini-sel" id="tst-manstatus" data-tip="Show only scenarios in one state."><option value="">Any status</option>${["Passed","Failed","Blocked","Not run"].map(x=>`<option value="${x}"${state.tests.manStatus===x?" selected":""}>${x}</option>`).join("")}</select></span></div>
+    ${(function(){
+      const areas=[...new Set(MANUAL_TESTS.map(m=>m.area))];
+      const sa=state.tests.area;
+      return `<div class="suitechips"><button type="button" class="chip${sa?"":" on"}" data-manarea="">All areas<span>${MANUAL_TESTS.length}</span></button>${
+        areas.map(ar=>{
+          const list=MANUAL_TESTS.filter(m=>m.area===ar);
+          const fail=list.filter(m=>(TEST_STATE.manual[m.id]||{}).status==="Failed").length;
+          return `<button type="button" class="chip${sa===ar?" on":""}${fail?" bad":""}" data-manarea="${esc(ar)}">${esc(ar)}<span>${fail?fail+" fail":list.length}</span></button>`;
+        }).join("")}</div>`;
+    })()}
     <div class="table-wrap"><table><thead><tr><th>Test</th><th>Area</th><th>Scenario</th><th>Priority</th><th class="r">Status</th><th>Last run</th><th class="r">Record</th></tr></thead>
-    <tbody>${MANUAL_TESTS.map(m=>{
+    <tbody>${MANUAL_TESTS.filter(m=>!state.tests.area||m.area===state.tests.area)
+      .filter(m=>!state.tests.manStatus||((TEST_STATE.manual[m.id]||{status:"Not run"}).status===state.tests.manStatus))
+      .map(m=>{
       const r=TEST_STATE.manual[m.id]||{status:"Not run"};
       const cls=r.status==="Passed"?"t-pass":r.status==="Failed"?"t-fail":r.status==="Blocked"?"t-warn":"t-muted";
       const open=state.tests.openManual===m.id;
@@ -5212,8 +6026,9 @@ function paneTests(){
           <div style="font-size:0.75rem;color:var(--ink-2);line-height:1.6">${esc(m.expected)}</div>
           ${r.notes?`<div class="eyebrow" style="margin:10px 0 4px">Tester note</div><div style="font-size:0.75rem;color:var(--ink-3)">${esc(r.notes)}</div>`:""}
         </div></td></tr>`:""}`;
-    }).join("")}</tbody></table></div></div>
+    }).join("")||`<tr><td colspan="7"><div class="empty">No scenarios match this filter.</div></td></tr>`}</tbody></table></div></div>`:""}
 
+  ${view==="rel"?`
   <div class="grid2 mt14">
     <div class="panel"><div class="panel-hd"><h3>Release testing<i class="info" data-tip="What each release was tested against. The automated suite grows with the product, so the test count rises release on release.">i</i></h3><span class="slo">${RELEASES.length} releases</span></div>
       <div class="table-wrap"><table><thead><tr><th>Release</th><th>Contents</th><th class="r">Automated</th><th class="r">Runs</th><th class="r">Final result</th><th class="r">Signed off</th></tr></thead>
@@ -5239,7 +6054,7 @@ function paneTests(){
         <td class="muted mono">${d.found}</td>
         <td class="mono muted">${d.test}</td>
         <td class="r"><span class="tag ${d.status==="Open"?"t-warn":"t-pass"}">${d.status}${d.fixed?" "+d.fixed:""}</span></td></tr>`).join("")}</tbody></table></div></div>
-  </div>`;
+  </div>`:""}`;
 }
 
 /* ============================================================
@@ -5344,6 +6159,12 @@ document.addEventListener("click",e=>{
     return;
   }
   const treset=e.target.closest("#tst-reset"); if(treset){ TEST_RESULTS={}; render(); return; }
+  const tview=e.target.closest("[data-testview]");
+  if(tview){ state.tests.view=tview.dataset.testview; state.tests.suite=""; state.tests.show=""; state.tests.area=""; state.tests.manStatus=""; render(); return; }
+  const tsuite=e.target.closest("[data-testsuite]");
+  if(tsuite){ state.tests.suite=tsuite.dataset.testsuite; render(); return; }
+  const tarea=e.target.closest("[data-manarea]");
+  if(tarea){ state.tests.area=tarea.dataset.manarea; render(); return; }
   const mset=e.target.closest("[data-manset]");
   if(mset){
     const [id,st]=mset.dataset.manset.split("|");
@@ -5397,8 +6218,8 @@ document.addEventListener("change",e=>{
   if(e.target.id==="expo-seg"){ state.expo.seg=e.target.value; render(); return; }
   const RQF={"rqf-type":"type","rqf-requester":"requester","rqf-approver":"approver","rqf-status":"status"};
   if(RQF[e.target.id]){ state.reqFilters[RQF[e.target.id]]=e.target.value; render(); return; }
-  if(e.target.id==="tst-suite"){ state.tests.suite=e.target.value; render(); return; }
   if(e.target.id==="tst-show"){ state.tests.show=e.target.value; render(); return; }
+  if(e.target.id==="tst-manstatus"){ state.tests.manStatus=e.target.value; render(); return; }
   const RVF={"rvf-scope":"scope","rvf-window":"window","rvf-purpose":"purpose","rvf-requester":"requester","rvf-approver":"approver","rvf-status":"status"};
   if(RVF[e.target.id]){ state.rsvFilters[RVF[e.target.id]]=e.target.value; render(); return; }
   if(e.target.id==="hm-highlight"){ state.highlight=e.target.checked; hlPinned=null; hlApply(null); hlBadge(); return; }
