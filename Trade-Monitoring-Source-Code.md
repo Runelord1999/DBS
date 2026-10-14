@@ -66,36 +66,36 @@ In this order:
 
 | | lines |
 |---|---|
-| Application logic and presentation | 4,456 |
-| Synthetic data generators (`*-demo-*`, replace entirely) | 2,144 |
-| **Total JavaScript** | **6,600** |
-| Stylesheet | 590 |
+| Application logic and presentation | 4,637 |
+| Synthetic data generators (`*-demo-*`, replace entirely) | 2,268 |
+| **Total JavaScript** | **6,905** |
+| Stylesheet | 598 |
 
 ## Contents
 
 | # | File | Lines | Treat as |
 |---|---|---|---|
-| 1 | `01-engine.js` | 154 | SUPPORT |
-| 2 | `02-format.js` | 32 | SUPPORT |
+| 1 | `01-engine.js` | 184 | SUPPORT |
+| 2 | `02-format.js` | 37 | SUPPORT |
 | 3 | `03-demo-desks.js` | 122 | REPLACE |
 | 4 | `04-demo-instruments.js` | 168 | REPLACE / PORT |
 | 5 | `05-config-limits.js` | 83 | REPLACE |
 | 6 | `06-demo-market.js` | 247 | REPLACE / PORT |
-| 7 | `07-demo-book.js` | 87 | REPLACE |
+| 7 | `07-demo-book.js` | 192 | REPLACE / PORT |
 | 8 | `08-derive-baselines.js` | 53 | PORT |
 | 9 | `09-rules.js` | 261 | PORT |
 | 10 | `10-data-dictionary.js` | 169 | PORT |
-| 11 | `11-demo-alerts.js` | 1,419 | REFERENCE |
+| 11 | `11-demo-alerts.js` | 1,438 | REFERENCE |
 | 12 | `12-demo-reviews.js` | 101 | REPLACE / PORT |
 | 13 | `13-derive-stats.js` | 40 | PORT |
-| 14 | `14-state.js` | 128 | PORT |
-| 15 | `15-highlight.js` | 341 | REBUILD |
-| 16 | `16-charts.js` | 395 | REBUILD |
+| 14 | `14-state.js` | 132 | PORT |
+| 15 | `15-highlight.js` | 349 | REBUILD |
+| 16 | `16-charts.js` | 420 | REBUILD |
 | 17 | `17-market-context.js` | 189 | REBUILD / PORT |
 | 18 | `18-view-helpers.js` | 7 | SUPPORT |
-| 19 | `19-panel-guidance.js` | 255 | PORT |
+| 19 | `19-panel-guidance.js` | 285 | PORT |
 | 20 | `20-pane-overview.js` | 255 | REBUILD |
-| 21 | `21-pane-activity.js` | 275 | REBUILD |
+| 21 | `21-pane-activity.js` | 352 | REBUILD |
 | 22 | `22-pane-timeseries.js` | 757 | REBUILD |
 | 23 | `23-pane-detections.js` | 83 | REBUILD |
 | 24 | `24-pane-rules.js` | 47 | REBUILD |
@@ -104,11 +104,11 @@ In this order:
 | 27 | `27-pane-log.js` | 101 | REBUILD |
 | 28 | `28-drawer.js` | 248 | REBUILD / PORT |
 | 29 | `29-rail.js` | 67 | REBUILD |
-| 30 | `30-render.js` | 61 | SUPPORT |
-| 31 | `31-events.js` | 232 | REBUILD |
+| 30 | `30-render.js` | 62 | SUPPORT |
+| 31 | `31-events.js` | 233 | REBUILD |
 | 32 | `32-boot.js` | 6 | SUPPORT |
-| — | `css/dashboard.css` | 590 | REBUILD |
-| — | `index.html` | 120 | REBUILD |
+| — | `css/dashboard.css` | 598 | REBUILD |
+| — | `index.html` | 121 | REBUILD |
 
 ---
 
@@ -116,7 +116,7 @@ In this order:
 
 ## 1. `01-engine.js`
 
-**SUPPORT** · 154 lines
+**SUPPORT** · 184 lines
 
 Browser plumbing — tooltips, theming, font scaling. Nothing to port; your UI stack has equivalents.
 
@@ -206,7 +206,7 @@ let TIPGEN_EPOCH=0;
 /* ============================================================
    Theme + font-size engines — same contract as the sibling dashboards.
 ============================================================ */
-const THEME_KEY="ts-dash-theme", FS_KEY="ts-dash-fontsize";
+const THEME_KEY="ts-dash-theme", FS_KEY="ts-dash-fontsize", MSR_KEY="ts-dash-measure";
 /* Two extra steps on the large end for high-resolution monitors and for anyone
    reading the page from a distance. Nothing added below 12px: the smallest step
    is already at the floor of what the dense tables stay legible at. */
@@ -225,6 +225,36 @@ function applyFontSize(i){
   document.documentElement.style.fontSize=FS_LEVELS[i]+"px";
   CHART_FS=FS_LEVELS[i]/16;
   try{localStorage.setItem(FS_KEY,i);}catch(e){}
+}
+/* Transactions or P&L. The per-trader cards on the same tab carry their own
+   three-way measure, and the first of those three is whichever one the page is
+   in — so switching the page switches that button with it rather than leaving
+   the cards counting deals under a set of P&L charts. Notional and tenor are
+   deliberate picks and survive the switch untouched. */
+const MEASURES=["txn","pnl"];
+/* Read where state is built rather than in initChrome below: that initialiser
+   runs thousands of lines before the state object is declared, and touching
+   state from there is a temporal-dead-zone error that takes the whole page
+   down — for exactly the readers who had chosen P&L last time. */
+function storedMeasure(){
+  let m=null; try{m=localStorage.getItem(MSR_KEY);}catch(e){}
+  return MEASURES.includes(m)?m:"txn";
+}
+function setMeasure(m){
+  if(!MEASURES.includes(m)||state.measure===m) return;
+  state.measure=m;
+  try{localStorage.setItem(MSR_KEY,m);}catch(e){}
+  if(m==="pnl"&&state.act.metric==="count") state.act.metric="pnl";
+  if(m==="txn"&&state.act.metric==="pnl") state.act.metric="count";
+  syncMeasureBtns();
+  render();
+}
+function syncMeasureBtns(){
+  const box=$("#msr-sel"); if(!box) return;
+  // Only the Trade Activity panels read the measure, so the control lives with them.
+  box.classList.toggle("on",state.tab==="activity");
+  $$("button[data-measure]",box).forEach(b=>
+    b.setAttribute("aria-pressed",String(b.dataset.measure===state.measure)));
 }
 (function initChrome(){
   let t=DEFAULT_THEME;try{t=normTheme(localStorage.getItem(THEME_KEY));}catch(e){}
@@ -278,7 +308,7 @@ const plural=(n,one,many)=>n+" "+(n===1?one:(many||one+"s"));
 
 ## 2. `02-format.js`
 
-**SUPPORT** · 32 lines
+**SUPPORT** · 37 lines
 
 Number, money and date formatting, plus the seeded random generator the demo book is built from.
 
@@ -304,7 +334,12 @@ const fmtM=v=>{ // v in $M
 };
 const fmtK=v=>{ // v in $k
   const a=Math.abs(v);
+  // An axis that starts at zero should say "$0", not "$0k". Below a thousand
+  // dollars it keeps a decimal instead of rounding away: a worst deal of -$400
+  // printed as "$0" beside a loss rate of ten per cent reads as a broken number.
+  if(a===0) return "$0";
   if(a>=1000) return (v<0?"-":"")+"$"+(a/1000).toFixed(a>=10000?0:1)+"m";
+  if(a<0.95) return (v<0?"-":"")+"$"+a.toFixed(1)+"k";
   return (v<0?"-":"")+"$"+Math.round(a).toLocaleString()+"k";
 };
 const fmtPct=(v,d=1)=>(v*100).toFixed(d)+"%";
@@ -970,9 +1005,9 @@ const SETTLE_DAYS={"FX Spot":2,"FX Forward":30,"FX Swap":30,"NDF":30,"Govt Bond"
 
 ## 7. `07-demo-book.js`
 
-**REPLACE** · 87 lines
+**REPLACE / PORT** · 192 lines
 
-A year of synthetic trades. Your FACT_TRADE feed replaces it.
+Two things in one file. A year of synthetic trades, which your FACT_TRADE feed replaces outright; and, at the end, the revenue model — the per-deal dealing revenue the Trade Activity tab's P&L view is drawn from. Each deal is priced off its instrument's quoted spread, halved and multiplied by a capture rate, then adjusted for booking channel, counterparty type, product family and ticket size, with rate-quoted families converted through cash duration and option families charged on premium rather than notional. The per-family factors are calibrated to published revenue-per-million benchmarks, which are listed in the comment above them. At the bank none of this is modelled: `revenue` and `clientRevenue` come from your revenue attribution or product-control feed, and this block exists only so the demo has a defensible number to draw.
 
 ```javascript
 /* ============================================================
@@ -1061,6 +1096,111 @@ function makeTrade(dayIdx,trader,prod,opts){
     });
   }
 })();
+
+/* ============================================================
+   Desk revenue — what the floor earned, deal by deal
+
+   The Trade Activity tab can be read in transactions or in P&L. Transactions
+   come straight off the book; P&L has to be modelled, because a booking system
+   records what was traded, not what the desk made on it.
+
+   The model is the one a markets business actually runs on: revenue is the
+   spread captured on the way through, not a mark-to-market. It is built from
+   the instrument's own dealing spread, which is already modelled per instrument
+   and is what the pricing rules test against — so the P&L view and the
+   surveillance thresholds are reading the same number, and a wide-spread name
+   earns more here for the same reason an off-market print there is harder to
+   call.
+
+   Calibration, with real-world anchors:
+     FX spot        0.5 bps spread  ->  ~25 USD per million traded. Interbank
+                    EUR/USD quotes around 0.1-0.5 pips on a 1.08 handle, which
+                    is 0.1-0.5 bps, so the floor of the range.
+     Govt bonds     ~1.2 bps        ->  ~60 per million.
+     Corporate      ~21 bps         ->  ~1,000 per million. Median investment
+                    grade bid-ask has been reported around 8-10 bps of par on
+                    electronic platforms and wider by voice for size.
+     Repo           ~1.9 bps        ->  ~10 per million after the financing
+                    adjustment. Repo is a balance-sheet business, not a spread
+                    one, so it is deliberately damped.
+     FX options     quoted on premium, not notional. Spread is applied to the
+                    premium and the premium is a few per cent of notional.
+
+   For contrast, retail FX brokers report revenue per million traded of roughly
+   60-100 USD. An institutional desk earns a fraction of that per unit, on
+   volumes several orders of magnitude larger.
+
+   Four things move the margin on an individual ticket, all of them real:
+   electronic flow prices tighter than voice, a bank counterparty prices tighter
+   than a corporate, a larger ticket prices tighter per million, and a longer
+   tenor earns more because the risk carried is larger.
+============================================================ */
+/* Premium as a fraction of notional, for products whose spread is quoted on the
+   premium rather than on the notional. An option on 10m notional does not trade
+   on 10m of value. */
+const PREMIUM_FRAC={fxopt:0.022,eqopt:0.028};
+/* How much of the quoted spread the desk actually keeps, as a fraction of the
+   full bid-offer. Never all of it: the quoted mid is not where risk is recycled,
+   and the hedge costs something. */
+const SPREAD_CAPTURE=0.85;
+/* Electronic flow is priced tighter than voice, and an internal transfer earns
+   nothing — it moves risk between two of the bank's own books. */
+const CHANNEL_MARGIN={"Voice":1.30,"eComm single-dealer":0.95,
+  "Multi-dealer platform":0.60,"API / Algo":0.48,"Internal booking":0.05};
+/* A corporate hedging an exposure pays more than a bank recycling risk. */
+const CTPY_MARGIN={"Corporate":1.50,"Private Client":1.65,"Insurer":1.20,
+  "Asset Manager":1.00,"Bank":0.70,"Hedge Fund":0.78,"Broker":0.60};
+/* Per-family calibration. The quoted spread and the duration conversion get the
+   shape right; this brings each family onto the revenue per million a markets
+   business of this kind actually reports, which the spread alone does not,
+   because some products are priced on the spread and earned on something else.
+   Repo is financing — the earnings are in the rate, not in the bid-offer.
+   Credit and equity flow is recycled far more cheaply than the screen spread
+   suggests. The target each factor is calibrated to, in USD per million traded:
+
+     FX spot and forward   20      Govt bonds       30
+     NDF                   70      Corporate bonds 700
+     FX options           200      Repo              4
+     Interest rate swaps   55      CDS single name 280
+     Equity swaps          60      CDS index        40
+     Equity options       220      Total return     90                        */
+const FAM_MARGIN={fx:1.10,ndf:0.49,fxopt:1.28,rate:0.81,bondg:0.83,bondc:0.93,
+  repo:0.90,cds:0.43,cdsi:0.36,eq:0.47,eqopt:0.93,trs:0.56};
+
+/* Which families quote their spread in RATE basis points rather than in price.
+   This is the difference between a rough model and a wrong one. A 0.45 bp
+   bid-offer on a ten-year swap is not 0.45 bp of notional — it is 0.45 bp of
+   rate, and its cash value is that multiplied by the duration of the trade,
+   which is why the long end of a swap book earns many times what the front end
+   does on the same notional. Bonds and equities already quote in price, and FX
+   in the rate itself, so they convert one for one. */
+const RATE_QUOTED={rate:1,cds:1,cdsi:1,repo:1};
+function cashDuration(t){
+  if(!RATE_QUOTED[t.fam]) return 1;
+  const y=tenorYears(t.tenor);
+  const yrs=isFinite(y)&&y>0?y:1;
+  // Modified duration, flattened at the long end where convexity and the
+  // shape of the curve stop it growing one for one with maturity.
+  return Math.min(16,Math.max(0.02,yrs<=1?yrs*0.9:1+(yrs-1)*0.82));
+}
+
+/* Revenue on one ticket, in USD thousands to match the rest of the book. */
+function dealRevenue(t){
+  const inst=INST_BY_KEY[t.instKey];
+  if(!inst||t.internal) return 0;
+  const half=(inst.spreadBps||0.5)/2*SPREAD_CAPTURE;      // bps of the quoted measure
+  // Options quote on premium; everything else on notional.
+  const pf=PREMIUM_FRAC[t.fam];
+  const value=pf?t.notional*pf:t.notional;                 // USD millions exposed to the spread
+  // Larger tickets price finer. Flattened, not linear: a 100m ticket is not a
+  // hundred times cheaper per million than a 1m one.
+  const sizeMult=Math.min(1.35,Math.max(0.45,Math.pow(12/Math.max(0.5,t.notional),0.13)));
+  const mult=(CHANNEL_MARGIN[t.channel]??1)*(CTPY_MARGIN[t.ctpyType]??1)*
+             (FAM_MARGIN[t.fam]??1)*sizeMult*cashDuration(t);
+  // bps of value, in USD thousands: value is already in millions, so one basis
+  // point of a million is 100 dollars, which is 0.1 thousand.
+  return value*half*0.1*mult;
+}
 ```
 
 ## 8. `08-derive-baselines.js`
@@ -1573,7 +1713,7 @@ const MONTH_END_REV=MONTH_END.filter(d=>BIZ_DAYS.indexOf(d)<BIZ_DAYS.length-11);
 
 ## 11. `11-demo-alerts.js`
 
-**REFERENCE** · 1,419 lines
+**REFERENCE** · 1,438 lines
 
 The twenty pattern generators that plant detectable behaviour in the synthetic book, and the evidence builder that turns a hit into a reviewable alert. You will not port the generators — your engine raises real alerts — but the evidence construction is worth reading: it is what makes an alert reviewable rather than a score.
 
@@ -2996,6 +3136,25 @@ RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<scaled(r.plants);i++) f(r)
 ALERTS.sort((a,b)=>a.day-b.day||SEV_RANK[b.sev]-SEV_RANK[a.sev]||a.ruleId.localeCompare(b.ruleId));
 ALERTS.forEach((a,i)=>{ a.id="ALT-"+String(i+1).padStart(5,"0"); a.n=i; });
 const ALERT_BY_ID={}; ALERTS.forEach(a=>ALERT_BY_ID[a.id]=a);
+
+/* Revenue is assigned here rather than beside the model, because the pattern
+   generators above add trades of their own — a wash pair, a split ticket, a
+   layered burst — and a pass that ran before them would leave every planted
+   deal earning nothing.
+
+   Client revenue plus the risk the desk carried. The second term is what makes
+   a P&L chart look like a P&L chart rather than a rescaled volume chart: a desk
+   that warehouses risk has losing days, and a trader whose every month is a
+   clean multiple of their turnover is not running a book. It is seeded, so the
+   same deal gives the same answer on every reload. */
+TRADES.forEach(t=>{
+  const client=dealRevenue(t);
+  // Wide enough to turn a ticket negative: a desk that warehouses risk loses
+  // money on some of it, and a book where every deal earns is not a book.
+  const risk=client*rand(-1.6,1.75)*0.80;
+  t.clientRevenue=+client.toFixed(3);
+  t.revenue=+(client+risk).toFixed(3);
+});
 ```
 
 ## 12. `12-demo-reviews.js`
@@ -3157,7 +3316,7 @@ ALERTS.forEach(a=>{ const mi=monthIdxOf(a.date); if(mi>=0) RULE_STATS[a.ruleId].
 
 ## 14. `14-state.js`
 
-**PORT** · 128 lines
+**PORT** · 132 lines
 
 Filter state and the rail predicates every view is scoped by, plus the trader risk index. Small, and it defines what 'in scope' means across the whole application.
 
@@ -3176,13 +3335,17 @@ const state={
   blot:{ac:"",product:"",desk:"",trader:"",dir:"",ctpy:"",flagged:false,search:"",from:"",to:"",
         sort:{key:"seq",dir:-1},page:0,per:50},
   rules:{cat:"",sort:{key:"hits",dir:-1}},
-  act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,metric:"count",scale:"own",yoy:false},
+  act:{year:TODAY.getFullYear(),unit:"week",range:"",cols:0,
+       metric:storedMeasure()==="pnl"?"pnl":"count",scale:"own",yoy:false},
   // enc holds at most one of trader/desk, enforced where it is toggled.
   // px is pixels per day and runs continuously from months down to seconds.
   // Only trader has a chart-level picker; desk and asset class come from the rail.
   ts:{enc:["ac"],n:3,unit:"month",y:"notional",px:16,h:470,pick:{trader:[]},case:""},
   heat:{rows:"rule",cols:"trader",top:18,density:"comfortable"},
   highlight:true,
+  /* Which quantity the Trade Activity panels are drawn in. "txn" counts deals
+     and measures them in notional; "pnl" draws the same cuts in revenue. */
+  measure:storedMeasure(),
   trad:{sort:{key:"idx",dir:-1},view:"cards"},
   log:{who:"me",status:"",search:"",sort:{key:"reviewDay",dir:-1},page:0,per:25},
   ovMonthSel:null,
@@ -3293,7 +3456,7 @@ buildTraderStats();
 
 ## 15. `15-highlight.js`
 
-**REBUILD** · 341 lines
+**REBUILD** · 349 lines
 
 Brushing and linking: hovering a trader anywhere dims everything that is not theirs and marks their share of every other chart. Conceptually valuable, implementation is DOM-specific.
 
@@ -3402,7 +3565,7 @@ function hlTradeAggregate(spec){
   const [key,val]=spec.split("|");
   const mk=()=>({trader:{},desk:{},ac:{},product:{},ctpy:{},channel:{},tenorb:{},sizeb:{},
                  hour:{},month:{}});
-  const r=mk(); r.vol=mk(); r.n=0; r.notional=0;
+  const r=mk(); r.vol=mk(); r.pl=mk(); r.n=0; r.notional=0;
   let ids=null;
   if(key==="rule"||key==="cat"||key==="sev"||key==="status"){
     ids=Object.create(null);
@@ -3423,20 +3586,22 @@ function hlTradeAggregate(spec){
       default:        return !!ids[t.id];
     }
   };
-  const bump=(dim,k,nl)=>{ r[dim][k]=(r[dim][k]||0)+1; r.vol[dim][k]=(r.vol[dim][k]||0)+nl; };
+  const bump=(dim,k,nl,pl)=>{ r[dim][k]=(r[dim][k]||0)+1; r.vol[dim][k]=(r.vol[dim][k]||0)+nl;
+                              r.pl[dim][k]=(r.pl[dim][k]||0)+pl; };
   TRADES.forEach(t=>{
     if(!tradeMatchesRail(t)||!hit(t)) return;
     r.n++; r.notional+=t.notional;
-    bump("trader",t.traderId,t.notional);
-    bump("desk",t.deskId,t.notional);
-    bump("ac",t.ac,t.notional);
-    bump("product",t.product,t.notional);
-    bump("ctpy",t.ctpy,t.notional);
-    bump("channel",t.channel,t.notional);
-    bump("tenorb",tenorBandOf(t.tenor),t.notional);
-    bump("sizeb",sizeBandOf(t.notional),t.notional);
-    bump("hour",Math.min(23,Math.floor(t.execMin/60)),t.notional);
-    const mi=monthIdxOf(t.date); if(mi>=0) bump("month",mi,t.notional);
+    const nl=t.notional, pl=t.revenue;
+    bump("trader",t.traderId,nl,pl);
+    bump("desk",t.deskId,nl,pl);
+    bump("ac",t.ac,nl,pl);
+    bump("product",t.product,nl,pl);
+    bump("ctpy",t.ctpy,nl,pl);
+    bump("channel",t.channel,nl,pl);
+    bump("tenorb",tenorBandOf(t.tenor),nl,pl);
+    bump("sizeb",sizeBandOf(t.notional),nl,pl);
+    bump("hour",Math.min(23,Math.floor(t.execMin/60)),nl,pl);
+    const mi=monthIdxOf(t.date); if(mi>=0) bump("month",mi,nl,pl);
   });
   HL_TAGG.set(spec,r);
   return r;
@@ -3451,7 +3616,7 @@ function hlTradeAggregate(spec){
    from deals, so they have to be measured in deals — a marker sized in alerts
    over a bar sized in deals is a ratio of two different populations, and at
    1,727 alerts against 27,565 deals it renders as no marker at all. */
-const HL_CUT={"P:":a=>a.a.period,"T:":a=>a.t,"V:":a=>a.t.vol};
+const HL_CUT={"P:":a=>a.a.period,"T:":a=>a.t,"V:":a=>a.t.vol,"R:":a=>a.t.pl};
 const hlSplit=spec=>{
   const i=spec.indexOf("|"), d=spec.slice(0,i);
   return spec.charAt(1)===":"?[d.slice(0,2),d.slice(2),spec.slice(i+1)]:["",d,spec.slice(i+1)];
@@ -3480,8 +3645,12 @@ const hlIsSelf=(spec,sel)=>{
    is what lets picking a trader redraw the execution-hour profile. */
 const hlSameDim=(spec,sel)=>!!sel&&hlSplit(spec)[1]===hlSplit(sel)[1];
 function hlPaintAggregates(aggs,sel){
+  /* Revenue is the one cut that can come back negative — a selection can be
+     loss-making inside a profitable bar — and a marker has no negative width,
+     so a losing selection reads as no marker rather than as a bar drawn
+     backwards. */
   const shareOf=(spec,sub,total)=>
-    hlSameDim(spec,sel)||total<=0?0:Math.min(1,sub/total);
+    hlSameDim(spec,sel)||total<=0?0:Math.max(0,Math.min(1,sub/total));
   $$("[data-hl-agg]").forEach(el=>{
     const spec=el.getAttribute("data-hl-agg");
     const sub=hlSub(aggs,spec);
@@ -3638,11 +3807,13 @@ const hlAggP=(dim,key,total,ratePct)=>hlAgg("P:"+dim,key,total,ratePct);
    bar in deals rather than both being marked in alerts. */
 const hlAggT=(dim,key,total,ratePct)=>hlAgg("T:"+dim,key,total,ratePct);
 const hlAggV=(dim,key,total,ratePct)=>hlAgg("V:"+dim,key,total,ratePct);
+/* R measures the same selection in revenue, for the P&L view of those panels. */
+const hlAggR=(dim,key,total,ratePct)=>hlAgg("R:"+dim,key,total,ratePct);
 ```
 
 ## 16. `16-charts.js`
 
-**REBUILD** · 395 lines
+**REBUILD** · 420 lines
 
 Hand-rolled SVG chart primitives — stacked columns, horizontal bars, donuts, sparklines, heat cells. No chart library. Reference for what each panel plots; your stack will draw them.
 
@@ -3670,13 +3841,15 @@ function donut(segs,cTop,cBot,size,thick){
     '<text x="'+cx+'" y="'+(cy-3)+'" text-anchor="middle" fill="var(--ink)" font-size="'+cf(19)+'" font-weight="750" font-family="var(--mono)">'+esc(cTop)+"</text>"+
     '<text x="'+cx+'" y="'+(cy+16)+'" text-anchor="middle" fill="var(--ink-3)" font-size="'+cf(10)+'">'+esc(cBot)+"</text></svg>";
 }
-function donutLegend(segs,tot,clickAttr){
+function donutLegend(segs,tot,clickAttr,opts){
+  opts=opts||{};
+  const fmt=opts.fmt||fmtNum, head=opts.head||"Count";
   const t=tot||segs.reduce((a,s)=>a+s.v,0)||1;
   const max=Math.max(1,...segs.map(s=>s.v));
-  return '<div class="dlegend"><div class="dhd"><span style="flex:1">Series</span><span class="damt">Count</span><span class="dpct">Share</span></div>'+
+  return '<div class="dlegend"><div class="dhd"><span style="flex:1">Series</span><span class="damt">'+esc(head)+'</span><span class="dpct">Share</span></div>'+
     segs.map(s=>'<div class="drow" '+(clickAttr?clickAttr(s):"")+" "+(s.hl||"")+" "+(s.agg||"")+">"+
       '<span class="dot" style="background:'+s.color+'"></span>'+
-      '<span class="dlabel">'+esc(s.label)+'</span><span class="damt">'+fmtNum(s.v)+'</span>'+
+      '<span class="dlabel">'+esc(s.label)+'</span><span class="damt">'+esc(fmt(s.v))+'</span>'+
       '<span class="dpct" style="color:'+s.color+'">'+((s.v/t)*100).toFixed(1)+"%</span>"+
       '<span class="dtrack bar-mini"><i style="width:'+(s.v/max*100).toFixed(1)+"%;background:"+s.color+'"></i><i class="hlmark"></i></span>'+
       "</div>").join("")+"</div>";
@@ -3685,7 +3858,10 @@ function donutLegend(segs,tot,clickAttr){
    so the same function fits a full-width panel and a drawer block. */
 function stackedBars(cats,series,opts){
   opts=opts||{};
-  const W=opts.w||560,H=opts.h||236,padL=34,padB=30,padT=12,padR=6;
+  /* The axis and the figure over each column are counts by default; a panel
+     drawn in money passes its own formatter rather than printing raw thousands. */
+  const vfmt=opts.fmt||(v=>String(Math.round(v)));
+  const W=opts.w||560,H=opts.h||236,padL=opts.padL||34,padB=30,padT=12,padR=6;
   const max=Math.max(1,...cats.map(c=>c.parts.reduce((a,p)=>a+p.v,0)));
   const niceMax=Math.ceil(max/5)*5;
   const bw=(W-padL-padR)/cats.length, bar=Math.min(34,bw*0.62);
@@ -3694,13 +3870,13 @@ function stackedBars(cats,series,opts){
   for(let i=0;i<=4;i++){
     const v=niceMax*i/4, y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+       '<text x="'+(padL-6)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+esc(vfmt(v))+"</text>";
   }
   const px=(H-padB-padT)/niceMax;   // pixels per alert, for the highlight overlay
   cats.forEach((c,i)=>{
     const x=padL+i*bw+(bw-bar)/2; let acc=0;
     const tot=c.parts.reduce((a,p)=>a+p.v,0);
-    const tip=c.parts.filter(p=>p.v>0).map(p=>p.label+"|"+p.v).join("§");
+    const tip=c.parts.filter(p=>p.v>0).map(p=>p.label+"|"+vfmt(p.v)).join("§");
     c.parts.forEach(p=>{
       if(p.v<=0) return;
       const y=Y(acc+p.v),h=Y(acc)-Y(acc+p.v);
@@ -3709,7 +3885,7 @@ function stackedBars(cats,series,opts){
         '" fill="'+p.color+'" rx="1.5" style="cursor:pointer" data-monthbar="'+i+
         '" data-hl-'+dim+'="'+esc(HL_MULTI[dim]?"|"+p.label+"|":p.label)+
         '" data-hlsrc="'+esc(dim+"|"+p.label)+
-        (opts.hlMonth?'" data-hl-month="'+i:"")+'" data-tip="'+esc(c.label)+'" data-tipsub="'+tot+
+        (opts.hlMonth?'" data-hl-month="'+i:"")+'" data-tip="'+esc(c.label)+'" data-tipsub="'+esc(vfmt(tot))+
         " "+esc(opts.unitLabel||"alerts")+'" data-tiptable="'+esc(tip)+'"/>';
       acc+=p.v;
     });
@@ -3721,10 +3897,10 @@ function stackedBars(cats,series,opts){
        switched on in CSS only while a selection is live — with none, the bar has
        no height and nothing to say. */
     if(opts.hlMonth) g+='<rect class="hlshare" data-hl-for="'+(opts.cut||"")+'month|'+i+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
-      '" data-tipgen="hlshare" data-hlkeep="1" data-hl-mtot="'+tot+'" data-hl-mlabel="'+esc(c.label+(c.sub?" "+c.sub:""))+
+      '" data-tipgen="hlshare" data-hlkeep="1" data-hl-mtot="'+esc(vfmt(tot))+'" data-hl-mlabel="'+esc(c.label+(c.sub?" "+c.sub:""))+
       '" data-hl-unit="'+esc(opts.unitLabel||"alerts")+
       '" x="'+(x+bar*0.28).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.44).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)"/>';
-    if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="'+cf(8.5)+'" font-family="var(--mono)" fill="var(--ink-3)">'+tot+"</text>";
+    if(tot>0) g+='<text class="hlctx" x="'+(x+bar/2).toFixed(1)+'" y="'+(Y(tot)-4).toFixed(1)+'" text-anchor="middle" font-size="'+cf(8.5)+'" font-family="var(--mono)" fill="var(--ink-3)">'+esc(vfmt(tot))+"</text>";
     g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+13)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)">'+esc(c.label)+"</text>";
     if(c.sub) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+23)+'" text-anchor="middle" font-size="'+cf(7.5)+'" fill="var(--ink-3)" opacity=".8">'+esc(c.sub)+"</text>";
   });
@@ -3784,7 +3960,7 @@ function hbars(items,opts){
     g+=open;
     g+='<text x="0" y="'+(y+10)+'" font-size="'+cf(9.5)+'" fill="var(--ink-2)">'+esc(it.label)+"</text>";
     g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+w.toFixed(1)+'" height="11" rx="2.5" fill="'+(it.color||"var(--run)")+
-      '" style="cursor:pointer" '+(it.click||"")+'><title>'+esc(it.label)+": "+it.v+"</title></rect>";
+      '" style="cursor:pointer" '+(it.click||"")+'><title>'+esc(it.label)+": "+esc(it.vLabel||String(it.v))+"</title></rect>";
     if(it.v2!=null){
       const w2=it.v2/max*barW;
       g+='<rect x="'+labW+'" y="'+(y+1)+'" width="'+Math.max(0,w2).toFixed(1)+'" height="11" rx="2.5" fill="var(--fail)" opacity=".92"><title>'+esc(it.label)+": "+it.v2+" suspicious</title></rect>";
@@ -3802,7 +3978,8 @@ function hbars(items,opts){
    the chart rather than a number the reader has to hold in their head. */
 function hourChart(counts,opts){
   opts=opts||{};
-  const W=opts.w||560,H=opts.h||212,padL=30,padB=28,padT=14,padR=8;
+  const vfmt=opts.fmt||(v=>String(Math.round(v)));
+  const W=opts.w||560,H=opts.h||212,padL=opts.padL||30,padB=28,padT=14,padR=8;
   const max=Math.max(1,...counts), niceMax=Math.ceil(max/4)*4;
   const bw=(W-padL-padR)/24, bar=Math.min(17,bw*0.72);
   const Y=v=>H-padB-(v/niceMax)*(H-padB-padT);
@@ -3817,7 +3994,7 @@ function hourChart(counts,opts){
   for(let i=0;i<=4;i++){
     const v=niceMax*i/4,y=Y(v);
     g+='<line x1="'+padL+'" y1="'+y.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+y.toFixed(1)+'" stroke="var(--hair)" stroke-dasharray="'+(i?"2 3":"0")+'"/>'+
-       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+Math.round(v)+"</text>";
+       '<text x="'+(padL-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+esc(vfmt(v))+"</text>";
   }
   /* The columns are aggregates in their own right: pick a trader anywhere on the
      page and this chart redraws as that trader's session, lit where they deal and
@@ -3833,7 +4010,7 @@ function hourChart(counts,opts){
       '" rx="1.5" fill="'+(outside?"var(--fail)":"var(--agent)")+'" data-hl-hour="'+h+'" data-hlsrc="hour|'+h+'" data-hlpin="1" '+
       hlAgg(cut+"hour",h,v)+
       ' style="cursor:pointer" data-tip="'+pad2(h)+":00 – "+pad2((h+1)%24)+':00" data-tipsub="'+(outside?"Outside every desk's trading window":"Within desk hours")+
-      '" data-tiptable="'+esc(noun)+"|"+v+"§Share of the day|"+(v/tot*100).toFixed(1)+'%"/>';
+      '" data-tiptable="'+esc(noun)+"|"+esc(vfmt(v))+"§Share of the day|"+(v/tot*100).toFixed(1)+'%"/>';
     g+='<rect class="hlshare" data-hl-for="'+cut+'hour|'+h+'" data-hl-px="'+px.toFixed(4)+'" data-hl-base="'+(H-padB)+
       '" x="'+(x+bar*0.26).toFixed(1)+'" y="'+(H-padB)+'" width="'+(bar*0.48).toFixed(1)+'" height="0" rx="1.5" fill="var(--ink)" pointer-events="none"/>';
     if(h%3===0) g+='<text x="'+(x+bar/2).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="'+cf(8.5)+'" fill="var(--ink-3)" font-family="var(--mono)">'+pad2(h)+"</text>";
@@ -3886,9 +4063,22 @@ const PRIOR_ACT={};
         const tr=weightedChoice(desk.traders.map(x=>[x,x.grade==="Associate"?1.35:x.grade==="Senior"?1.15:0.85]));
         const prod=choice(tr.products), meta=PROD_BY_NAME[prod];
         const notional=Math.min(tr.ticketLimit*0.94,Math.max(0.4,lognorm(meta.med,meta.sig)));
-        const band=tenorBandOf(choice(meta.tenors));
-        const rec=PRIOR_ACT[tr.id][iso]||(PRIOR_ACT[tr.id][iso]={n:0,notional:0,tenor:{}});
+        const tenor=choice(meta.tenors), band=tenorBandOf(tenor);
+        const rec=PRIOR_ACT[tr.id][iso]||(PRIOR_ACT[tr.id][iso]={n:0,notional:0,pl:0,tenor:{}});
         rec.n++; rec.notional+=notional; rec.tenor[band]=(rec.tenor[band]||0)+1;
+        /* The prior year is a comparison line, not a book: it has no channel and
+           no counterparty, so it is priced on the product alone and both of those
+           multipliers fall back to neutral.
+
+           Guarded because this block is demo data and the revenue model lives
+           with the rest of it: a build that strips the generators keeps this
+           loop but not dealRevenue, and the guard is what stops that build from
+           throwing the first time anyone gives it desks to iterate. */
+        rec.pl+=typeof dealRevenue==="function"
+          ?dealRevenue({fam:meta.fam,notional:notional,tenor:tenor,
+             instKey:(INST_BY_FAM[meta.fam]||[])[0]&&INST_BY_FAM[meta.fam][0].key,
+             channel:null,ctpyType:null,internal:false})
+          :0;
       }
     });
   }
@@ -3917,10 +4107,15 @@ function sparkStack(cols,segs,opts){
       g+='<rect x="'+x.toFixed(2)+'" y="'+y.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+Math.max(0.6,h).toFixed(2)+'" fill="'+sg.color+'"/>';
       acc+=v;
     });
-    if(t>0||c.prior>0) g+='<rect class="ssHit" x="'+x.toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
-      ' data-tip="'+esc(c.label)+'" data-tipsub="'+esc(opts.unit==="m"?fmtM(t):fmtNum(t)+" deals")+
-      '" data-tiptable="'+esc(segs.filter(sg=>(c.v[sg.label]||0)>0).map(sg=>sg.label+"|"+(opts.unit==="m"?fmtM(c.v[sg.label]):fmtNum(c.v[sg.label]))).join("§")+
-        (yoy?"§Same period last year|"+(opts.unit==="m"?fmtM(c.prior||0):fmtNum(Math.round(c.prior||0))):""))+'"/>';
+    /* The segment total, not the drawn height: a loss-making week has no bar to
+       draw — a negative segment is skipped above — so the figure in the tooltip
+       is the only place the reader sees it, and it has to be the true one. */
+    const uf=opts.unit==="m"?fmtM:opts.unit==="k"?fmtK:(v=>fmtNum(Math.round(v)));
+    const usub=opts.unit==="m"||opts.unit==="k"?uf(t):fmtNum(t)+" deals";
+    if(t!==0||c.prior>0) g+='<rect class="ssHit" x="'+x.toFixed(2)+'" y="0" width="'+bw.toFixed(2)+'" height="'+H+'" fill="transparent"'+
+      ' data-tip="'+esc(c.label)+'" data-tipsub="'+esc(usub)+
+      '" data-tiptable="'+esc(segs.filter(sg=>(c.v[sg.label]||0)!==0).map(sg=>sg.label+"|"+uf(c.v[sg.label])).join("§")+
+        (yoy?"§Same period last year|"+uf(c.prior||0):""))+'"/>';
   });
   if(yoy){
     const pts=cols.map((c,i)=>((i*(bw+gap))+bw/2).toFixed(2)+","+(H-1-((c.prior||0)/max)*(H-2)).toFixed(2)).join(" ");
@@ -4016,6 +4211,7 @@ function actColumns(){
 /* Weekly (or daily) activity per trader, bucketed once over the book. */
 function traderActivity(cols,metric){
   const tenor=metric==="tenor";
+  const val=metric==="notional"?(x=>x.notional):metric==="pnl"?(x=>x.revenue):(()=>1);
   const segs=tenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):ASSET_CLASSES.map(a=>({label:a,color:AC_COLOR[a]}));
   const by={};
   TRADERS.forEach(t=>{
@@ -4026,13 +4222,13 @@ function traderActivity(cols,metric){
           if(!tradeMatchesRail(x)) return;
           if(tenor) cell.tenors.push(tenorYears(x.tenor));
           const k=tenor?tenorBandOf(x.tenor):x.ac;
-          cell.v[k]=(cell.v[k]||0)+(metric==="notional"?x.notional:1);
+          cell.v[k]=(cell.v[k]||0)+val(x);
         });
       });
       let pw=0,pn=0;
       c.dates.forEach(iso=>{
         const r=(PRIOR_ACT[t.id]||{})[iso]; if(!r) return;
-        cell.prior+=metric==="notional"?r.notional:r.n;
+        cell.prior+=metric==="notional"?r.notional:metric==="pnl"?r.pl:r.n;
         Object.keys(r.tenor).forEach(b=>{ pw+=r.tenor[b]*(BAND_MID[b]||1); pn+=r.tenor[b]; });
       });
       if(pn) cell.priorTenor=pw/pn;
@@ -4258,7 +4454,7 @@ function kpi(eyebrow,value,sub,accent){
 
 ## 19. `19-panel-guidance.js`
 
-**PORT** · 255 lines
+**PORT** · 285 lines
 
 The explanatory copy behind every information icon: what each chart is, how to read it, and where an anomaly shows. Plain text, no code. Reuse it verbatim — it is the product's documentation.
 
@@ -4373,6 +4569,36 @@ const PANEL_INFO={
  what:"The whole book by maturity band — how long the risk actually runs.",
  read:"Each desk has a natural profile: an FX spot book sits almost entirely in the shortest band, a rates book spreads across the curve.",
  flag:"A trader with weight in a band their mandate does not reach. Tenor authorisations are personal, so a single long-dated deal on a short-dated book is a breach even when the desk is approved for it."},
+
+/* The P&L view renames five panels, and the help is keyed by title, so those
+   five need an entry of their own or the button disappears when the measure
+   changes. Each one is written about the measure, not about the chart: the
+   question a reader brings to a P&L chart is not the question they bring to a
+   volume chart drawn from the same cut. */
+"P&L by month":{
+ what:"What the floor earned each month, stacked by asset class, over the same twelve months the volume view covers.",
+ read:"Read it against the volume view. The two shapes do not have to agree, and where they disagree the month was earned on margin rather than on activity.",
+ flag:"A month that earns far more than its volume justifies, in one asset class, on one desk. Revenue arriving without the activity to explain it is the pattern behind off-market pricing and mismarking alike."},
+
+"P&L by product":{
+ what:"The twelve products that earned the floor most over the window.",
+ read:"Read it beside Margin by product. This chart finds the products that matter commercially; the one beside it finds the ones that earn well.",
+ flag:"A product earning materially more than the comparable products on the same desk. It is usually a wider spread honestly charged, but it is also what a mispriced book looks like from the outside."},
+
+"Margin by product":{
+ what:"Revenue per million traded, by product — what the floor earns on each unit of risk it moves rather than how much it moves.",
+ read:"Margin is a rate, so the ranking is independent of size. A product can top this chart on a fraction of the notional in the chart beside it.",
+ flag:"A product whose margin sits well away from the rest of its asset class in either direction. Too thin suggests the desk is buying flow or pricing for a relationship; too wide, on an instrument that trades on a screen, is a price-fairness question."},
+
+"P&L by counterparty":{
+ what:"The twelve counterparties the floor earned most from. Red marks a name on the related-party register.",
+ read:"Earnings concentration, not exposure concentration. Hover a name to see the deals, the traders facing it, and the margin behind the figure.",
+ flag:"A single trader accounting for most of the revenue from one name, particularly a red one. Revenue concentrated in one relationship is where inducement and reciprocal-dealing questions start."},
+
+"Margin by counterparty":{
+ what:"Revenue per million traded, by counterparty — how well the floor is paid by each name it faces.",
+ read:"Clients pay different margins for good reasons: size, sophistication, how hard they shop a price. The comparison that matters is within a type, not across the chart.",
+ flag:"A related party paying a visibly thinner margin than comparable names of the same type. That is the quantitative form of the price-favouritism argument, and it is the shape the off-market rules are built to find."},
 
 "Trading activity by trader":{
  what:"One small chart per trader — their own book, period by period, ordered so that people who sit next to each other on the floor sit next to each other here.",
@@ -4784,9 +5010,9 @@ function paneOverview(){
 
 ## 21. `21-pane-activity.js`
 
-**REBUILD** · 275 lines
+**REBUILD** · 352 lines
 
-Trade activity pane.
+Trade activity pane. Every panel is drawn in whichever measure the page is set to — deals and notional, or P&L and margin — from one pass over the book; the measure branches are in `paneActivity` and the toggle that drives them is `setMeasure` in `01-engine.js`.
 
 ```javascript
 /* ============================================================
@@ -4799,22 +5025,67 @@ Trade activity pane.
 function paneActivity(){
   const rows=TRADES.filter(tradeMatchesRail);
   const notl=rows.reduce((a,t)=>a+t.notional,0);
+  /* Two readings of one book. "txn" counts the deals and measures them in
+     notional; "pnl" draws the same cuts in what the desk earned on them. The
+     panels, the dimensions and the layout are the same either way — only the
+     quantity on the axis changes, so a shape you learned in one view is still
+     the same shape in the other.
+
+     Where a panel had a count and a notional twin, the P&L view keeps the pair
+     but changes what the second one asks: P&L answers "where is the money", and
+     P&L per million answers "where is it earned well". A name can be first on
+     one and last on the other, which is the whole reason both are drawn.
+
+     Revenue is held in USD thousands throughout, the same unit dealRevenue
+     returns, so fmtK is the formatter everywhere below. */
+  const PL=state.measure==="pnl";
+  const mval=b=>PL?b.pl:b.n;                       // the primary measure
+  const mfmt=v=>PL?fmtK(v):fmtNum(v);
+  const munit=PL?"P&L":"deals";
+  // Margin, in dollars earned per million traded — the second half of each pair.
+  const marg=b=>b.nl>0?b.pl/b.nl*1000:0;
+  const mgfmt=v=>"$"+fmtNum(Math.round(v));
+  // Deals are cut "T:", notional "V:", revenue "R:"; a marker drawn over a bar
+  // has to be measured in whatever the bar itself is measured in.
+  const hlAggM=PL?hlAggR:hlAggT;
+  const mcut=PL?"R:":"T:";
   // Sorted once: median and the 95th percentile are two reads of one ordering,
   // and at 59,000 tickets sorting twice is the most expensive line on the tab.
   const sizes=rows.map(t=>t.notional).sort((a,b)=>a-b);
   const activeTraders=uniq(rows.map(t=>t.traderId)).length;
   const bizDays=uniq(rows.map(t=>t.dayIdx)).length||1;
 
-  const kpis='<div class="kpis">'+
-    kpi("Deals booked",fmtNum(rows.length),"12 months, rail-scoped","var(--agent)")+
-    kpi("Notional",fmtM(notl),"aggregate across products","var(--run)")+
-    kpi("Median ticket",fmtM(median(sizes)),"p95 "+fmtM(pctile(sizes,0.95)),"var(--violet)")+
-    kpi("Largest ticket",fmtM(Math.max(0,...sizes)),"single deal","var(--warn)")+
-    kpi("Deals per day",fmtNum(Math.round(rows.length/bizDays)),"across "+fmtNum(bizDays)+" sessions","var(--cyan)")+
-    kpi("Traders active",fmtNum(activeTraders),"of "+TRADERS.length+" on the floor","var(--gold)")+
-    kpi("Products",fmtNum(uniq(rows.map(t=>t.product)).length),"of "+PRODUCTS.length+" approved","var(--pink)")+
-    kpi("Counterparties",fmtNum(uniq(rows.map(t=>t.ctpy)).length),"names faced","var(--pass)")+
-    "</div>";
+  /* The P&L reading of the same eight boxes. Sorted once, like the sizes above,
+     because the best and the worst deal of the year are two reads of one
+     ordering and the loss count is a third. */
+  let kpis;
+  if(PL){
+    const pls=rows.map(t=>t.revenue).sort((a,b)=>a-b);
+    const plTot=pls.reduce((a,v)=>a+v,0);
+    const clTot=rows.reduce((a,t)=>a+t.clientRevenue,0);
+    const lossN=pls.filter(v=>v<0).length;
+    kpis='<div class="kpis">'+
+      kpi("Net P&L",fmtK(plTot),"12 months, rail-scoped","var(--agent)")+
+      kpi("Client revenue",fmtK(clTot),"dealing spread, before risk","var(--run)")+
+      kpi("Margin",notl>0?mgfmt(plTot/notl*1000):"—","per $1m traded","var(--violet)")+
+      kpi("Best deal",fmtK(pls.length?pls[pls.length-1]:0),"single ticket","var(--warn)")+
+      kpi("Worst deal",fmtK(pls.length?pls[0]:0),"single ticket","var(--fail)")+
+      kpi("P&L per day",fmtK(plTot/bizDays),"across "+fmtNum(bizDays)+" sessions","var(--cyan)")+
+      kpi("Loss-making",rows.length?fmtPct(lossN/rows.length):"—","of "+fmtNum(rows.length)+" deals booked","var(--pink)")+
+      kpi("Traders active",fmtNum(activeTraders),"of "+TRADERS.length+" on the floor","var(--gold)")+
+      "</div>";
+  }else{
+    kpis='<div class="kpis">'+
+      kpi("Deals booked",fmtNum(rows.length),"12 months, rail-scoped","var(--agent)")+
+      kpi("Notional",fmtM(notl),"aggregate across products","var(--run)")+
+      kpi("Median ticket",fmtM(median(sizes)),"p95 "+fmtM(pctile(sizes,0.95)),"var(--violet)")+
+      kpi("Largest ticket",fmtM(Math.max(0,...sizes)),"single deal","var(--warn)")+
+      kpi("Deals per day",fmtNum(Math.round(rows.length/bizDays)),"across "+fmtNum(bizDays)+" sessions","var(--cyan)")+
+      kpi("Traders active",fmtNum(activeTraders),"of "+TRADERS.length+" on the floor","var(--gold)")+
+      kpi("Products",fmtNum(uniq(rows.map(t=>t.product)).length),"of "+PRODUCTS.length+" approved","var(--pink)")+
+      kpi("Counterparties",fmtNum(uniq(rows.map(t=>t.ctpy)).length),"names faced","var(--pass)")+
+      "</div>";
+  }
 
   /* One pass over the book, not one per series. Every panel below is a different
      cut of the same 12 months, and the readable shape — a filter per product, per
@@ -4822,16 +5093,16 @@ function paneActivity(){
      real floor books, that turned every toggle on this tab into a two-second wait.
      Collect once into buckets, read the buckets afterwards. */
   const SEP="\u0001";   // key delimiter, so 1+"FX Cash" cannot collide with 11+"FX Cash"
-  const bucket=()=>({n:0,nl:0,sizes:[],traders:Object.create(null),tn:0});
+  const bucket=()=>({n:0,nl:0,pl:0,sizes:[],traders:Object.create(null),tn:0});
   const grab=(m,k)=>m[k]||(m[k]=bucket());
   const put=(b,t)=>{
-    b.n++; b.nl+=t.notional; b.sizes.push(t.notional);
+    b.n++; b.nl+=t.notional; b.pl+=t.revenue; b.sizes.push(t.notional);
     if(!b.traders[t.traderId]){ b.traders[t.traderId]=1; b.tn++; }
   };
   const byProd=Object.create(null), byCtpy=Object.create(null), byAc=Object.create(null),
         byCh=Object.create(null), byTenor=Object.create(null), bySize=Object.create(null),
         byMonthAc=Object.create(null), ctpyType=Object.create(null);
-  const hrs=Array(24).fill(0);
+  const hrs=Array(24).fill(0), hrsPl=Array(24).fill(0);
   rows.forEach(t=>{
     put(grab(byProd,t.product),t);
     put(grab(byCtpy,t.ctpy),t);
@@ -4840,8 +5111,9 @@ function paneActivity(){
     put(grab(byTenor,tenorBandOf(t.tenor)),t);
     put(grab(bySize,sizeBandOf(t.notional)),t);
     const mi=monthIdxOf(t.date);
-    if(mi>=0) grab(byMonthAc,mi+SEP+t.ac).n++;
-    hrs[Math.min(23,Math.floor(t.execMin/60))]++;
+    if(mi>=0){ const mb=grab(byMonthAc,mi+SEP+t.ac); mb.n++; mb.pl+=t.revenue; }
+    const hh=Math.min(23,Math.floor(t.execMin/60));
+    hrs[hh]++; hrsPl[hh]+=t.revenue;
     if(ctpyType[t.ctpy]===undefined) ctpyType[t.ctpy]=t.ctpyType||"";
   });
   // Alerts the same way: one pass keyed by dimension rather than a scan per series.
@@ -4854,25 +5126,26 @@ function paneActivity(){
     (a.tenorBands||[]).forEach(x=>alBy.tenorb[x]=(alBy.tenorb[x]||0)+1);
     (a.sizeBands||[]).forEach(x=>alBy.sizeb[x]=(alBy.sizeb[x]||0)+1);
   });
-  const B=(m,k)=>m[k]||{n:0,nl:0,sizes:[],tn:0};
+  const B=(m,k)=>m[k]||{n:0,nl:0,pl:0,sizes:[],tn:0};
 
   // Monthly volume, stacked by asset class — the book's own shape over the year.
   const months=MONTH_KEYS.map((mk,i)=>({label:mk.label,sub:i===0||mk.m===0?String(mk.y).slice(2):"",
-    parts:ASSET_CLASSES.map(ac=>({label:ac,v:(byMonthAc[i+SEP+ac]||{n:0}).n,color:AC_COLOR[ac]}))}));
+    parts:ASSET_CLASSES.map(ac=>({label:ac,v:mval(byMonthAc[i+SEP+ac]||{n:0,pl:0}),color:AC_COLOR[ac]}))}));
 
   /* Every panel here is drawn from deals, so every marker is measured in deals
-     too — "T:" for the count charts, "V:" for the notional ones. */
+     too — "T:" for the count charts, "V:" for the notional ones, "R:" when the
+     page is drawn in P&L. */
   const acSegs=ASSET_CLASSES.map(ac=>{
-    const n=B(byAc,ac).n;
-    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" '+hlDim("ac",ac),agg:hlAggT("ac",ac,n)};
+    const n=mval(B(byAc,ac));
+    return {label:ac,v:n,color:AC_COLOR[ac],hl:'data-hlsrc="ac|'+esc(ac)+'" '+hlDim("ac",ac),agg:hlAggM("ac",ac,n)};
   }).filter(x=>x.v>0);
   const chSegs=CHANNELS.map(c=>{
-    const n=B(byCh,c[0]).n;
+    const n=mval(B(byCh,c[0]));
     return {label:c[0],v:n,
       color:{"Voice":"var(--run)","eComm single-dealer":"var(--agent)","Multi-dealer platform":"var(--cyan)",
              "API / Algo":"var(--violet)","Internal booking":"var(--ink-3)"}[c[0]]||"var(--ink-3)",
       hl:'data-hlsrc="channel|'+esc(c[0])+'" '+hlDim("channel",c[0]),
-      agg:hlAggT("channel",c[0],n)};
+      agg:hlAggM("channel",c[0],n)};
   }).filter(x=>x.v>0);
 
   /* Product and counterparty, each measured twice — once by how often the desk
@@ -4882,101 +5155,127 @@ function paneActivity(){
   const prodStats=PRODUCTS.map(pr=>{
     const b=byProd[pr.p]; if(!b) return null;
     const al=alBy.product[pr.p]||0;
-    return {p:pr.p,ac:pr.ac,n:b.n,nl:b.nl,al,
+    return {p:pr.p,ac:pr.ac,n:b.n,nl:b.nl,pl:b.pl,mg:marg(b),al,
       tiptable:["Deals|"+fmtNum(b.n),"Notional|"+fmtM(b.nl),
         "Median ticket|"+fmtM(median(b.sizes)||0),
+        "P&L|"+fmtK(b.pl),"Margin|"+mgfmt(marg(b))+" per $1m",
         "Traders|"+b.tn,"Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="product|'+esc(pr.p)+'" '+hlDim("product",pr.p)};
   }).filter(Boolean);
-  const prodCount=prodStats.slice().sort((a,b)=>b.n-a.n).slice(0,12).map(x=>({
-    label:x.p,v:x.n,vLabel:fmtNum(x.n),color:AC_COLOR[x.ac],
-    tip:x.p,tipsub:x.ac+" · by transaction count",tiptable:x.tiptable,hl:x.hl,
-    agg:hlAggT("product",x.p,x.n),aggKey:"T:product|"+x.p}));
-  const prodVol=prodStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12).map(x=>({
-    label:x.p,v:x.nl,vLabel:fmtM(x.nl),color:AC_COLOR[x.ac],
-    tip:x.p,tipsub:x.ac+" · by notional",tiptable:x.tiptable,hl:x.hl,
-    agg:hlAggV("product",x.p,x.nl),aggKey:"V:product|"+x.p}));
+  const prodA=prodStats.slice().sort((a,b)=>(PL?b.pl-a.pl:b.n-a.n)).slice(0,12).map(x=>({
+    label:x.p,v:PL?x.pl:x.n,vLabel:PL?fmtK(x.pl):fmtNum(x.n),color:AC_COLOR[x.ac],
+    tip:x.p,tipsub:x.ac+(PL?" · by P&L":" · by transaction count"),tiptable:x.tiptable,hl:x.hl,
+    agg:hlAggM("product",x.p,PL?x.pl:x.n),aggKey:mcut+"product|"+x.p}));
+  /* The notional twin, or in the P&L view the margin one. A margin bar is a
+     ratio, so there is no share of it for a selection to account for and no
+     marker to draw over it — it still lights where the selection is present. */
+  const prodB=prodStats.slice().sort((a,b)=>(PL?b.mg-a.mg:b.nl-a.nl)).slice(0,12).map(x=>({
+    label:x.p,v:PL?x.mg:x.nl,vLabel:PL?mgfmt(x.mg):fmtM(x.nl),color:AC_COLOR[x.ac],
+    tip:x.p,tipsub:x.ac+(PL?" · by P&L per $1m":" · by notional"),tiptable:x.tiptable,hl:x.hl,
+    agg:PL?hlAggR("product",x.p,x.pl):hlAggV("product",x.p,x.nl),
+    aggKey:PL?null:"V:product|"+x.p}));
 
   const ctpyStats=Object.keys(byCtpy).map(c=>{
     const b=byCtpy[c], al=alBy.ctpy[c]||0, rel=!!RELATED_PARTIES[c];
-    return {c,n:b.n,nl:b.nl,al,rel,type:ctpyType[c]||"",
+    return {c,n:b.n,nl:b.nl,pl:b.pl,mg:marg(b),al,rel,type:ctpyType[c]||"",
       short:c.length>24?c.slice(0,23)+"…":c,
       tiptable:["Deals|"+fmtNum(b.n),"Notional|"+fmtM(b.nl),
         "Median ticket|"+fmtM(median(b.sizes)||0),
+        "P&L|"+fmtK(b.pl),"Margin|"+mgfmt(marg(b))+" per $1m",
         "Traders facing this name|"+b.tn,
         "Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="ctpy|'+esc(c)+'" '+hlDim("ctpy",c)};
   });
   const ctpyRow=x=>({label:x.short,color:x.rel?"var(--fail)":"var(--agent)",
     tip:x.c,tipsub:x.type+(x.rel?" · related-party register":""),tiptable:x.tiptable,hl:x.hl});
-  const ctpyCount=ctpyStats.slice().sort((a,b)=>b.n-a.n).slice(0,12)
-    .map(x=>Object.assign(ctpyRow(x),{v:x.n,vLabel:fmtNum(x.n),
-      agg:hlAggT("ctpy",x.c,x.n),aggKey:"T:ctpy|"+x.c}));
-  const ctpyVol=ctpyStats.slice().sort((a,b)=>b.nl-a.nl).slice(0,12)
-    .map(x=>Object.assign(ctpyRow(x),{v:x.nl,vLabel:fmtM(x.nl),
-      agg:hlAggV("ctpy",x.c,x.nl),aggKey:"V:ctpy|"+x.c}));
+  const ctpyA=ctpyStats.slice().sort((a,b)=>(PL?b.pl-a.pl:b.n-a.n)).slice(0,12)
+    .map(x=>Object.assign(ctpyRow(x),{v:PL?x.pl:x.n,vLabel:PL?fmtK(x.pl):fmtNum(x.n),
+      agg:hlAggM("ctpy",x.c,PL?x.pl:x.n),aggKey:mcut+"ctpy|"+x.c}));
+  const ctpyB=ctpyStats.slice().sort((a,b)=>(PL?b.mg-a.mg:b.nl-a.nl)).slice(0,12)
+    .map(x=>Object.assign(ctpyRow(x),{v:PL?x.mg:x.nl,vLabel:PL?mgfmt(x.mg):fmtM(x.nl),
+      agg:PL?hlAggR("ctpy",x.c,x.pl):hlAggV("ctpy",x.c,x.nl),
+      aggKey:PL?null:"V:ctpy|"+x.c}));
 
   const tenorItems=TENOR_BANDS.map(bd=>{
-    const b=B(byTenor,bd.label), al=alBy.tenorb[bd.label]||0;
-    return {label:bd.label,v:b.n,color:bd.color,vLabel:fmtNum(b.n),
+    const b=B(byTenor,bd.label), al=alBy.tenorb[bd.label]||0, v=mval(b);
+    return {label:bd.label,v:v,color:bd.color,vLabel:mfmt(v),
       tip:bd.label,tipsub:"Tenor band",
       tiptable:["Deals|"+fmtNum(b.n),"Notional|"+fmtM(b.nl),
+        "P&L|"+fmtK(b.pl),"Margin|"+mgfmt(marg(b))+" per $1m",
         "Share of the book|"+(rows.length?Math.round(b.n/rows.length*100):0)+"%","Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="tenorb|'+esc(bd.label)+'" '+hlDim("tenorb",bd.label),
-      agg:hlAggT("tenorb",bd.label,b.n),aggKey:"T:tenorb|"+bd.label};
+      agg:hlAggM("tenorb",bd.label,v),aggKey:mcut+"tenorb|"+bd.label};
   });
 
   const sizeItems=SIZE_BANDS.map(bd=>{
-    const b=B(bySize,bd[2]), al=alBy.sizeb[bd[2]]||0;
-    return {label:bd[2],v:b.n,color:"var(--run)",vLabel:fmtNum(b.n),
+    const b=B(bySize,bd[2]), al=alBy.sizeb[bd[2]]||0, v=mval(b);
+    return {label:bd[2],v:v,color:"var(--run)",vLabel:mfmt(v),
       tip:bd[2],tipsub:"Ticket size band",
       tiptable:["Deals|"+fmtNum(b.n),"Notional|"+fmtM(b.nl),
+        "P&L|"+fmtK(b.pl),"Margin|"+mgfmt(marg(b))+" per $1m",
         "Alerts|"+fmtNum(al)].join("§"),
       hl:'data-hlsrc="sizeb|'+esc(bd[2])+'" '+hlDim("sizeb",bd[2]),
-      agg:hlAggT("sizeb",bd[2],b.n),aggKey:"T:sizeb|"+bd[2]};
+      agg:hlAggM("sizeb",bd[2],v),aggKey:mcut+"sizeb|"+bd[2]};
   }).filter(x=>x.v>0);
 
+  const segTot=segs=>segs.reduce((a,x)=>a+x.v,0);
   const rowA='<div class="gridw2 tight">'+
-    panel("Deal volume by month","stacked by asset class · 12 months",
+    panel(PL?"P&L by month":"Deal volume by month","stacked by asset class · 12 months",
       '<div class="panel-body"><div class="chart-well tall">'+
-        stackedBars(months,null,{w:660,h:266,dim:"ac",hlMonth:true,cut:"T:",unitLabel:"deals"})+"</div></div>",
-      "The book's own shape across the year. Quarter ends and roll dates are visible without anyone marking them.")+
-    panel("Asset class mix","share of deals",
+        stackedBars(months,null,{w:660,h:266,dim:"ac",hlMonth:true,cut:mcut,
+          unitLabel:PL?"P&L":"deals",fmt:PL?fmtK:null,padL:PL?48:34})+"</div></div>",
+      PL?"The earnings shape across the year. It is not the volume shape: a quiet month on a wide spread can out-earn a busy one on a thin margin."
+        :"The book's own shape across the year. Quarter ends and roll dates are visible without anyone marking them.")+
+    panel("Asset class mix",PL?"share of P&L":"share of deals",
       '<div class="panel-body"><div class="chart-well donut-well">'+
-      donut(acSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(acSegs,rows.length)+"</div></div>",
-      "Hovering a class lights it across every panel on the page.")+
-    panel("Booking channel","how the deals reached the system",
+      donut(acSegs,PL?fmtK(segTot(acSegs)):fmtNum(rows.length),PL?"P&L":"deals",112,19)+
+      donutLegend(acSegs,PL?segTot(acSegs):rows.length,null,PL?{head:"P&L",fmt:fmtK}:null)+"</div></div>",
+      PL?"Where the floor earns, which is rarely where it is busiest — options and credit carry a handful of per cent of the deals and a far larger share of the revenue."
+        :"Hovering a class lights it across every panel on the page.")+
+    panel("Booking channel",PL?"share of P&L":"how the deals reached the system",
       '<div class="panel-body"><div class="chart-well donut-well">'+
-      donut(chSegs,fmtNum(rows.length),"deals",112,19)+donutLegend(chSegs,rows.length)+"</div></div>",
-      "Voice and internal bookings are the two channels with the least automated evidence behind them.")+
+      donut(chSegs,PL?fmtK(segTot(chSegs)):fmtNum(rows.length),PL?"P&L":"deals",112,19)+
+      donutLegend(chSegs,PL?segTot(chSegs):rows.length,null,PL?{head:"P&L",fmt:fmtK}:null)+"</div></div>",
+      PL?"Voice earns a multiple of what the platforms do on the same notional, which is the commercial reason the least-evidenced channel is also the hardest to retire."
+        :"Voice and internal bookings are the two channels with the least automated evidence behind them.")+
     "</div>";
 
   const rowB='<div class="grid4t tight">'+
-    panel("Transaction count by product","top 12 by deals",
-      '<div class="panel-body"><div class="chart-well">'+hbars(prodCount,{w:520,rowH:19,labW:148})+"</div></div>",
-      "How often the floor deals in each product.")+
-    panel("Volume by product","top 12 by notional",
-      '<div class="panel-body"><div class="chart-well">'+hbars(prodVol,{w:520,rowH:19,labW:148})+"</div></div>",
-      "The same products by size. Where this order differs from the count beside it, the product trades in blocks rather than in flow.")+
-    panel("Transaction count by counterparty","top 12 by deals · red = related party",
-      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyCount,{w:540,rowH:19,labW:168})+"</div></div>",
-      "Who the floor deals with most often.")+
-    panel("Volume by counterparties","top 12 by notional · red = related party",
-      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyVol,{w:540,rowH:19,labW:168})+"</div></div>",
-      "A name large by notional and small by count is a block relationship; the reverse is a flow one. Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
+    panel(PL?"P&L by product":"Transaction count by product",PL?"top 12 by P&L":"top 12 by deals",
+      '<div class="panel-body"><div class="chart-well">'+hbars(prodA,{w:520,rowH:19,labW:148})+"</div></div>",
+      PL?"What each product earned the floor over the year."
+        :"How often the floor deals in each product.")+
+    panel(PL?"Margin by product":"Volume by product",PL?"top 12 by margin":"top 12 by notional",
+      '<div class="panel-body"><div class="chart-well">'+hbars(prodB,{w:520,rowH:19,labW:148})+"</div></div>",
+      PL?"The same products by how well they earn rather than how much. A product high here and absent beside it earns a good margin on very little volume — which is where a mispriced ticket hides best."
+        :"The same products by size. Where this order differs from the count beside it, the product trades in blocks rather than in flow.")+
+    panel(PL?"P&L by counterparty":"Transaction count by counterparty",
+      (PL?"top 12 by P&L":"top 12 by deals")+" · red = related party",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyA,{w:540,rowH:19,labW:168})+"</div></div>",
+      PL?"Which names the floor earns most from."
+        :"Who the floor deals with most often.")+
+    panel(PL?"Margin by counterparty":"Volume by counterparties",
+      (PL?"top 12 by margin":"top 12 by notional")+" · red = related party",
+      '<div class="panel-body"><div class="chart-well">'+hbars(ctpyB,{w:540,rowH:19,labW:168})+"</div></div>",
+      PL?"Margin per name, which is where price-fairness questions start. A related party dealing at a visibly thinner margin than comparable names is the shape the off-market rules are built to find."
+        :"A name large by notional and small by count is a block relationship; the reverse is a flow one. Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
     "</div>";
 
   const rowC='<div class="grid3 tight">'+
-    panel("Execution hours","the trading day · desk-local time",
+    panel("Execution hours",(PL?"P&L through the trading day":"the trading day")+" · desk-local time",
       '<div class="panel-body"><div class="chart-well">'+
-        hourChart(hrs,{w:560,h:212,cut:"T:",unitLabel:"Deals"})+"</div></div>",
-      "Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against. Select a trader anywhere on the page and this redraws as their session.")+
-    panel("Ticket size distribution","deals per size band",
+        hourChart(PL?hrsPl:hrs,{w:560,h:212,cut:mcut,unitLabel:PL?"P&L":"Deals",
+          fmt:PL?fmtK:null,padL:PL?44:30})+"</div></div>",
+      PL?"Earnings by hour of the session. Revenue booked into the shaded hours, when neither the client nor the market is watching closely, is worth more scrutiny than revenue booked at midday."
+        :"Every deal, not just the alerting ones — the shape a normal session makes, and the baseline the after-hours rule measures against. Select a trader anywhere on the page and this redraws as their session.")+
+    panel("Ticket size distribution",PL?"P&L per size band":"deals per size band",
       '<div class="panel-body"><div class="chart-well">'+hbars(sizeItems,{w:460,rowH:19,labW:110})+"</div></div>",
-      "A book's size profile is never linear. The tail on the right is where the authorisation rules live.")+
-    panel("Tenor profile","how long the risk runs",
+      PL?"Where in the size profile the money is made. The small-ticket bands carry most of the deals and a minority of the revenue; the tail on the right is the reverse."
+        :"A book's size profile is never linear. The tail on the right is where the authorisation rules live.")+
+    panel("Tenor profile",PL?"P&L by maturity band":"how long the risk runs",
       '<div class="panel-body"><div class="chart-well">'+hbars(tenorItems,{w:460,rowH:26,labW:120})+"</div></div>",
-      "The whole book by maturity band, against which any one trader's mix can be read.")+
+      PL?"Longer risk earns more per million because the spread is charged on a bigger duration. A short book earning like a long one is worth a question."
+        :"The whole book by maturity band, against which any one trader's mix can be read.")+
     "</div>";
 
   /* Trading activity, one small chart per trader. Alert panels answer "who is
@@ -4987,13 +5286,17 @@ function paneActivity(){
   const A=state.act;
   const actCols=actColumns();
   const act=traderActivity(actCols,A.metric);
-  const unit=A.metric==="notional"?"m":"n";
+  const unit=A.metric==="notional"?"m":A.metric==="pnl"?"k":"n";
   const isTenor=A.metric==="tenor";
   const actRows=TRADERS.filter(traderInRail).slice().sort((a,b)=>
     a.deskId.localeCompare(b.deskId,undefined,{numeric:true})||TRADER_STATS[b.id].idx-TRADER_STATS[a.id].idx);
   const cellTot=c=>act.segs.reduce((x,sg)=>x+(c.v[sg.label]||0),0);
   const sharedMax=Math.max(1e-9,...actRows.map(t=>Math.max(0,...act.by[t.id].map(cellTot))));
-  const METRICS=[["count","Deal count"],["notional","Notional volume"],["tenor","Tenor spread"]];
+  /* The page-level measure decides what the first of these three asks: deals in
+     the transaction view, earnings in the P&L one. Notional and tenor are
+     properties of the book either way and stay offered in both. */
+  const METRICS=[PL?["pnl","P&L"]:["count","Deal count"],
+    ["notional","Notional volume"],["tenor","Tenor spread"]];
   const YEARS=uniq(Array.from({length:DAYS},(_,d)=>dateForIdx(d).getFullYear())).sort();
 
   const railTrader=state.filters.trader;
@@ -5014,9 +5317,9 @@ function paneActivity(){
       (isTenor?tenorScatter(cells,{w:188,h:62,yoy:A.yoy})
               :sparkStack(cells,act.segs,{w:188,h:62,unit:unit,yoy:A.yoy,max:A.scale==="shared"?sharedMax:0}))+
       '<div class="af"><span>'+(isTenor?fmtNum(allT.length)+" deals"
-          :A.metric==="notional"?fmtM(tot):fmtNum(tot)+" deals")+"</span>"+
+          :A.metric==="notional"?fmtM(tot):A.metric==="pnl"?fmtK(tot):fmtNum(tot)+" deals")+"</span>"+
       "<b>"+(isTenor?(allT.length?fmtYrs(median(allT))+" med · "+uniq(allT.map(x=>x.toFixed(2))).length+" tenors":"—")
-          :"peak "+(A.metric==="notional"?fmtM(peak):fmtNum(peak)))+"</b></div>"+
+          :"peak "+(A.metric==="notional"?fmtM(peak):A.metric==="pnl"?fmtK(peak):fmtNum(peak)))+"</b></div>"+
       "</div>";
   }).join(""):'<div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div>';
 
@@ -6651,7 +6954,7 @@ function closeMsel(){
 
 ## 30. `30-render.js`
 
-**SUPPORT** · 61 lines
+**SUPPORT** · 62 lines
 
 Pane dispatch.
 
@@ -6667,6 +6970,7 @@ function render(){
   renderRail(); renderChips();
   $("#pane").innerHTML=PANES[state.tab]();
   $$(".tab").forEach(t=>t.setAttribute("aria-selected",String(t.dataset.tab===state.tab)));
+  syncMeasureBtns();
   closeInfo();
   Object.keys(MSEL_OPTS).forEach(refreshMselBtn);
   // The pane is rebuilt from scratch, so a pinned selection has to be
@@ -6720,7 +7024,7 @@ function goTimeSeriesCase(alertId){
 
 ## 31. `31-events.js`
 
-**REBUILD** · 232 lines
+**REBUILD** · 233 lines
 
 One delegated listener for the whole page; defines every interaction.
 
@@ -6751,6 +7055,7 @@ function handleChrome(t,e){
   const mall=t.closest("[data-mselall]"); if(mall){ const k=mall.dataset.mselall; state.filters[k]=new Set(MSEL_OPTS[k]); buildMsel(k); render(); return true; }
   const mclr=t.closest("[data-mselclear]"); if(mclr){ const k=mclr.dataset.mselclear; state.filters[k]=new Set(); buildMsel(k); render(); return true; }
   const tab=t.closest(".tab"); if(tab){ state.tab=tab.dataset.tab; closeMsel(); render(); return true; }
+  const msr=t.closest("button[data-measure]"); if(msr){ setMeasure(msr.dataset.measure); return true; }
   const dop=t.closest("[data-detopen]");
   if(dop){ alertDrawer(ALERT_BY_ID[dop.dataset.detopen]); return true; }
   /* A queue row opens its finding underneath itself. Guarded on click count so a
@@ -7085,6 +7390,14 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--brand)}
 .tab .cnt{display:inline-block;margin-left:6px;font-size:0.59375rem;font-family:var(--mono);font-weight:700;background:color-mix(in srgb,var(--fail) 16%,transparent);color:var(--fail);border-radius:9px;padding:1px 6px;vertical-align:1px}
 .mini-sel{width:auto;padding:4px 8px;font-size:0.65625rem;border-radius:5px}
+/* Only the Trade Activity panels are drawn in a choice of measure, so the
+   control appears with that tab rather than sitting dead on the other seven.
+   Scoped to the strip rather than written as a bare class, because .segbtns
+   declares its own display further down the sheet and would otherwise win on
+   source order. */
+.tabs-right .msrsel{display:none}
+.tabs-right .msrsel.on{display:inline-flex}
+.tabs-right .msrsel button{padding:4px 9px}
 .fsrow.mini{gap:5px}
 .fsrow.mini input[type=range]{width:64px;flex:0 0 auto}
 .fsrow.mini .fA{font-size:0.6875rem}
@@ -7634,7 +7947,7 @@ container and the drawer. Everything else is generated at runtime.
     </div>
     <div class="rail-spacer"></div>
     <button class="btn-ghost" id="reset-reviews" style="width:100%">Reset my review decisions</button>
-    <div class="mininote">Detection runs <b>per trader</b>: every rule is tested against the individual's own authorisation, their own baseline or their peer cohort. A desk is a reporting line, not a detection unit.<br><br>All trades, traders, groups and counterparties are <b>modelled mock data</b> for demonstration — no booked positions and no real people. Detection thresholds are illustrative.</div>
+    <div class="mininote">Detection runs <b>per trader</b>: every rule is tested against the individual's own authorisation, their own baseline or their peer cohort. A desk is a reporting line, not a detection unit.<br><br>All trades, traders, groups and counterparties are <b>modelled mock data</b> for demonstration — no booked positions and no real people. Detection thresholds are illustrative. P&amp;L is <b>modelled from dealing spreads</b>, not booked revenue.</div>
   </aside>
 
   <main class="main">
@@ -7650,6 +7963,7 @@ container and the drawer. Everything else is generated at runtime.
         <button class="tab" role="tab" data-tab="log" aria-selected="false">Review Log</button>
       </div>
       <div class="tabs-right">
+        <div class="segbtns msrsel" id="msr-sel" role="group" aria-label="Chart measure"><button type="button" data-measure="txn" aria-pressed="true">Transactions</button><button type="button" data-measure="pnl" aria-pressed="false">P&amp;L</button></div>
         <select id="theme-sel" class="mini-sel"><option value="light">Light</option><option value="dark">Dark</option><option value="dbs">Red</option></select>
         <div class="fsrow mini"><span class="fA">A</span><input type="range" id="fs-sel" min="0" max="6" step="1" value="2" aria-label="Font size"><span class="fA big">A</span></div>
       </div>

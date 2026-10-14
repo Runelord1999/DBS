@@ -4509,10 +4509,17 @@ const PRIOR_ACT={};
         rec.n++; rec.notional+=notional; rec.tenor[band]=(rec.tenor[band]||0)+1;
         /* The prior year is a comparison line, not a book: it has no channel and
            no counterparty, so it is priced on the product alone and both of those
-           multipliers fall back to neutral. */
-        rec.pl+=dealRevenue({fam:meta.fam,notional:notional,tenor:tenor,
-          instKey:(INST_BY_FAM[meta.fam]||[])[0]&&INST_BY_FAM[meta.fam][0].key,
-          channel:null,ctpyType:null,internal:false});
+           multipliers fall back to neutral.
+
+           Guarded because this block is demo data and the revenue model lives
+           with the rest of it: a build that strips the generators keeps this
+           loop but not dealRevenue, and the guard is what stops that build from
+           throwing the first time anyone gives it desks to iterate. */
+        rec.pl+=typeof dealRevenue==="function"
+          ?dealRevenue({fam:meta.fam,notional:notional,tenor:tenor,
+             instKey:(INST_BY_FAM[meta.fam]||[])[0]&&INST_BY_FAM[meta.fam][0].key,
+             channel:null,ctpyType:null,internal:false})
+          :0;
       }
     });
   }
