@@ -18,7 +18,7 @@ double-clicking — no server, no install, no internet.
 A trade surveillance dashboard. It reads a book of trades and a set of alerts
 raised against them, and gives a compliance officer eight views for working
 that queue: an overview, two trade-activity views, the alert queue, a rule
-library, a blotter, a trader view and a review log. Fifty detection
+library, a blotter, a trader view and a review log. Fifty-eight detection
 typologies are defined in it. Every rule is evaluated per trader against that
 trader's own history rather than a desk average, which is the single most
 important design decision in the whole thing.
@@ -44,11 +44,11 @@ rebuild the presentation.
 
 In this order:
 
-1. **`09-rules.js`** — the fifty typologies. The business logic, and the
+1. **`09-rules.js`** — the fifty-eight typologies. The business logic, and the
    reason the rest exists. Portable to Java more or less directly.
 2. **`10-data-dictionary.js`** — what each rule needs before it can run.
-3. **`08-derive-baselines.js`** — each trader's own normal. Twenty-four of the
-   fifty rules read it directly, and forty-one measure against a reference
+3. **`08-derive-baselines.js`** — each trader's own normal. Twenty-eight of the
+   fifty-eight rules read it directly, and forty-nine measure against a reference
    specific to the trader, instrument or product rather than a fixed number.
 4. **`14-state.js`** — what "in scope" means everywhere.
 5. Everything else is presentation, and you will probably rebuild it.
@@ -66,49 +66,50 @@ In this order:
 
 | | lines |
 |---|---|
-| Application logic and presentation | 4,637 |
-| Synthetic data generators (`*-demo-*`, replace entirely) | 2,268 |
-| **Total JavaScript** | **6,905** |
+| Application logic and presentation | 4,717 |
+| Synthetic data generators (`*-demo-*`, replace entirely) | 2,753 |
+| **Total JavaScript** | **7,470** |
 | Stylesheet | 598 |
 
 ## Contents
 
 | # | File | Lines | Treat as |
 |---|---|---|---|
-| 1 | `01-engine.js` | 184 | SUPPORT |
+| 1 | `01-engine.js` | 195 | SUPPORT |
 | 2 | `02-format.js` | 37 | SUPPORT |
 | 3 | `03-demo-desks.js` | 122 | REPLACE |
 | 4 | `04-demo-instruments.js` | 168 | REPLACE / PORT |
 | 5 | `05-config-limits.js` | 83 | REPLACE |
 | 6 | `06-demo-market.js` | 247 | REPLACE / PORT |
-| 7 | `07-demo-book.js` | 192 | REPLACE / PORT |
+| 7 | `07-demo-book.js` | 198 | REPLACE / PORT |
 | 8 | `08-derive-baselines.js` | 53 | PORT |
-| 9 | `09-rules.js` | 261 | PORT |
-| 10 | `10-data-dictionary.js` | 169 | PORT |
-| 11 | `11-demo-alerts.js` | 1,438 | REFERENCE |
+| 9 | `09-rules.js` | 306 | PORT |
+| 10 | `10-data-dictionary.js` | 179 | PORT |
+| 11 | `11-demo-alerts.js` | 1,445 | REFERENCE |
 | 12 | `12-demo-reviews.js` | 101 | REPLACE / PORT |
-| 13 | `13-derive-stats.js` | 40 | PORT |
-| 14 | `14-state.js` | 132 | PORT |
-| 15 | `15-highlight.js` | 349 | REBUILD |
-| 16 | `16-charts.js` | 420 | REBUILD |
-| 17 | `17-market-context.js` | 189 | REBUILD / PORT |
-| 18 | `18-view-helpers.js` | 7 | SUPPORT |
-| 19 | `19-panel-guidance.js` | 285 | PORT |
-| 20 | `20-pane-overview.js` | 255 | REBUILD |
-| 21 | `21-pane-activity.js` | 352 | REBUILD |
-| 22 | `22-pane-timeseries.js` | 757 | REBUILD |
-| 23 | `23-pane-detections.js` | 83 | REBUILD |
-| 24 | `24-pane-rules.js` | 47 | REBUILD |
-| 25 | `25-pane-blotter.js` | 105 | REBUILD |
-| 26 | `26-pane-traders.js` | 112 | REBUILD |
-| 27 | `27-pane-log.js` | 101 | REBUILD |
-| 28 | `28-drawer.js` | 248 | REBUILD / PORT |
-| 29 | `29-rail.js` | 67 | REBUILD |
-| 30 | `30-render.js` | 62 | SUPPORT |
-| 31 | `31-events.js` | 233 | REBUILD |
-| 32 | `32-boot.js` | 6 | SUPPORT |
+| 13 | `12b-demo-revenue-alerts.js` | 472 | REFERENCE |
+| 14 | `13-derive-stats.js` | 40 | PORT |
+| 15 | `14-state.js` | 132 | PORT |
+| 16 | `15-highlight.js` | 349 | REBUILD |
+| 17 | `16-charts.js` | 420 | REBUILD |
+| 18 | `17-market-context.js` | 189 | REBUILD / PORT |
+| 19 | `18-view-helpers.js` | 7 | SUPPORT |
+| 20 | `19-panel-guidance.js` | 285 | PORT |
+| 21 | `20-pane-overview.js` | 255 | REBUILD |
+| 22 | `21-pane-activity.js` | 352 | REBUILD |
+| 23 | `22-pane-timeseries.js` | 757 | REBUILD |
+| 24 | `23-pane-detections.js` | 83 | REBUILD |
+| 25 | `24-pane-rules.js` | 47 | REBUILD |
+| 26 | `25-pane-blotter.js` | 105 | REBUILD |
+| 27 | `26-pane-traders.js` | 112 | REBUILD |
+| 28 | `27-pane-log.js` | 101 | REBUILD |
+| 29 | `28-drawer.js` | 262 | REBUILD / PORT |
+| 30 | `29-rail.js` | 67 | REBUILD |
+| 31 | `30-render.js` | 62 | SUPPORT |
+| 32 | `31-events.js` | 233 | REBUILD |
+| 33 | `32-boot.js` | 6 | SUPPORT |
 | — | `css/dashboard.css` | 598 | REBUILD |
-| — | `index.html` | 121 | REBUILD |
+| — | `index.html` | 122 | REBUILD |
 
 ---
 
@@ -116,7 +117,7 @@ In this order:
 
 ## 1. `01-engine.js`
 
-**SUPPORT** · 184 lines
+**SUPPORT** · 195 lines
 
 Browser plumbing — tooltips, theming, font scaling. Nothing to port; your UI stack has equivalents.
 
@@ -283,7 +284,18 @@ function syncMeasureBtns(){
    alert reviewed yesterday is the same alert today.
 ============================================================ */
 function mulberry32(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
-const rng=mulberry32(20260803);
+/* One seeded stream drives the whole demo book, so a reload reproduces it
+   exactly. It is reached through a holder rather than bound directly because a
+   generator added later must not draw from it: every draw it took would shift
+   every value generated after it — the review history, the prior year — and
+   the alerts already in the book would silently change. withStream() lends such
+   a generator a stream of its own and hands the original back untouched. */
+let RNG_SRC=mulberry32(20260803);
+const rng=()=>RNG_SRC();
+function withStream(seed,fn){
+  const prev=RNG_SRC; RNG_SRC=mulberry32(seed);
+  try{ return fn(); } finally{ RNG_SRC=prev; }
+}
 const rand=(a,b)=>a+rng()*(b-a);
 const randInt=(a,b)=>Math.floor(rand(a,b+1));
 const choice=a=>a[Math.floor(rng()*a.length)];
@@ -1005,7 +1017,7 @@ const SETTLE_DAYS={"FX Spot":2,"FX Forward":30,"FX Swap":30,"NDF":30,"Govt Bond"
 
 ## 7. `07-demo-book.js`
 
-**REPLACE / PORT** · 192 lines
+**REPLACE / PORT** · 198 lines
 
 Two things in one file. A year of synthetic trades, which your FACT_TRADE feed replaces outright; and, at the end, the revenue model — the per-deal dealing revenue the Trade Activity tab's P&L view is drawn from. Each deal is priced off its instrument's quoted spread, halved and multiplied by a capture rate, then adjusted for booking channel, counterparty type, product family and ticket size, with rate-quoted families converted through cash duration and option families charged on premium rather than notional. The per-family factors are calibrated to published revenue-per-million benchmarks, which are listed in the comment above them. At the bank none of this is modelled: `revenue` and `clientRevenue` come from your revenue attribution or product-control feed, and this block exists only so the demo has a defensible number to draw.
 
@@ -1156,7 +1168,13 @@ const CTPY_MARGIN={"Corporate":1.50,"Private Client":1.65,"Insurer":1.20,
    because some products are priced on the spread and earned on something else.
    Repo is financing — the earnings are in the rate, not in the bid-offer.
    Credit and equity flow is recycled far more cheaply than the screen spread
-   suggests. The target each factor is calibrated to, in USD per million traded:
+   suggests.
+
+   Calibrated on the finished book, not the unplanted one: the revenue rules
+   plant mark-ups and pull-forwards that are real revenue the desk booked, and
+   a floor whose reported margin excluded them would not be the floor the P&L
+   view draws. They come to about eight per cent of the year's revenue. The
+   target each factor is calibrated to, in USD per million traded:
 
      FX spot and forward   20      Govt bonds       30
      NDF                   70      Corporate bonds 700
@@ -1164,8 +1182,8 @@ const CTPY_MARGIN={"Corporate":1.50,"Private Client":1.65,"Insurer":1.20,
      Interest rate swaps   55      CDS single name 280
      Equity swaps          60      CDS index        40
      Equity options       220      Total return     90                        */
-const FAM_MARGIN={fx:1.10,ndf:0.49,fxopt:1.28,rate:0.81,bondg:0.83,bondc:0.93,
-  repo:0.90,cds:0.43,cdsi:0.36,eq:0.47,eqopt:0.93,trs:0.56};
+const FAM_MARGIN={fx:1.03,ndf:0.45,fxopt:1.20,rate:0.75,bondg:0.84,bondc:0.88,
+  repo:0.62,cds:0.42,cdsi:0.35,eq:0.51,eqopt:1.06,trs:0.50};
 
 /* Which families quote their spread in RATE basis points rather than in price.
    This is the difference between a rough model and a wrong one. A 0.45 bp
@@ -1207,7 +1225,7 @@ function dealRevenue(t){
 
 **PORT** · 53 lines
 
-**Each trader's own behavioural baseline.** Ticket sizes, daily notional, counterparty concentration, execution hours, amendment rate, loss days, and the peer cohort. Twenty-four of the fifty rules read this baseline directly and cannot run without it; forty-one measure against a reference specific to the trader, instrument or product rather than a bank-wide fixed number. Only nine test against a static list or tolerance. If the warehouse supplies AGG_TRADER_BASELINE you can read it instead, but the definitions here are what the rules assume.
+**Each trader's own behavioural baseline.** Ticket sizes, daily notional, counterparty concentration, execution hours, amendment rate, loss days, and the peer cohort. Twenty-eight of the fifty-eight rules read this baseline directly and cannot run without it; forty-nine measure against a reference specific to the trader, instrument or product rather than a bank-wide fixed number. Only nine test against a static list or tolerance. If the warehouse supplies AGG_TRADER_BASELINE you can read it instead, but the definitions here are what the rules assume.
 
 ```javascript
 /* ============================================================
@@ -1266,13 +1284,13 @@ const xBase=(v,b)=>(b>0?(v/b).toFixed(1):"—")+"×";
 
 ## 9. `09-rules.js`
 
-**PORT** · 261 lines
+**PORT** · 306 lines
 
-**The fifty typologies.** Each carries its identifier, category, severity, the test as implemented, what the test measures against, and why the pattern matters. This is the single most portable asset in the codebase and the place to start.
+**The fifty-eight typologies.** Each carries its identifier, category, severity, the test as implemented, what the test measures against, and why the pattern matters. This is the single most portable asset in the codebase and the place to start.
 
 ```javascript
 /* ============================================================
-   Rule library — 50 surveillance typologies, all evaluated per trader
+   Rule library — 58 surveillance typologies, all evaluated per trader
    `logic` is the plain-language threshold the officer sees on the rule card and
    in every alert, so a disposition can always be argued against a stated test.
    `fp` is the historic benign rate: rules that fire on timing or data-quality
@@ -1531,14 +1549,59 @@ const RULES=[
   logic:"substitution within 2 business days before a reporting date, reversed within 5 business days after, same trader",
   base:"The trader's own financing book across the reporting date",
   why:"The collateral reported is not the collateral held. The ratio improves on the one day it is measured."},
+ /* Revenue and margin. The fifty rules above test product-control P&L — how a
+    position was valued — and none of them asks what the desk charged its
+    clients. These eight do. They read per-deal revenue, so they are generated
+    after it is assigned, on a random stream of their own (stream:"revenue"):
+    see the revenue-alert module, after the review history. */
+ {id:"TS-51",name:"Excessive mark-up against comparable clients",cat:"Client conduct",sev:"High",fp:0.34,plants:12,actors:["T45","T23"],stream:"revenue",
+  desc:"One client paying a margin several times what clients of the same type pay for the same product and size, across a run of deals.",
+  logic:"≥5 deals with one client over 20 business days at a margin > 2.5× the median that clients of the same type pay for the same product and size band",
+  base:"What clients of the same type pay for the same product and ticket size, across the floor",
+  why:"Clients of the same type buying the same product at the same size should pay much the same. A client paying several times the going rate is usually the one least able to check the price — the fair-treatment failure behind most mark-up enforcement."},
+ {id:"TS-52",name:"Mark-up concentrated on voice",cat:"Client conduct",sev:"Medium",fp:0.46,plants:14,actors:["T45","T05"],stream:"revenue",
+  desc:"A client charged a materially wider margin on voice than the same client pays electronically for the same product.",
+  logic:"the same client's margin on voice deals > 2× their margin on electronic deals in the same product, with ≥6 deals on each channel over 60 business days",
+  base:"The same client's own electronic pricing in the same product",
+  why:"Electronic prices are logged and compared; a voice price is only as visible as its recording. A client who pays a fair price on a screen and a much wider one on the phone is being charged where it is hardest to see."},
+ {id:"TS-53",name:"Revenue concentration out of line with volume",cat:"Client conduct",sev:"Medium",fp:0.48,plants:8,actors:["T23","T29"],stream:"revenue",
+  desc:"A single client accounting for a large share of a trader's revenue while contributing little of their volume.",
+  logic:"one client > 35% of this trader's client revenue over 60 business days while < 10% of their notional",
+  base:"The trader's own revenue and notional over the same 60 days",
+  why:"Revenue that far outruns the business behind it is earned on price, not volume. It is the shape of a client being overcharged quietly, or of a relationship paying the trader for something other than execution."},
+ {id:"TS-54",name:"Margin outlier against the peer cohort",cat:"Valuation",sev:"High",fp:0.36,plants:7,actors:["T58","T45"],stream:"revenue",
+  desc:"A trader earning far more per million traded than their peer cohort earns on the same mix of products.",
+  logic:"this trader's revenue per $1m over 20 business days > 2.5× what their peer cohort earns on the same product mix",
+  base:"The peer cohort's margin, weighted to this trader's own product mix",
+  why:"A trader earning several times what peers earn on the same products is either charging more or marking more generously, and both need explaining. The comparison has to be on the same product mix, or every bond trader looks like an outlier against an FX desk."},
+ {id:"TS-55",name:"Revenue pulled into period end",cat:"Valuation",sev:"High",fp:0.32,plants:14,actors:["T08","T11"],stream:"revenue",
+  desc:"An unusually large share of a month's revenue booked in its final two business days.",
+  logic:"share of a month's client revenue booked in its last 2 business days > 2.5× this trader's own 12-month rate, and above 25% of the month",
+  base:"The trader's own 12-month share of revenue booked at period end",
+  why:"Revenue that bunches into the last two days of a month is revenue being moved to a reporting date — pulled forward to meet a target, or booked on terms that unwind once the period has closed."},
+ {id:"TS-56",name:"Spread given away on external flow",cat:"Client conduct",sev:"Medium",fp:0.50,plants:8,actors:["T29","T66"],stream:"revenue",
+  desc:"A trader's margin on client business falling to a fraction of their own norm while their volume rises.",
+  logic:"margin on external flow over 20 business days < 30% of this trader's own 12-month margin on the same product mix, while notional runs ≥ 1.5× their own baseline",
+  base:"The trader's own 12-month margin on the same products, and their own notional baseline",
+  why:"Spread given away is value given away. A trader buying volume at a fraction of their normal margin may be chasing a volume target, or paying a client for something that does not appear on the ticket."},
+ {id:"TS-57",name:"Front-office and product-control P&L disagree",cat:"Valuation",sev:"High",fp:0.30,plants:8,actors:["T08","T58"],stream:"revenue",
+  desc:"A trader-day on which the revenue front office reports and the P&L product control signs off are far apart.",
+  logic:"|front-office revenue − product-control P&L| for one trader on one day > max($250k, 3× that trader's own 60-day mean break)",
+  base:"The trader's own 60-day break between the two systems",
+  why:"Front office and product control should arrive at the same number. A break is where an unrealistic mark, an unbooked fee or a fictitious deal first becomes visible — often before anything on the trade itself looks wrong."},
+ {id:"TS-58",name:"Trading losses recovered through client mark-up",cat:"Client conduct",sev:"Critical",fp:0.20,plants:10,actors:["T11","T05"],stream:"revenue",
+  desc:"A trading loss on the trader's own position, followed the same day by client deals priced well above the trader's normal margin.",
+  logic:"risk loss on a day > 2× this trader's own daily risk-result swing, followed the same day by client margin > 2× their own margin on the same products",
+  base:"The trader's own daily risk-result volatility, and their own margin on the same products",
+  why:"A trader who loses money on their own position and then widens what clients pay that same afternoon is passing the loss to the clients. Either half is unremarkable alone; together they are one of the clearest fair-treatment failures there is."},
 ];
 ```
 
 ## 10. `10-data-dictionary.js`
 
-**PORT** · 169 lines
+**PORT** · 179 lines
 
-The sixty data elements the rules consume, the system each comes from, and the element list per rule. Drives the data-requirements panel and tells you exactly what each rule needs before it can run.
+The sixty-two data elements the rules consume, the system each comes from, and the element list per rule. Drives the data-requirements panel and tells you exactly what each rule needs before it can run.
 
 ```javascript
 /* ============================================================
@@ -1572,6 +1635,8 @@ const DATA_ELEMENTS={
   amend:    ["Amendment log — field, old, new, time","Trade capture audit"],
   cancel:   ["Cancellation timestamp",              "Trade capture audit"],
   pnl:      ["Deal P&L",                            "Product control"],
+  crev:     ["Client revenue per deal",             "Revenue attribution · product control"],
+  trev:     ["Total revenue per deal",              "Revenue attribution · product control"],
 
   mid:      ["Market mid at execution",             "Market data — tick store"],
   spread:   ["Prevailing bid / offer",              "Market data — tick store"],
@@ -1669,6 +1734,14 @@ const RULE_REQ={
   "TS-48":["inst","dir","notional","tdate","trader","news","pnl","base"],
   "TS-49":["px","gc","ctpy","relparty","notional","tenor","trader"],
   "TS-50":["collat","period","tdate","notional","trader","ctpy","cal"],
+  "TS-51":["crev","notional","prod","ctpy","ctpystat","trader","tdate","channel"],
+  "TS-52":["crev","channel","ctpy","prod","notional","trader","tdate"],
+  "TS-53":["crev","notional","ctpy","trader","tdate"],
+  "TS-54":["crev","notional","prod","trader","cohort","tdate"],
+  "TS-55":["crev","tdate","exec","trader","period","cal","base"],
+  "TS-56":["crev","notional","ctpy","trader","tdate","base"],
+  "TS-57":["trev","dpnl","trader","tdate","base"],
+  "TS-58":["trev","crev","exec","ctpy","ctpystat","trader","tdate","base"],
 };
 /* Grouped by the system that has to supply them — which is the shape of the
    conversation an implementation team actually has. */
@@ -1713,9 +1786,9 @@ const MONTH_END_REV=MONTH_END.filter(d=>BIZ_DAYS.indexOf(d)<BIZ_DAYS.length-11);
 
 ## 11. `11-demo-alerts.js`
 
-**REFERENCE** · 1,438 lines
+**REFERENCE** · 1,445 lines
 
-The twenty pattern generators that plant detectable behaviour in the synthetic book, and the evidence builder that turns a hit into a reviewable alert. You will not port the generators — your engine raises real alerts — but the evidence construction is worth reading: it is what makes an alert reviewable rather than a score.
+The pattern generators for the first fifty rules, which plant detectable behaviour in the synthetic book, and the evidence builder that turns a hit into a reviewable alert. You will not port the generators — your engine raises real alerts — but the evidence construction is worth reading: it is what makes an alert reviewable rather than a score.
 
 ```javascript
 /* ============================================================
@@ -1786,7 +1859,7 @@ const px=t=>t.px.toFixed(t.dp)+(t.unit==="%"?"%":t.unit==="bps"?" bps":t.unit===
 const mkt=t=>t.mktPx.toFixed(t.dp)+(t.unit==="%"?"%":t.unit==="bps"?" bps":t.unit==="% prem"?"%":"");
 
 /* ------------------------------------------------------------
-   The 20 pattern generators. Each one builds the trades that embody the
+   The pattern generators, one per rule. Each one builds the trades that embody the
    typology and then raises the alert those trades would trigger — the
    evidence on the alert is read back off the trades, never invented twice.
 ------------------------------------------------------------ */
@@ -3031,7 +3104,7 @@ PLANT["TS-50"]=function(rule){
 const FLOOR_SCALE=TRADERS.length/33;
 const scaled=n=>Math.max(1,Math.round(n*FLOOR_SCALE));
 
-RULES.forEach(r=>{ const f=PLANT[r.id]; for(let i=0;i<scaled(r.plants);i++) f(r); });
+RULES.forEach(r=>{ if(r.stream) return; const f=PLANT[r.id]; for(let i=0;i<scaled(r.plants);i++) f(r); });
 
 /* Background noise: ordinary trades that happen to sit just past a threshold.
    Without them every alert would be a genuine pattern, and the officer's job —
@@ -3146,14 +3219,21 @@ const ALERT_BY_ID={}; ALERTS.forEach(a=>ALERT_BY_ID[a.id]=a);
    a P&L chart look like a P&L chart rather than a rescaled volume chart: a desk
    that warehouses risk has losing days, and a trader whose every month is a
    clean multiple of their turnover is not running a book. It is seeded, so the
-   same deal gives the same answer on every reload. */
-TRADES.forEach(t=>{
-  const client=dealRevenue(t);
-  // Wide enough to turn a ticket negative: a desk that warehouses risk loses
-  // money on some of it, and a book where every deal earns is not a book.
-  const risk=client*rand(-1.6,1.75)*0.80;
-  t.clientRevenue=+client.toFixed(3);
-  t.revenue=+(client+risk).toFixed(3);
+   same deal gives the same answer on every reload.
+
+   On a stream of its own. This pass was added after the review history below
+   was written, and drawing its sixty thousand numbers from the shared stream
+   reshuffled every seeded disposition and the prior-year series that follow
+   it — the same alerts, decided differently. */
+withStream(20260917,()=>{
+  TRADES.forEach(t=>{
+    const client=dealRevenue(t);
+    // Wide enough to turn a ticket negative: a desk that warehouses risk loses
+    // money on some of it, and a book where every deal earns is not a book.
+    const risk=client*rand(-1.6,1.75)*0.80;
+    t.clientRevenue=+client.toFixed(3);
+    t.revenue=+(client+risk).toFixed(3);
+  });
 });
 ```
 
@@ -3209,8 +3289,8 @@ const SUSP_NOTES=[
   "Counterparty connection matches the related-party register. Conflicts declaration does not disclose it.",
   "Position built ahead of the announcement and closed straight after. Requesting comms review for the period.",
 ];
-function seedReviews(){
-  ALERTS.forEach(a=>{
+function seedReviews(list){
+  (list||ALERTS).forEach(a=>{
     const age=DAYS-1-a.day;
     const tr=TRADER_BY_ID[a.traderId];
     const rule=RULE_BY_ID[a.ruleId];
@@ -3266,7 +3346,487 @@ function applyReviews(){
 applyReviews();
 ```
 
-## 13. `13-derive-stats.js`
+## 13. `12b-demo-revenue-alerts.js`
+
+**REFERENCE** · 472 lines
+
+The generators for the eight revenue rules, TS-51 to TS-58 — mark-up against comparable clients, voice mark-up, revenue concentration, margin against the cohort, period-end pull-forward, spread given away, front-office against product-control breaks, and losses recovered through client mark-up. They run after revenue is assigned and on a random stream of their own, so the first fifty rules' alerts do not change. You will not port the generators, but read how each measures its baseline: against the trader's own margin on the same products, or what clients of the same type pay for the same product and size — never a blended margin, which makes a credit trader's ordinary bond business look like a mark-up. At the bank, the revenue these rules read comes from revenue attribution (FACT_TRADE.client_revenue_usd and total_revenue_usd).
+
+```javascript
+/* ============================================================
+   DEMO DATA — revenue and margin alerts (TS-51 … TS-58)
+   The eight revenue rules test what the desk charged its clients, so they can
+   only be planted once every deal carries revenue — which is after the alert
+   construction above and after the review history has been seeded.
+
+   Three things keep the rest of the book exactly as it was:
+     · They draw from a random stream of their own (withStream). Every draw
+       taken from the shared one would shift the prior-year series generated
+       after it, and the existing alerts would quietly change underneath.
+     · The figures each alert is measured against — a trader's own margin,
+       what comparable clients pay, the cohort's rate — are taken once, from
+       the book before any of these patterns is planted.
+     · A pattern claims the trader and the days it occupies. No later pattern
+       may touch the same trader inside that window, so the revenue an alert's
+       evidence quotes is still the revenue on the deals when the page renders.
+   Their alerts are numbered after the existing ones, as a newly deployed rule's
+   would be: the ids already in the queue, and any decision recorded against
+   one, stay where they were.
+============================================================ */
+/* trade id -> {c,r} as the deal stood before a pattern changed it; created
+   deals are marked so a check can rebuild the unplanted book. */
+const REV_ORIG=new Map();
+(function revenueAlerts(){
+withStream(20261015,()=>{
+  const isExt=t=>!t.internal&&t.channel!=="Internal booking";
+  const mgn=(rev,nl)=>nl>0?rev*1000/nl:0;        // revenue $k over notional $m → $ per $1m
+  const mg=v=>"$"+fmtNum(Math.round(v))+" per $1m";
+  const sum=(a,f)=>a.reduce((x,t)=>x+f(t),0);
+  const med=a=>{ const x=a.slice().sort((p,q)=>p-q), n=x.length; return n?(n%2?x[n>>1]:(x[n/2-1]+x[n/2])/2):0; };
+  const xf=v=>v.toFixed(1)+"×";
+  // The window an alert was measured over, stated so the figures can be rebuilt.
+  const win=(lo,hi,n)=>fmtDate(dateForIdx(lo))+" – "+fmtDate(dateForIdx(hi))+" · "+n+" business days";
+  const ELEC=["eComm single-dealer","Multi-dealer platform","API / Algo"];
+  const EXT_CH=CHANNELS.filter(c=>c[0]!=="Internal booking");
+  const CT=Object.create(null); COUNTERPARTIES.forEach(c=>{ CT[c.name]=c; });
+  const NB=BIZ_DAYS.length;
+  const bizIx=d=>BIZ_DAYS.indexOf(d);
+  const calSum=(m,lo,hi)=>{ let x=0; for(let d=lo;d<=hi;d++) x+=m[d]||0; return x; };
+  const monthBiz=me=>{ const dt=dateForIdx(me), ym=dt.getFullYear()*12+dt.getMonth();
+    return BIZ_DAYS.filter(d=>{ const x=dateForIdx(d); return x.getFullYear()*12+x.getMonth()===ym; }); };
+  const tradesIn=(tr,lo,hi,f)=>{
+    const out=[];
+    for(let d=lo;d<=hi;d++) (byTraderDay.get(tr.id+"|"+d)||[]).forEach(t=>{ if(!f||f(t)) out.push(t); });
+    return out;
+  };
+
+  /* ---- what each alert is measured against, from the unplanted book ---- */
+  const RB={}; TRADERS.forEach(tr=>{ RB[tr.id]={c:0,nl:0,n:0,day:{},risk:{},fo:{},cli:{}}; });
+  const C3={}, C2={}, C1={}, COH={}, TP={}, TPT={}, TPTC={};
+  const add=(m,k,c,nl)=>{ const o=m[k]||(m[k]={c:0,nl:0}); o.c+=c; o.nl+=nl; };
+  TRADES.forEach(t=>{
+    const b=RB[t.traderId]; if(!b) return;
+    b.risk[t.dayIdx]=(b.risk[t.dayIdx]||0)+(t.revenue-t.clientRevenue);
+    b.fo[t.dayIdx]=(b.fo[t.dayIdx]||0)+t.revenue;
+    if(!isExt(t)) return;
+    const tr=TRADER_BY_ID[t.traderId], m=mgn(t.clientRevenue,t.notional);
+    b.c+=t.clientRevenue; b.nl+=t.notional; b.n++;
+    b.day[t.dayIdx]=(b.day[t.dayIdx]||0)+t.clientRevenue;
+    b.cli[t.ctpy]=(b.cli[t.ctpy]||0)+t.clientRevenue;
+    const band=sizeBandOf(t.notional);
+    (C3[t.product+"|"+t.ctpyType+"|"+band]||(C3[t.product+"|"+t.ctpyType+"|"+band]=[])).push(m);
+    (C2[t.product+"|"+t.ctpyType]||(C2[t.product+"|"+t.ctpyType]=[])).push(m);
+    (C1[t.product]||(C1[t.product]=[])).push(m);
+    add(COH,tr.cohort+"|"+t.product,t.clientRevenue,t.notional);
+    add(TP,t.traderId+"|"+t.product,t.clientRevenue,t.notional);
+    add(TPT,t.traderId+"|"+t.product+"|"+t.ctpyType,t.clientRevenue,t.notional);
+    add(TPTC,t.traderId+"|"+t.product+"|"+t.ctpy,t.clientRevenue,t.notional);
+  });
+  const FLOOR={}; Object.keys(COH).forEach(k=>add(FLOOR,k.slice(k.indexOf("|")+1),COH[k].c,COH[k].nl));
+  TRADERS.forEach(tr=>{
+    const b=RB[tr.id];
+    b.margin=mgn(b.c,b.nl);
+    b.nlPerBiz=b.nl/NB; b.nPerBiz=b.n/NB; b.cPerBiz=b.c/NB;
+    const rd=Object.keys(b.risk).map(k=>b.risk[k]);
+    const mu=rd.reduce((x,v)=>x+v,0)/(rd.length||1);
+    b.riskSd=Math.sqrt(rd.reduce((x,v)=>x+(v-mu)*(v-mu),0)/Math.max(1,rd.length-1));
+    const fo=Object.keys(b.fo).map(k=>Math.abs(b.fo[k]));
+    b.meanAbsDay=fo.reduce((x,v)=>x+v,0)/(fo.length||1);
+    // The share of each month's client revenue booked in its last two business
+    // days. Calendar spans, not business-day lists: the month is its first
+    // business day to its last, and anything booked on a weekend inside that
+    // span counts — exactly as the alert below measures it.
+    const sh=[];
+    MONTH_END.forEach(me=>{
+      const days=monthBiz(me);
+      if(days.length<15) return;                         // a part-month at the edge of the year
+      const tot=calSum(b.day,days[0],me);
+      if(tot>0) sh.push(calSum(b.day,bizBack(me,1),me)/tot);
+    });
+    b.pe=sh.length?sh.reduce((x,v)=>x+v,0)/sh.length:0;
+    const cs=Object.keys(b.cli).map(k=>b.cli[k]).sort((p,q)=>q-p);
+    b.topShare=b.c>0&&cs.length?cs[0]/b.c:0;
+  });
+  // What clients of the same type pay for the same product, as narrowly as the
+  // book will support: product, type and size band if there are enough deals
+  // to make a median mean something, otherwise widened a step at a time.
+  function norm(prod,type,band){
+    const a=C3[prod+"|"+type+"|"+band]; if(a&&a.length>=15) return a._m!=null?a._m:(a._m=med(a));
+    const b=C2[prod+"|"+type];          if(b&&b.length>=15) return b._m!=null?b._m:(b._m=med(b));
+    const c=C1[prod]||[];               return c._m!=null?c._m:(c._m=med(c));
+  }
+  // The cohort's rate on a product, without the trader being measured in it.
+  function cohortMargin(tr,prod){
+    const c=COH[tr.cohort+"|"+prod]||{c:0,nl:0}, s=TP[tr.id+"|"+prod]||{c:0,nl:0};
+    if(c.nl-s.nl>=25) return mgn(c.c-s.c,c.nl-s.nl);
+    const f=FLOOR[prod]||{c:0,nl:0};
+    return mgn(f.c-s.c,f.nl-s.nl);
+  }
+  const cohortSize=tr=>TRADERS.filter(x=>x.cohort===tr.cohort&&x.id!==tr.id).length;
+  /* A trader's own margin on one product. A blended margin is no baseline for a
+     handful of deals: a credit trader's bonds earn thirty times their FX hedges,
+     so "twice their own margin" on a day of bond deals is the product mix, not a
+     mark-up. Where the trader has too little history in a product to say, the
+     cohort's rate stands in. */
+  function ownMargin(tr,prod){
+    const s=TP[tr.id+"|"+prod];
+    return s&&s.nl>=25?mgn(s.c,s.nl):cohortMargin(tr,prod);
+  }
+  const ownMix=(tr,ts)=>{ const nl=sum(ts,t=>t.notional); return nl>0?sum(ts,t=>ownMargin(tr,t.product)*t.notional)/nl:0; };
+
+  /* ---- claims, revenue edits and new deals ---- */
+  let CUR="";            // the rule being planted, recorded against every deal it changes
+  const CLAIM={};
+  const free=(tr,lo,hi)=>!(CLAIM[tr.id]||[]).some(w=>lo<=w[1]+3&&hi>=w[0]-3);
+  const claim=(tr,lo,hi)=>(CLAIM[tr.id]||(CLAIM[tr.id]=[])).push([lo,hi]);
+  // Client revenue changes; the risk the deal carried stays as it was unless
+  // the pattern is itself about risk.
+  function setRev(t,client,risk){
+    if(!REV_ORIG.has(t.id)) REV_ORIG.set(t.id,{c:t.clientRevenue,r:t.revenue,rule:CUR});
+    const rk=risk==null?t.revenue-t.clientRevenue:risk;
+    t.clientRevenue=+client.toFixed(3);
+    t.revenue=+(t.clientRevenue+rk).toFixed(3);
+  }
+  // A deal the pattern needs and the book does not have: an approved product,
+  // inside the trader's own ticket authorisation, on an external channel, priced
+  // the way every other deal in the book was.
+  function newDeal(day,tr,prod,o){
+    o=o||{};
+    const t=makeTrade(day,tr,prod,{ctpy:o.ctpy,channel:o.channel||weightedChoice(EXT_CH),execMin:o.execMin,
+      notional:o.notional!=null?o.notional:Math.max(0.5,Math.min(tr.ticketLimit*0.9,trBase(tr).medSize*rand(0.55,1.6)))});
+    const client=dealRevenue(t);
+    t.clientRevenue=+client.toFixed(3);
+    t.revenue=+(client+client*rand(-1.6,1.75)*0.80).toFixed(3);
+    REV_ORIG.set(t.id,{c:t.clientRevenue,r:t.revenue,created:true,rule:CUR});
+    return t;
+  }
+  const endDay=minBiz=>rng()<0.06?pickDay(Math.max(minBiz,DAYS-45),DAYS-1):pickDay(minBiz,DAYS-1);
+  const clientsOf=(tr,ok)=>(tr.ctpys||[]).filter(c=>CT[c.name]&&ok(c)).map(c=>CT[c.name]);
+  const names=ts=>uniq(ts.map(t=>t.ctpy));
+  const cite=(ts,n,key)=>ts.slice().sort(key).slice(0,n);
+
+  const GEN={};
+
+  /* TS-51 — one client paying several times what comparable clients pay. */
+  GEN["TS-51"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), hi=endDay(BIZ_DAYS[22]), lo=bizBack(hi,19);
+      if(!free(tr,lo,hi)) continue;
+      const cands=clientsOf(tr,c=>c.type!=="Bank"&&c.type!=="Broker");
+      if(!cands.length) continue;
+      const cl=weightedChoice(cands.map(c=>[c,c.type==="Private Client"||c.type==="Corporate"?3:c.type==="Insurer"?2:1]));
+      const mine=tradesIn(tr,lo,hi,t=>isExt(t)&&t.ctpy===cl.name);
+      const pc={}; mine.forEach(t=>{ pc[t.product]=(pc[t.product]||0)+1; });
+      const prod=Object.keys(pc).sort((a,b)=>pc[b]-pc[a])[0]||choice(tr.products);
+      const deals=mine.filter(t=>t.product===prod);
+      if(deals.length>10) continue;
+      const want=randInt(5,8);
+      while(deals.length<want) deals.push(newDeal(pickDay(lo,hi),tr,prod,{ctpy:cl}));
+      deals.forEach(t=>setRev(t,norm(prod,cl.type,sizeBandOf(t.notional))*rand(2.65,3.6)*t.notional/1000));
+      claim(tr,lo,hi);
+      const nl=sum(deals,t=>t.notional), rev=sum(deals,t=>t.clientRevenue);
+      const fair=sum(deals,t=>norm(prod,cl.type,sizeBandOf(t.notional))*t.notional/1000);
+      const m=mgn(rev,nl), mc=mgn(fair,nl);
+      const all=TPT[tr.id+"|"+prod+"|"+cl.type]||{c:0,nl:0}, me=TPTC[tr.id+"|"+prod+"|"+cl.name]||{c:0,nl:0};
+      const oNl=all.nl-me.nl;
+      return mkAlert(rule,hi,tr,deals,[
+        ev("Client",cl.name+" · "+cl.type),
+        ev("Product",prod),
+        ev("Window",win(lo,hi,20)),
+        ev("Deals with this client in the window",deals.length+" · "+fmtM(nl)+" notional",true),
+        ev("Margin charged on those deals",mg(m),true),
+        ev("What "+cl.type.toLowerCase()+" clients pay for the same deals",mg(mc)+" — floor median, matched on product and size band"),
+        ev("Multiple of the comparable rate",xf(m/mc)+" — rule threshold 2.5×",true),
+        ev("Revenue above the comparable rate",fmtK(rev-fair),true),
+        ev("This trader's margin with other "+cl.type.toLowerCase()+" clients in "+prod,
+           oNl>=5?mg(mgn(all.c-me.c,oNl))+" over the prior 12 months":"Too little other business of this type to compare"),
+        ev("Channels",uniq(deals.map(t=>t.channel)).join(", ")),
+      ],cl.name+" ("+cl.type+") charged "+xf(m/mc)+" the comparable margin on "+deals.length+" "+prod+" deals");
+    }
+    return null;
+  };
+
+  /* TS-52 — the same client, the same product, a wider price on the phone. */
+  GEN["TS-52"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), hi=endDay(BIZ_DAYS[62]), lo=bizBack(hi,59);
+      if(!free(tr,lo,hi)) continue;
+      const cands=clientsOf(tr,c=>c.type!=="Bank"&&c.type!=="Broker");
+      if(!cands.length) continue;
+      const cl=choice(cands);
+      const mine=tradesIn(tr,lo,hi,t=>isExt(t)&&t.ctpy===cl.name);
+      const pc={}; mine.forEach(t=>{ pc[t.product]=(pc[t.product]||0)+1; });
+      const prod=Object.keys(pc).sort((a,b)=>pc[b]-pc[a])[0]||choice(tr.products);
+      const voice=mine.filter(t=>t.product===prod&&t.channel==="Voice");
+      const elec=mine.filter(t=>t.product===prod&&ELEC.indexOf(t.channel)>=0);
+      if(voice.length>10||elec.length>10) continue;
+      while(voice.length<6) voice.push(newDeal(pickDay(lo,hi),tr,prod,{ctpy:cl,channel:"Voice"}));
+      while(elec.length<6)  elec.push(newDeal(pickDay(lo,hi),tr,prod,{ctpy:cl,channel:choice(ELEC)}));
+      elec.forEach(t=>setRev(t,norm(prod,cl.type,sizeBandOf(t.notional))*rand(0.75,1.1)*t.notional/1000));
+      const me=mgn(sum(elec,t=>t.clientRevenue),sum(elec,t=>t.notional));
+      voice.forEach(t=>setRev(t,me*rand(2.4,3.8)*t.notional/1000));
+      claim(tr,lo,hi);
+      const vNl=sum(voice,t=>t.notional), vRev=sum(voice,t=>t.clientRevenue), eNl=sum(elec,t=>t.notional);
+      const mv=mgn(vRev,vNl);
+      const deals=voice.concat(elec);
+      return mkAlert(rule,hi,tr,deals,[
+        ev("Client",cl.name+" · "+cl.type),
+        ev("Product",prod),
+        ev("Margin on voice",mg(mv)+" over "+voice.length+" deals · "+fmtM(vNl),true),
+        ev("Margin on electronic channels",mg(me)+" over "+elec.length+" deals · "+fmtM(eNl)),
+        ev("Voice against electronic",xf(mv/me)+" — rule threshold 2×",true),
+        ev("Revenue on voice above the client's own electronic rate",fmtK(vRev-me*vNl/1000),true),
+        ev("Window",win(lo,hi,60)),
+        ev("Voice recordings for these deals",choice(["Retained — not yet reviewed","Retained for 6 of the "+voice.length+" calls","Not located for the two largest"])),
+      ],cl.name+" paid "+xf(mv/me)+" on voice what it paid electronically for "+prod);
+    }
+    return null;
+  };
+
+  /* TS-53 — a client small by notional and large by revenue. */
+  GEN["TS-53"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), hi=endDay(BIZ_DAYS[62]), lo=bizBack(hi,59);
+      if(!free(tr,lo,hi)) continue;
+      const ext0=tradesIn(tr,lo,hi,isExt);
+      if(ext0.length<40) continue;
+      const N0=sum(ext0,t=>t.notional);
+      const byC={}; ext0.forEach(t=>{ (byC[t.ctpy]||(byC[t.ctpy]=[])).push(t); });
+      const small=Object.keys(byC).filter(c=>CT[c]&&CT[c].type!=="Bank"&&byC[c].length<=8&&sum(byC[c],t=>t.notional)<N0*0.05);
+      let cl, deals;
+      if(small.length){ cl=CT[choice(small)]; deals=byC[cl.name].slice(); }
+      else{
+        const fresh=clientsOf(tr,c=>c.type!=="Bank"&&!byC[c.name]);
+        if(!fresh.length) continue;
+        cl=choice(fresh); deals=[];
+      }
+      const want=randInt(3,5);
+      while(deals.length<want) deals.push(newDeal(pickDay(lo,hi),tr,choice(tr.products),
+        {ctpy:cl,notional:Math.max(0.5,trBase(tr).medSize*rand(0.25,0.6))}));
+      const ext=tradesIn(tr,lo,hi,isExt), N=sum(ext,t=>t.notional), nC=sum(deals,t=>t.notional);
+      if(nC/N>=0.085) continue;
+      const rest=ext.filter(t=>t.ctpy!==cl.name), Rother=sum(rest,t=>t.clientRevenue);
+      if(Rother<=0) continue;
+      const s=rand(0.37,0.46), Rc=s/(1-s)*Rother;
+      // each deal keeps its own shape — a bond ticket still out-earns an FX one
+      const c0=sum(deals,t=>t.clientRevenue);
+      deals.forEach(t=>setRev(t,c0>0?t.clientRevenue*Rc/c0:Rc*t.notional/nC));
+      claim(tr,lo,hi);
+      const R=sum(ext,t=>t.clientRevenue), rc=sum(deals,t=>t.clientRevenue);
+      const byC2={}; rest.forEach(t=>{ byC2[t.ctpy]=(byC2[t.ctpy]||0)+t.clientRevenue; });
+      const next=Object.keys(byC2).sort((a,b)=>byC2[b]-byC2[a])[0];
+      return mkAlert(rule,hi,tr,deals,[
+        ev("Client",cl.name+" · "+cl.type),
+        ev("Window",win(lo,hi,60)),
+        ev("Share of this trader's client revenue",fmtPct(rc/R)+" — "+fmtK(rc)+" of "+fmtK(R)+" · rule threshold 35%",true),
+        ev("Share of this trader's notional",fmtPct(nC/N)+" — "+fmtM(nC)+" of "+fmtM(N)+" · rule ceiling 10%",true),
+        ev("Margin on this client",mg(mgn(rc,nC))+" against "+mg(mgn(Rother,N-nC))+" on the rest of the book",true),
+        ev("Deals with this client",deals.length+" in the window"),
+        ev("Next-largest client by revenue",next?next+" · "+fmtPct(byC2[next]/R):"—"),
+        ev("This trader's largest client share over the prior 12 months",fmtPct(RB[tr.id].topShare)),
+      ],cl.name+" is "+fmtPct(rc/R,0)+" of this trader's revenue on "+fmtPct(nC/N,0)+" of the notional");
+    }
+    return null;
+  };
+
+  /* TS-54 — earning far more per million than the cohort, on the same products. */
+  GEN["TS-54"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), hi=endDay(BIZ_DAYS[22]), lo=bizBack(hi,19);
+      if(!free(tr,lo,hi)||cohortSize(tr)<2) continue;
+      const ext=tradesIn(tr,lo,hi,isExt);
+      if(ext.length<15) continue;
+      const exp=sum(ext,t=>cohortMargin(tr,t.product)*t.notional/1000), act=sum(ext,t=>t.clientRevenue);
+      if(!(exp>0)||!(act>0)) continue;
+      const kf=rand(2.65,3.2)*exp/act;
+      ext.forEach(t=>setRev(t,t.clientRevenue*kf));
+      claim(tr,lo,hi);
+      const N=sum(ext,t=>t.notional), R=sum(ext,t=>t.clientRevenue), m=mgn(R,N), mc=mgn(exp,N);
+      const exc={}; ext.forEach(t=>{ exc[t.product]=(exc[t.product]||0)+t.clientRevenue-cohortMargin(tr,t.product)*t.notional/1000; });
+      const topP=Object.keys(exc).sort((a,b)=>exc[b]-exc[a])[0];
+      const xs=t=>t.clientRevenue-cohortMargin(tr,t.product)*t.notional/1000;
+      const cited=cite(ext,16,(a,b)=>xs(b)-xs(a));
+      return mkAlert(rule,hi,tr,cited,[
+        ev("Window",win(lo,hi,20)),
+        ev("Margin over the window",mg(m)+" on "+fmtM(N)+" across "+ext.length+" deals",true),
+        ev("Cohort margin on the same product mix",mg(mc)+" — "+tr.cohort+", "+cohortSize(tr)+" peers"),
+        ev("Multiple of the cohort",xf(m/mc)+" — rule threshold 2.5×",true),
+        ev("Revenue above the cohort rate",fmtK(R-exp),true),
+        ev("Largest contributor",topP+" · "+fmtK(exc[topP])+" above the cohort rate"),
+        ev("This trader's own 12-month margin",mg(RB[tr.id].margin)),
+        ev("Deals cited",cited.length+" with the largest excess, of "+ext.length+" in the window"),
+      ],"Earning "+xf(m/mc)+" the cohort's margin on the same product mix over 20 business days");
+    }
+    return null;
+  };
+
+  /* TS-55 — a month's revenue bunched into its last two days. */
+  GEN["TS-55"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), me=choice(MONTH_END_REV), dt=dateForIdx(me), mdays=monthBiz(me);
+      if(mdays.length<15) continue;
+      const lo=mdays[0], d1=bizBack(me,1), nx=bizFwd(me,10);
+      if(!free(tr,lo,nx)) continue;
+      const b=RB[tr.id].pe; if(!(b>0)||b>0.24) continue;
+      const last=tradesIn(tr,d1,me,isExt);
+      while(last.length<3) last.push(newDeal(rng()<0.5?d1:me,tr,choice(tr.products),{}));
+      const rest=tradesIn(tr,lo,d1-1,isExt), Rrest=sum(rest,t=>t.clientRevenue);
+      if(Rrest<=0) continue;
+      const s=Math.min(0.7,Math.max(0.28,b*rand(2.8,4.2)));
+      if(s/b<2.6) continue;
+      const nl=sum(last,t=>t.notional), Rl=s/(1-s)*Rrest, added=Rl-sum(last,t=>t.clientRevenue);
+      const c0=sum(last,t=>t.clientRevenue);
+      last.forEach(t=>setRev(t,c0>0?t.clientRevenue*Rl/c0:Rl*t.notional/nl));
+      // Pulled forward is pulled from somewhere: the first ten business days of
+      // the next month give up what the last two days gained, as far as they can
+      // without a deal earning less than nothing.
+      const next=tradesIn(tr,bizFwd(me,1),nx,isExt), Rn=sum(next,t=>t.clientRevenue);
+      if(Rn>0&&added>0){ const keep=1-Math.min(0.75,added/Rn); next.forEach(t=>setRev(t,t.clientRevenue*keep)); }
+      claim(tr,lo,nx);
+      const RL=sum(last,t=>t.clientRevenue), RM=RL+Rrest, share=RL/RM;
+      const after=tradesIn(tr,bizFwd(me,1),nx,isExt), Rafter=sum(after,t=>t.clientRevenue);
+      const late=last.filter(t=>t.execMin>=16*60).length;
+      return mkAlert(rule,me,tr,last,[
+        ev("Month",MONTHS[dt.getMonth()]+" "+dt.getFullYear()),
+        ev("Client revenue in the last two business days",fmtK(RL)+" on "+last.length+" deals · "+fmtM(nl),true),
+        ev("Client revenue for the month",fmtK(RM)),
+        ev("Share booked in the last two days",fmtPct(share)+" — rule floor 25%",true),
+        ev("This trader's own 12-month rate",fmtPct(b)+" — this month is "+xf(share/b)+" · rule threshold 2.5×",true),
+        ev("Deals executed after 16:00 local on those days",late+" of "+last.length),
+        ev("Revenue in the first ten business days of the next month",fmtK(Rafter)+" against a normal "+fmtK(RB[tr.id].cPerBiz*10),
+           Rafter<RB[tr.id].cPerBiz*10*0.6),
+      ],fmtPct(share,0)+" of "+MONTHS[dt.getMonth()]+"'s revenue booked in its last two business days");
+    }
+    return null;
+  };
+
+  /* TS-56 — volume up, margin given away. */
+  GEN["TS-56"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), hi=endDay(BIZ_DAYS[22]), lo=bizBack(hi,19);
+      if(!free(tr,lo,hi)) continue;
+      const B=RB[tr.id]; if(!(B.margin>0)) continue;
+      const ext=tradesIn(tr,lo,hi,isExt), days=BIZ_DAYS.slice(bizIx(lo),bizIx(hi)+1);
+      const baseNl=B.nlPerBiz*20, target=baseNl*rand(1.55,1.9);
+      let N=sum(ext,t=>t.notional), guard=0;
+      while(N<target&&guard++<300){ const t=newDeal(choice(days),tr,choice(tr.products),{}); ext.push(t); N+=t.notional; }
+      if(N<target) continue;
+      ext.forEach(t=>setRev(t,ownMargin(tr,t.product)*rand(0.05,0.27)*t.notional/1000));
+      claim(tr,lo,hi);
+      const R=sum(ext,t=>t.clientRevenue), m=mgn(R,N), own=ownMix(tr,ext);
+      const byC={}; ext.forEach(t=>{ byC[t.ctpy]=(byC[t.ctpy]||0)+t.notional; });
+      const top=Object.keys(byC).sort((a,b)=>byC[b]-byC[a]).slice(0,3);
+      const cited=cite(ext,16,(a,b)=>b.notional-a.notional);
+      return mkAlert(rule,hi,tr,cited,[
+        ev("Window",win(lo,hi,20)),
+        ev("Margin on external flow",mg(m),true),
+        ev("This trader's own margin on the same product mix",mg(own)+" over 12 months — the window is "+fmtPct(m/own,0)+" of it · rule ceiling 30%",true),
+        ev("Notional in the window",fmtM(N)+" against a normal "+fmtM(baseNl)+" — "+xf(N/baseNl)+" · rule threshold 1.5×",true),
+        ev("Deals in the window",ext.length+" against a normal "+Math.round(B.nPerBiz*20)),
+        ev("Revenue forgone at this trader's own margin",fmtK(own*N/1000-R),true),
+        ev("Clients taking the most notional at this rate",top.map(c=>c+" · "+fmtM(byC[c])).join("; ")),
+        ev("Deals cited",cited.length+" largest, of "+ext.length+" in the window"),
+      ],"Margin at "+fmtPct(m/own,0)+" of this trader's own norm on "+xf(N/baseNl)+" their usual volume");
+    }
+    return null;
+  };
+
+  /* TS-57 — front office and product control a long way apart on one day. */
+  GEN["TS-57"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), d=endDay(BIZ_DAYS[5]), nd=bizFwd(d,1);
+      if(nd===d||!free(tr,d,nd)) continue;
+      const deals=tradesIn(tr,d,d,isExt);
+      while(deals.length<2) deals.push(newDeal(d,tr,choice(tr.products),{}));
+      const FO0=sum(tradesIn(tr,d,d),t=>t.revenue);
+      const mb=RB[tr.id].meanAbsDay*rand(0.05,0.11);
+      const thr=Math.max(250,3*mb);
+      const up=rng()<0.5, B=thr*rand(1.35,1.9)*(up?1:-1);
+      // A break this size belongs on a book big enough to produce one. On a
+      // trader whose whole year earns less than a few of them, it would not be
+      // a reconciliation break; it would be the year.
+      if(Object.keys(RB[tr.id].fo).reduce((x,k)=>x+RB[tr.id].fo[k],0)<4*Math.abs(B)) continue;
+      const nl=sum(deals,t=>t.notional);
+      deals.forEach(t=>setRev(t,t.clientRevenue,(t.revenue-t.clientRevenue)+B*t.notional/nl));
+      claim(tr,d,nd);
+      const FO=sum(tradesIn(tr,d,d),t=>t.revenue);
+      const PC=FO0-mb*rand(-0.8,0.8), brk=FO-PC;
+      const big=deals.slice().sort((a,b)=>Math.abs(b.revenue)-Math.abs(a.revenue))[0];
+      return mkAlert(rule,d,tr,deals,[
+        ev("Business date",fmtDate(dateForIdx(d))),
+        ev("Front-office revenue",fmtK(FO),true),
+        ev("Product-control P&L",fmtK(PC)),
+        ev("Break",fmtK(brk)+(up?" — front office above product control":" — front office below product control"),true),
+        ev("Rule threshold",fmtK(thr)+" — the greater of $250k and 3× this trader's own mean break"),
+        ev("This trader's mean daily break, prior 60 days",fmtK(mb)),
+        ev("Largest deal carrying it",big.id+" · "+big.product+" · "+fmtK(big.revenue)),
+        ev("Reserve or price-verification adjustment raised for it",rng()<0.25?"Yes — raised after the close, not yet approved":"None on file",false),
+        ev("Front-office revenue the next business day",fmtK(sum(tradesIn(tr,nd,nd),t=>t.revenue))),
+      ],"Front office "+(up?"above":"below")+" product control by "+fmtK(Math.abs(brk))+" on one day");
+    }
+    return null;
+  };
+
+  /* TS-58 — a loss on the book, then the clients pay for it. */
+  GEN["TS-58"]=function(rule){
+    for(let k=0;k<60;k++){
+      const tr=pickActor(rule), d=endDay(BIZ_DAYS[5]);
+      if(!free(tr,d,d)) continue;
+      const B=RB[tr.id]; if(!(B.riskSd>0)||!(B.margin>0)) continue;
+      const h=DESK_HOURS[DESK_BY_ID[tr.deskId].region], open=Math.round(h[0]*60), close=Math.round(h[1]*60);
+      const day=tradesIn(tr,d,d,isExt).sort((a,b)=>a.execMin-b.execMin);
+      let loss=day.filter(t=>t.execMin<=close-240).slice(0,Math.min(2,day.length));
+      if(!loss.length) loss=[newDeal(d,tr,choice(tr.products),{execMin:open+randInt(30,150)})];
+      const tL=Math.max(...loss.map(t=>t.execMin));
+      const after=day.filter(t=>loss.indexOf(t)<0&&t.execMin>tL);
+      while(after.length<3) after.push(newDeal(d,tr,choice(tr.products),{execMin:tL+randInt(15,Math.max(20,close-tL-15))}));
+      const L=B.riskSd*rand(2.4,3.6), lnl=sum(loss,t=>t.notional);
+      // the loss sits on the first deals; everything else that day carries no risk
+      tradesIn(tr,d,d).forEach(t=>{ if(loss.indexOf(t)<0&&t.revenue!==t.clientRevenue) setRev(t,t.clientRevenue,0); });
+      loss.forEach(t=>setRev(t,t.clientRevenue,-L*t.notional/lnl));
+      after.forEach(t=>setRev(t,ownMargin(tr,t.product)*rand(2.4,3.6)*t.notional/1000,0));
+      claim(tr,d,d);
+      const risk=sum(tradesIn(tr,d,d),t=>t.revenue-t.clientRevenue);
+      const aNl=sum(after,t=>t.notional), aRev=sum(after,t=>t.clientRevenue), ma=mgn(aRev,aNl), own=ownMix(tr,after);
+      const excess=aRev-own*aNl/1000;
+      const first=after.reduce((a,t)=>t.execMin<a.execMin?t:a,after[0]);
+      const cl=uniq(after.map(t=>t.ctpy+" · "+t.ctpyType));
+      return mkAlert(rule,d,tr,loss.concat(after),[
+        ev("Business date",fmtDate(dateForIdx(d))),
+        ev("Risk result on the day",fmtK(risk)+" — taken on "+loss.map(t=>t.id).join(", ")+" by "+fmtTime(tL),true),
+        ev("This trader's own daily risk-result swing",fmtK(B.riskSd)+" (1σ) — the day is "+xf(Math.abs(risk)/B.riskSd)+" · rule threshold 2×",true),
+        ev("Client margin on the "+after.length+" deals after the loss",mg(ma),true),
+        ev("This trader's own margin on the same products",mg(own)+" over 12 months — after the loss "+xf(ma/own)+" · rule threshold 2×",true),
+        ev("Revenue above their own margin, after the loss",fmtK(excess)+" — "+fmtPct(excess/Math.abs(risk),0)+" of the loss recovered",excess/Math.abs(risk)>0.3),
+        ev("First marked-up deal",first.id+" at "+fmtTime(first.execMin)+", "+(first.execMin-tL)+" minutes after the loss"),
+        ev("Clients charged",cl.join("; ")),
+      ],"Loss of "+fmtK(Math.abs(risk))+" followed by client deals at "+xf(ma/own)+" the trader's own margin on those products");
+    }
+    return null;
+  };
+
+  /* ---- run, number after the existing alerts, seed their history ---- */
+  const before=ALERTS.length, made=[];
+  RULES.filter(r=>r.stream==="revenue").forEach(r=>{
+    const f=GEN[r.id];
+    if(!f) throw new Error("no generator for "+r.id);
+    CUR=r.id;
+    for(let i=0;i<scaled(r.plants);i++){ const a=f(r); if(a) made.push(a); }
+  });
+  const order=(a,b)=>a.day-b.day||SEV_RANK[b.sev]-SEV_RANK[a.sev]||a.ruleId.localeCompare(b.ruleId);
+  made.sort(order).forEach((a,i)=>{ a.n=before+i; a.id="ALT-"+String(before+i+1).padStart(5,"0"); ALERT_BY_ID[a.id]=a; });
+  seedReviews(made);
+  // Back into date order. The sort is stable and the existing alerts were
+  // already in this order, so their relative positions do not move.
+  ALERTS.sort(order);
+});
+})();
+// Decisions recorded against these alerts are applied here: the pass above the
+// banner ran before they existed.
+applyReviews();
+```
+
+## 14. `13-derive-stats.js`
 
 **PORT** · 40 lines
 
@@ -3314,7 +3874,7 @@ const monthIdxOf=d=>{ for(let i=0;i<12;i++) if(MONTH_KEYS[i].y===d.getFullYear()
 ALERTS.forEach(a=>{ const mi=monthIdxOf(a.date); if(mi>=0) RULE_STATS[a.ruleId].months[mi]++; });
 ```
 
-## 14. `14-state.js`
+## 15. `14-state.js`
 
 **PORT** · 132 lines
 
@@ -3454,7 +4014,7 @@ function buildTraderStats(){
 buildTraderStats();
 ```
 
-## 15. `15-highlight.js`
+## 16. `15-highlight.js`
 
 **REBUILD** · 349 lines
 
@@ -3811,7 +4371,7 @@ const hlAggV=(dim,key,total,ratePct)=>hlAgg("V:"+dim,key,total,ratePct);
 const hlAggR=(dim,key,total,ratePct)=>hlAgg("R:"+dim,key,total,ratePct);
 ```
 
-## 16. `16-charts.js`
+## 17. `16-charts.js`
 
 **REBUILD** · 420 lines
 
@@ -4239,7 +4799,7 @@ function traderActivity(cols,metric){
 }
 ```
 
-## 17. `17-market-context.js`
+## 18. `17-market-context.js`
 
 **REBUILD / PORT** · 189 lines
 
@@ -4436,7 +4996,7 @@ function heatColor(v,max){
 }
 ```
 
-## 18. `18-view-helpers.js`
+## 19. `18-view-helpers.js`
 
 **SUPPORT** · 7 lines
 
@@ -4452,7 +5012,7 @@ function kpi(eyebrow,value,sub,accent){
 }
 ```
 
-## 19. `19-panel-guidance.js`
+## 20. `19-panel-guidance.js`
 
 **PORT** · 285 lines
 
@@ -4616,7 +5176,7 @@ const PANEL_INFO={
  flag:"Work the score and age columns together. A high score sitting unreviewed past three days is the combination the SLA exists to prevent, and the one an auditor will ask about first."},
 
 "Rule library":{
- what:"All fifty typologies, with the exact test each applies, what that test is measured against, and every data element it reads.",
+ what:"All fifty-eight typologies, with the exact test each applies, what that test is measured against, and every data element it reads.",
  read:"Every threshold shown is the production setting. The fields chip on each card lists the data the rule needs and the system each field has to come from.",
  flag:"Use it to challenge a rule rather than to browse. If a test is wrong for how your product trades, the card gives you the precise wording to argue against — and a rule with no feed behind it is a control on paper only."},
 
@@ -4745,7 +5305,7 @@ function opt(v,label,cur){ return '<option value="'+esc(v)+'"'+(cur===v?" select
 const ageOf=a=>DAYS-1-a.day;
 ```
 
-## 20. `20-pane-overview.js`
+## 21. `20-pane-overview.js`
 
 **REBUILD** · 255 lines
 
@@ -4862,7 +5422,7 @@ function paneOverview(){
 
   /* The detection heatmap has to survive production: two hundred traders and a
      rule set that keeps growing. It does that by zooming rather than by
-     truncating — rows collapse from fifty rules to nine categories, columns
+     truncating — rows collapse from fifty-eight rules to nine categories, columns
      from every trader to twelve desks, and in trader mode you choose how many
      of the busiest names to bring on screen. Category × desk fits any monitor;
      rule × trader is the same picture at full resolution. */
@@ -5008,7 +5568,7 @@ function paneOverview(){
 }
 ```
 
-## 21. `21-pane-activity.js`
+## 22. `21-pane-activity.js`
 
 **REBUILD** · 352 lines
 
@@ -5368,7 +5928,7 @@ function paneActivity(){
 }
 ```
 
-## 22. `22-pane-timeseries.js`
+## 23. `22-pane-timeseries.js`
 
 **REBUILD** · 757 lines
 
@@ -6133,7 +6693,7 @@ function tsFit(){
 })();
 ```
 
-## 23. `23-pane-detections.js`
+## 24. `23-pane-detections.js`
 
 **REBUILD** · 83 lines
 
@@ -6224,7 +6784,7 @@ function paneDetections(){
 }
 ```
 
-## 24. `24-pane-rules.js`
+## 25. `24-pane-rules.js`
 
 **REBUILD** · 47 lines
 
@@ -6245,7 +6805,7 @@ function paneRules(){
     const passed=dec.filter(a=>a.status==="Passed").length;
     const months=MONTH_KEYS.map((mk,i)=>hits.filter(a=>monthIdxOf(a.date)===i).length);
     /* Also outside the highlight system. The library is a reference document —
-       fifty cards read for their wording — and having forty-nine of them fade
+       fifty-eight cards read for their wording — and having fifty-seven of them fade
        out under the cursor made it unreadable as one. */
     return '<div class="rulecard" style="--sevc:'+SEV_COLOR[r.sev]+'" data-ruleclick="'+r.id+'">'+
       '<div class="rhd"><span class="rid">'+r.id+"</span><h4>"+esc(r.name)+"</h4>"+sevTag(r.sev)+"</div>"+
@@ -6279,7 +6839,7 @@ function paneRules(){
 }
 ```
 
-## 25. `25-pane-blotter.js`
+## 26. `25-pane-blotter.js`
 
 **REBUILD** · 105 lines
 
@@ -6392,7 +6952,7 @@ function paneBlotter(){
 }
 ```
 
-## 26. `26-pane-traders.js`
+## 27. `26-pane-traders.js`
 
 **REBUILD** · 112 lines
 
@@ -6512,7 +7072,7 @@ function paneTraders(){
 }
 ```
 
-## 27. `27-pane-log.js`
+## 28. `27-pane-log.js`
 
 **REBUILD** · 101 lines
 
@@ -6621,9 +7181,9 @@ function paneLog(){
 }
 ```
 
-## 28. `28-drawer.js`
+## 29. `28-drawer.js`
 
-**REBUILD / PORT** · 248 lines
+**REBUILD / PORT** · 262 lines
 
 The alert case file: evidence table, market context, trader control profile, audit trail and the disposition form. The structure of what a reviewer is shown is worth porting even if the markup is not.
 
@@ -6681,6 +7241,20 @@ function alertFindingHTML(a){
   const rule=RULE_BY_ID[a.ruleId];
   const tr=TRADER_BY_ID[a.traderId];
   const trades=a.tradeIds.map(id=>TRADES_BY_ID[id]).filter(Boolean);
+  /* A revenue rule is argued in revenue, so its deals are listed in it: the
+     deal-level P&L column measures a price's deviation from mid, which is the
+     wrong quantity for a mark-up the price never shows. Revenue is signed, so
+     the loss in a recovery case and the break in a reconciliation case are
+     visible on the deal that carries them. */
+  const REVR=rule.stream==="revenue";
+  const revHead=REVR
+    ?'<th class="r" data-tip="Revenue" data-tipsub="Client revenue plus the risk result on the deal">Revenue</th>'+
+     '<th class="r" data-tip="Client margin" data-tipsub="Client revenue per million notional — the figure these rules measure">$ per $1m</th>'
+    :'<th class="r">P&amp;L</th>';
+  const revCell=t=>REVR
+    ?'<td class="r mono '+(t.revenue>=0?"passc":"failc")+'">'+fmtK(t.revenue)+'</td>'+
+     '<td class="r mono">'+fmtNum(Math.round(t.notional>0?t.clientRevenue*1000/t.notional:0))+"</td>"
+    :'<td class="r mono '+(t.pnl>=0?"passc":"failc")+'">'+fmtK(t.pnl)+"</td>";
   return   '<div class="block"><div class="lbl">What the engine observed</div>'+
       '<p class="narr"><b>'+esc(a.summary)+".</b></p>"+
       '<p class="narr" style="margin-top:8px">Test applied: <span class="mono" style="font-size:0.9em">'+esc(rule.logic)+"</span></p>"+
@@ -6703,12 +7277,12 @@ function alertFindingHTML(a){
 
     '<div class="block"><div class="lbl">Deals in this alert</div><div class="dwrap"><table class="dtable"><thead><tr>'+
       "<th>Trade</th><th>Date / time</th><th>Product</th><th>Instrument</th><th>Dir</th><th class=\"r\">Notional</th>"+
-      "<th class=\"r\">Price</th><th class=\"r\">Mid</th><th class=\"r\">Dev bps</th><th>Counterparty</th><th class=\"r\">P&amp;L</th><th>Status</th></tr></thead><tbody>"+
+      "<th class=\"r\">Price</th><th class=\"r\">Mid</th><th class=\"r\">Dev bps</th><th>Counterparty</th>"+revHead+"<th>Status</th></tr></thead><tbody>"+
       trades.map(t=>'<tr class="flag"><td class="mono"><a href="#" data-trade="'+t.id+'">'+t.id+"</a></td>"+
         '<td class="mono">'+fmtDateShort(t.date)+" "+fmtTime(t.execMin)+"</td><td>"+esc(t.product)+"</td><td>"+esc(t.instrument)+"</td>"+
         "<td>"+esc(t.dir)+'</td><td class="r mono">'+fmtM(t.notional)+'</td><td class="r mono">'+t.px.toFixed(t.dp)+"</td>"+
         '<td class="r mono muted">'+t.mktPx.toFixed(t.dp)+'</td><td class="r mono '+(Math.abs(t.devBps)>25?"failc":"")+'">'+
-        (t.devBps>0?"+":"")+t.devBps.toFixed(1)+"</td><td>"+esc(t.ctpy)+'</td><td class="r mono '+(t.pnl>=0?"passc":"failc")+'">'+fmtK(t.pnl)+"</td>"+
+        (t.devBps>0?"+":"")+t.devBps.toFixed(1)+"</td><td>"+esc(t.ctpy)+"</td>"+revCell(t)+
         '<td><span class="tag '+(t.status==="Cancelled"?"t-muted":t.status==="Amended"?"t-warn":t.status==="Live"?"t-run":"t-pass")+'">'+t.status+"</span></td></tr>").join("")+
       "</tbody></table></div></div>";
 }
@@ -6877,7 +7451,7 @@ function traderDrawer(tr){
 }
 ```
 
-## 29. `29-rail.js`
+## 30. `29-rail.js`
 
 **REBUILD** · 67 lines
 
@@ -6952,7 +7526,7 @@ function closeMsel(){
 }
 ```
 
-## 30. `30-render.js`
+## 31. `30-render.js`
 
 **SUPPORT** · 62 lines
 
@@ -7022,7 +7596,7 @@ function goTimeSeriesCase(alertId){
 }
 ```
 
-## 31. `31-events.js`
+## 32. `31-events.js`
 
 **REBUILD** · 233 lines
 
@@ -7263,7 +7837,7 @@ document.addEventListener("input",e=>{
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlPinned=null; hlApply(null); } closeDrawer(); closeMsel(); closeInfo(); closeTsPick(); } });
 ```
 
-## 32. `32-boot.js`
+## 33. `32-boot.js`
 
 **SUPPORT** · 6 lines
 
@@ -7993,6 +8567,7 @@ container and the drawer. Everything else is generated at runtime.
 <script src="js/10-data-dictionary.js"></script>
 <script src="js/11-demo-alerts.js"></script>
 <script src="js/12-demo-reviews.js"></script>
+<script src="js/12b-demo-revenue-alerts.js"></script>
 <script src="js/13-derive-stats.js"></script>
 <script src="js/14-state.js"></script>
 <script src="js/15-highlight.js"></script>
