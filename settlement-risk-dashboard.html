@@ -1470,20 +1470,20 @@ let CARVEOUTS=loadLS("sr-dash-carveouts-v3",SEED_CARVEOUTS);
    filter. Requester is the covering RM; approver the credit officer who decided
    it. Pending requests carry neither an approver nor a decision date. */
 const REQUESTERS=[
-  ["Amanda Chok","GFM Sales"],["Benedict Rao","FI Coverage"],["Cheryl Lim","Corporate Banking"],
-  ["Daniel Osei","Treasury Sales"],["Elaine Tan","GFM Sales"],["Farhan Idris","FI Coverage"],
-  ["Grace Wong","Private Bank"],["Hafiz Rahman","Corporate Banking"],["Ivy Chandra","GFM Sales"],
-  ["Jerome Pang","Institutional Sales"],["Karen Sim","Private Bank"],["Lionel Goh","FI Coverage"],
-  ["Mei Ling Ho","Corporate Banking"],["Nadia Suryani","Treasury Sales"],["Owen Chen","GFM Sales"],
-  ["Priya Menon","Institutional Sales"],["Rachel Ng","Private Bank"],["Samuel Teo","FI Coverage"],
-  ["Tanvi Shah","Corporate Banking"],["Vanessa Koh","GFM Sales"],["Wei Jie Lim","Treasury Sales"],
-  ["Xavier Dsouza","Institutional Sales"],
+  ["Aiko Shinohara","GFM Sales"],["Kazuya Takagi","FI Coverage"],["Chiaki Hamada","Corporate Banking"],
+  ["Shingo Oshima","Treasury Sales"],["Erika Sugimoto","GFM Sales"],["Fumiya Izumi","FI Coverage"],
+  ["Kumiko Wada","Private Bank"],["Hiroto Kurata","Corporate Banking"],["Ikumi Chiba","GFM Sales"],
+  ["Jiro Hosokawa","Institutional Sales"],["Kyoko Shimada","Private Bank"],["Ryohei Goda","FI Coverage"],
+  ["Miyu Horie","Corporate Banking"],["Natsuki Suzuki","Treasury Sales"],["Kohei Oda","GFM Sales"],
+  ["Yuka Minami","Institutional Sales"],["Rumi Nishioka","Private Bank"],["Satoshi Terada","FI Coverage"],
+  ["Tomomi Shiraishi","Corporate Banking"],["Kanako Koyama","GFM Sales"],["Yuji Masuda","Treasury Sales"],
+  ["Kazuhiro Ando","Institutional Sales"],
 ];
 const APPROVERS=[
-  ["Adrian Yeo","Senior Credit Officer"],["Beatrice Sim","Credit Risk"],["Cheng Wei Tan","Regional Credit"],
-  ["Dhruv Kapoor","Credit Risk"],["Evelyn Cheah","Head of Credit"],["Gerald Ma","Senior Credit Officer"],
-  ["Hui Min Neo","Credit Risk"],["Ismail Bakar","Regional Credit"],["Joanna Lau","Head of Credit"],
-  ["Kelvin Ong","Senior Credit Officer"],
+  ["Akihiro Yokoyama","Senior Credit Officer"],["Mariko Sekine","Credit Risk"],["Tsuyoshi Tani","Regional Credit"],
+  ["Toru Kanda","Credit Risk"],["Emiko Hirata","Head of Credit"],["Genta Matsuoka","Senior Credit Officer"],
+  ["Hitomi Negishi","Credit Risk"],["Isamu Baba","Regional Credit"],["Noriko Ozawa","Head of Credit"],
+  ["Keisuke Onishi","Senior Credit Officer"],
 ];
 const RQ_REASONS=[
   "Seasonal flow ahead of quarter-end index rebalancing.",
@@ -1534,7 +1534,21 @@ function seedRequests(){
   return out.sort((a,b)=>b.createdTs-a.createdTs);
 }
 /* Key bumped: an empty array stored against the old build would hide the seeds. */
+/* The seeded people were renamed: names in mock data follow the repository's
+   convention and are Japanese. A browser that saved requests, reserves or test
+   results before the rename would otherwise keep showing the old names, so
+   saved records are renamed once on load and written back. Only the seeded
+   names are touched; anything a viewer entered themselves is left as it is. */
+const RENAMED_PEOPLE={"Amanda Chok": "Aiko Shinohara", "Benedict Rao": "Kazuya Takagi", "Cheryl Lim": "Chiaki Hamada", "Daniel Osei": "Shingo Oshima", "Elaine Tan": "Erika Sugimoto", "Farhan Idris": "Fumiya Izumi", "Grace Wong": "Kumiko Wada", "Hafiz Rahman": "Hiroto Kurata", "Ivy Chandra": "Ikumi Chiba", "Jerome Pang": "Jiro Hosokawa", "Karen Sim": "Kyoko Shimada", "Lionel Goh": "Ryohei Goda", "Mei Ling Ho": "Miyu Horie", "Nadia Suryani": "Natsuki Suzuki", "Owen Chen": "Kohei Oda", "Priya Menon": "Yuka Minami", "Rachel Ng": "Rumi Nishioka", "Samuel Teo": "Satoshi Terada", "Tanvi Shah": "Tomomi Shiraishi", "Vanessa Koh": "Kanako Koyama", "Wei Jie Lim": "Yuji Masuda", "Xavier Dsouza": "Kazuhiro Ando", "Adrian Yeo": "Akihiro Yokoyama", "Beatrice Sim": "Mariko Sekine", "Cheng Wei Tan": "Tsuyoshi Tani", "Dhruv Kapoor": "Toru Kanda", "Evelyn Cheah": "Emiko Hirata", "Gerald Ma": "Genta Matsuoka", "Hui Min Neo": "Hitomi Negishi", "Ismail Bakar": "Isamu Baba", "Joanna Lau": "Noriko Ozawa", "Kelvin Ong": "Keisuke Onishi"};
+function renameSavedPeople(records,fields){
+  let n=0;
+  (records||[]).forEach(r=>fields.forEach(f=>{
+    const v=r&&r[f]; if(typeof v==="string"&&RENAMED_PEOPLE[v]){ r[f]=RENAMED_PEOPLE[v]; n++; }
+  }));
+  return n;
+}
 let REQUESTS=loadLS("sr-dash-requests-v2",seedRequests());
+if(renameSavedPeople(REQUESTS,["requester","approver"])) saveLS("sr-dash-requests-v2",REQUESTS);
 
 /* Drawn against a carve-out = the customer's current utilization rate, scaled by
    that carve-out's own draw bias, applied to its allocated amount and capped at it. */
@@ -1671,6 +1685,7 @@ function seedReserves(){
   return out.sort((a,b)=>b.createdTs-a.createdTs);
 }
 let RESERVES=loadLS("sr-dash-reserves-v1",seedReserves());
+if(renameSavedPeople(RESERVES,["requester","approver"])) saveLS("sr-dash-reserves-v1",RESERVES);
 RESERVES.forEach(r=>{ const n=+(r.id||"").slice(4); if(n>=RSVID) RSVID=n+1; });
 /* Where a reserve sits relative to today. Only approved reserves hold capacity;
    a pending one is a claim nobody has agreed to yet. */
@@ -3636,8 +3651,8 @@ function paneDocs(){
   type:"Temporary" / "Time-bound" / "Permanent",
   current:920, newLimit:1240,          // $M
   start:"02 Aug 2026", end:"17 Sept 2026",   // blank when Permanent
-  requester:"Amanda Chok", requesterDesk:"GFM Sales",
-  approver:"Gerald Ma",   approverRole:"Senior Credit Officer",
+  requester:"Aiko Shinohara", requesterDesk:"GFM Sales",
+  approver:"Genta Matsuoka",   approverRole:"Senior Credit Officer",
   notes:"...", status:"Pending" / "Approved" / "Rejected",
   created:"29 Jul 2026", decided:"30 Jul 2026"
 }</code></pre>
@@ -3681,8 +3696,8 @@ function paneDocs(){
   fromDay:14, toDay:96,            // days from today, negative = already open
   from:"13 Aug 2026", to:"03 Nov 2026",
   purpose:"Block equity cross",
-  requester:"Amanda Chok", requesterDesk:"GFM Sales",
-  approver:"Gerald Ma",   approverRole:"Senior Credit Officer",
+  requester:"Aiko Shinohara", requesterDesk:"GFM Sales",
+  approver:"Genta Matsuoka",   approverRole:"Senior Credit Officer",
   notes:"...", status:"Pending" / "Approved" / "Rejected",
   created:"29 Jul 2026", decided:"30 Jul 2026"
 }</code></pre>
@@ -5765,9 +5780,10 @@ const TEST_KEY="sr-dash-tests-v1";
 const TEST_STATE=loadLS(TEST_KEY,{manual:{},runs:[]});
 if(!TEST_STATE.manual) TEST_STATE.manual={};
 if(!TEST_STATE.runs) TEST_STATE.runs=[];
+if(renameSavedPeople(Object.values(TEST_STATE.manual),["by"])) saveLS(TEST_KEY,TEST_STATE);
 /* Seed a plausible manual history the first time, so the dashboards are not empty. */
 if(!Object.keys(TEST_STATE.manual).length){
-  const testers=["Amanda Chok","Jerome Pang","Priya Menon","Rachel Ng","Owen Chen"];
+  const testers=["Aiko Shinohara","Jiro Hosokawa","Yuka Minami","Rumi Nishioka","Kohei Oda"];
   MANUAL_TESTS.forEach((m,i)=>{
     const st = i%9===4 ? "Failed" : i%7===6 ? "Blocked" : i%5===3 ? "Not run" : "Passed";
     if(st==="Not run") return;

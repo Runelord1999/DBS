@@ -3,30 +3,34 @@
  *
  * EVERY string in this file is invented. Nothing here is an anonymised or
  * lightly-disguised real project, sponsor, vendor or person (Build Brief
- * Section 11). The names are deliberately generic-sounding so that no reader
- * can mistake one for a real book of work, and the numbers are arbitrary.
+ * Section 11). Project names are deliberately generic-sounding so that no
+ * reader can mistake one for a real book of work, and the numbers are arbitrary.
+ *
+ * People's names are Japanese, the repository's convention for mock data (see
+ * CLAUDE.md at the root). The two pools are combined at random, so they are
+ * swapped position for position when changed: the seed then draws the same
+ * sequence and every other generated value stays as it was.
  */
 
 export const FIRST_NAMES = [
-  'Amara', 'Beatrix', 'Callum', 'Delphine', 'Emeka', 'Farrah', 'Gideon', 'Halima',
-  'Idris', 'Juniper', 'Kwame', 'Lorenza', 'Mattias', 'Nadira', 'Osric', 'Priya',
-  'Quentin', 'Rosalind', 'Soren', 'Tamsin', 'Ulrike', 'Vikram', 'Wilhelmina', 'Xiomara',
-  'Yusuf', 'Zenobia', 'Anouk', 'Bartholomew', 'Cressida', 'Dashiell', 'Elowen', 'Fionnuala',
-  'Gustavo', 'Henrietta', 'Ignatius', 'Jocasta', 'Konstantin', 'Leocadia', 'Marisol',
-  'Nikolai', 'Ottoline', 'Perpetua', 'Rafferty', 'Saoirse', 'Thaddeus', 'Ursula',
-  'Valentina', 'Wendeline', 'Yolanda', 'Zephyrine', 'Caspian', 'Isolde', 'Marnie',
-  'Oberon', 'Sabelle', 'Torquil', 'Verity', 'Wystan', 'Anselm', 'Brigid',
+  'Akane', 'Ayumi', 'Chiharu', 'Daigo', 'Eita', 'Fuka', 'Gaku', 'Hikari', 'Isao',
+  'Jumpei', 'Kaede', 'Rumiko', 'Minoru', 'Nao', 'Osamu', 'Miho', 'Kiyoshi', 'Ryoko',
+  'Sota', 'Tamaki', 'Umeko', 'Yasuhiro', 'Wakana', 'Shizuka', 'Yoshinori', 'Yuzuki',
+  'Aoi', 'Bunta', 'Chinatsu', 'Daisaku', 'Etsuko', 'Fuyumi', 'Genki', 'Haruna',
+  'Ippei', 'Junichi', 'Koichi', 'Ritsuko', 'Masumi', 'Nobuyuki', 'Otoha', 'Sachiko',
+  'Raita', 'Sena', 'Takumi', 'Ukyo', 'Yasuko', 'Wakaba', 'Yoshie', 'Zenji', 'Kanata',
+  'Itsuki', 'Marina', 'Tadashi', 'Saori', 'Toshiki', 'Yumiko', 'Wataru', 'Akiyoshi',
+  'Hanae',
 ];
 
 export const LAST_NAMES = [
-  'Aldergate', 'Brackwater', 'Castellane', 'Drummondsley', 'Eastmarch', 'Fenwicke',
-  'Grimsdale', 'Hollowbrook', 'Innesford', 'Jarrowmere', 'Kirkbride', 'Lockhaven',
-  'Marchetti', 'Northwood', 'Ollivander', 'Pemberton', 'Quillon', 'Ravensworth',
-  'Stonebridge', 'Thornbury', 'Underhill', 'Vanterpool', 'Westerling', 'Yarrowfield',
-  'Ashcombe', 'Blythewood', 'Coldstream', 'Danforth', 'Elmsworth', 'Fairholme',
-  'Galbraith', 'Havelock', 'Ilderton', 'Jessamine', 'Kestrelmoor', 'Langmere',
-  'Mossgrave', 'Netherfield', 'Oakhurst', 'Pinehollow', 'Quarrington', 'Redmayne',
-  'Sallowfield', 'Tanglewood', 'Uppingham', 'Vexley', 'Wharton', 'Yewbank',
+  'Aikawa', 'Bando', 'Chikada', 'Egawa', 'Fukushima', 'Hamaguchi', 'Ichikawa', 'Jinbo',
+  'Kagawa', 'Kitamura', 'Kuwano', 'Maruyama', 'Mochida', 'Nagata', 'Nozaki', 'Oguri',
+  'Okubo', 'Sakurai', 'Sekiguchi', 'Shindo', 'Takeuchi', 'Tominaga', 'Umeda',
+  'Wakabayashi', 'Yagi', 'Yamashita', 'Yokota', 'Yoshioka', 'Akiyama', 'Furukawa',
+  'Hoshino', 'Igarashi', 'Kamata', 'Kinoshita', 'Kuroki', 'Matsushita', 'Miyazaki',
+  'Narita', 'Ochiai', 'Sakaguchi', 'Shibuya', 'Sugawara', 'Tachibana', 'Tsujimoto',
+  'Uehara', 'Yasuda', 'Yoneda', 'Asakura',
 ];
 
 /** Fictional programme codenames — none of these correspond to anything real. */
