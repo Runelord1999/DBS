@@ -567,6 +567,10 @@ tr.clickable:hover .expandhint{opacity:1}
 .actstrip{flex-wrap:wrap;row-gap:9px}
 .actstrip .segbtns button{padding:5px 8px}
 .anodata{padding:26px 16px;color:var(--ink-3);font-size:0.75rem}
+.tmap-well svg{display:block;width:100%;height:auto}
+.tmap-foot{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;justify-content:space-between;margin-top:8px}
+.tmap-note{font-size:0.625rem;color:var(--ink-3)}
+.tmap-foot .alegend{max-width:none;justify-content:flex-start}
 .alegend{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;justify-content:flex-end;max-width:44em}
 .alg i.dash{width:14px;height:0;border-top:1.6px dashed var(--ink);border-radius:0}
 .alg{display:inline-flex;align-items:center;gap:5px;font-size:0.59375rem;color:var(--ink-2);white-space:nowrap}
@@ -4965,6 +4969,105 @@ function hbars(items,opts){
   });
   return '<svg viewBox="0 0 '+W+" "+Math.max(y+2,20)+'" preserveAspectRatio="xMinYMin meet" role="img">'+g+"</svg>";
 }
+/* Squarified treemap (Bruls, Huizing & van Wijk). Areas are proportional to
+   value and laid out in rows that keep each tile as near square as the values
+   allow: sliced and diced, sixty-eight traders become sixty-eight slivers that
+   nobody can read a name in or put a cursor on. Values must be positive and
+   sorted largest first; tiles come back in the same order. */
+function squarify(vals,x,y,w,h){
+  const tot=vals.reduce((a,v)=>a+v,0), out=[];
+  if(!(tot>0)||w<=0||h<=0) return vals.map(()=>({x,y,w:0,h:0}));
+  const k=w*h/tot, A=vals.map(v=>v*k);
+  const worst=(row,side)=>{ let s=0,mx=0,mn=Infinity; row.forEach(a=>{ s+=a; if(a>mx)mx=a; if(a<mn)mn=a; });
+    return Math.max(side*side*mx/(s*s),(s*s)/(side*side*mn)); };
+  let i=0;
+  while(i<A.length){
+    const side=Math.min(w,h); let row=[A[i]], j=i+1, wr=worst(row,side);
+    while(j<A.length){ const nr=row.concat(A[j]), nw=worst(nr,side); if(nw>wr) break; row=nr; wr=nw; j++; }
+    const s=row.reduce((a,v)=>a+v,0);
+    if(w>=h){ const cw=s/h; let cy=y; row.forEach(a=>{ const ch=a/cw; out.push({x,y:cy,w:cw,h:ch}); cy+=ch; }); x+=cw; w-=cw; }
+    else    { const ch=s/w; let cx=x; row.forEach(a=>{ const cw=a/ch; out.push({x:cx,y,w:cw,h:ch}); cx+=cw; }); y+=ch; h-=ch; }
+    i=j;
+  }
+  return out;
+}
+/* The first label that fits the width: a full name, then a surname, then
+   initials. Width is estimated from the glyph count at the semibold weight the
+   names are set in — close enough at these sizes, and it errs on the side of
+   the shorter label rather than letting one run into the next tile. With trunc
+   set, a label that fits in no form is cut short rather than dropped — a desk
+   heading has to stay, because it is the only thing naming its group. */
+const fitLabel=(cands,w,fs,trunc)=>{
+  const f=cands.find(c=>c&&c.length*fs*0.62<=w);
+  if(f||!trunc) return f||"";
+  const n=Math.floor(w/(fs*0.62)), c=cands[cands.length-1];
+  return n>=4?c.slice(0,n-1).trimEnd()+"…":"";
+};
+/* A two-level treemap: groups first, each sized by its own total, then the
+   items inside each group. Each tile is a highlight aggregate like a bar, with
+   a marker along its foot sized to the selection's share of it. Items too small
+   to draw are pushed onto opts.skipped, so nothing leaves the chart unsaid.
+   Colour is the
+   item's own (it.color), drawn as a tint so the ink label stays legible in every
+   theme, with a solid strip along the top carrying the identity. */
+function treemap(groups,opts){
+  opts=opts||{};
+  const W=opts.w||1600, H=opts.h||420, G=4, fmt=opts.fmt||(v=>fmtNum(v));
+  const fsH=cf(11.5), fsN=cf(12.5), fsV=cf(11), HD=Math.round(fsH*1.9);
+  const gs=groups.filter(g=>g.v>0).sort((a,b)=>b.v-a.v);
+  /* A desk's heading and padding take area its traders cannot use, and a small
+     desk loses a larger share of itself to them than a large one — laid out on
+     value alone, a tile on a small desk is drawn smaller than a tile of the same
+     value on a large desk. Weight each desk by its value over the share of its
+     box its tiles actually get, and lay out again; a few passes settle it, so
+     tile area stays proportional to value across the whole floor. */
+  const inner=R=>{ const w=R.w-G, h=R.h-G, hd=h>HD*2.2?HD:0; return Math.max(1e-6,(w-4)*(h-hd-3)); };
+  // How far the worst desk's tiles are from the floor-wide area per unit of value.
+  const tot=gs.reduce((a,g)=>a+g.v,0);
+  // Desks under 1% of the map are left out of the measure: padding alone is
+  // most of their box, and chasing them would distort every other desk.
+  const skew=L=>{ const k=L.reduce((a,R)=>a+inner(R),0)/tot;
+    return Math.max(0,...L.map((R,gi)=>gs[gi].v<tot*0.01?0:Math.abs(inner(R)/(gs[gi].v*k)-1))); };
+  // A re-weighting can move a desk into a different row of the layout, so the
+  // passes do not converge smoothly; keep the best layout seen, not the last.
+  let wt=gs.map(g=>g.v), gr=squarify(wt,0,0,W,H), best=gr, bestSkew=skew(gr);
+  for(let pass=0;pass<24&&bestSkew>0.003;pass++){
+    const k=gr.reduce((a,R)=>a+inner(R),0)/tot;
+    wt=wt.map((w,gi)=>gs[gi].v<tot*0.01?w:w*Math.min(2,Math.max(0.5,Math.pow(gs[gi].v*k/inner(gr[gi]),0.7))));
+    gr=squarify(wt,0,0,W,H);
+    const sk=skew(gr); if(sk<bestSkew){ best=gr; bestSkew=sk; }
+  }
+  gr=best;
+  let s="";
+  gs.forEach((g,gi)=>{
+    const R=gr[gi], x=R.x+G/2, y=R.y+G/2, w=Math.max(0,R.w-G), h=Math.max(0,R.h-G);
+    s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="4" fill="var(--panel-2)"/>';
+    const hd=h>HD*2.2?HD:0;
+    if(hd) s+='<text x="'+(x+6).toFixed(1)+'" y="'+(y+hd-6).toFixed(1)+'" font-size="'+fsH+'" font-weight="700" fill="var(--ink-2)" '+
+      (g.hl||"")+' data-tip="'+esc(g.tip||g.label)+'" data-tipsub="'+esc(g.tipsub||"")+'" data-tiptable="'+esc(g.tiptable||"")+'" style="cursor:pointer">'+
+      esc(fitLabel([g.label+"  ·  "+fmt(g.v),g.label],w-12,fsH,true))+"</text>";
+    const items=g.items.filter(it=>it.v>0).sort((a,b)=>b.v-a.v);
+    const rs=squarify(items.map(it=>it.v),x+2,y+hd+1,w-4,h-hd-3);
+    items.forEach((it,k)=>{
+      const r=rs[k], tx=r.x+1, ty=r.y+1, tw=Math.max(0,r.w-2), th=Math.max(0,r.h-2);
+      // Too small to see or to put a cursor on: handed back for the caller to list.
+      if(tw<3||th<3){ if(opts.skipped) opts.skipped.push(it); return; }
+      const name=th>fsN*1.7?fitLabel(it.labels||[it.label],tw-8,fsN):"";
+      const val=name&&th>fsN*1.7+fsV*1.5?fitLabel([fmt(it.v)],tw-8,fsV):"";
+      s+='<g '+(it.hl||"")+" "+(it.agg||"")+' data-tip="'+esc(it.tip||it.label)+'" data-tipsub="'+esc(it.tipsub||"")+
+        '" data-tiptable="'+esc(it.tiptable||"")+'" style="cursor:pointer">'+
+        '<rect x="'+tx.toFixed(1)+'" y="'+ty.toFixed(1)+'" width="'+tw.toFixed(1)+'" height="'+th.toFixed(1)+'" rx="3" '+
+          'fill="color-mix(in srgb,'+it.color+' 30%,var(--panel))"/>'+
+        '<rect x="'+tx.toFixed(1)+'" y="'+ty.toFixed(1)+'" width="'+tw.toFixed(1)+'" height="'+Math.min(3,th).toFixed(1)+'" fill="'+it.color+'"/>'+
+        (name?'<text x="'+(tx+5).toFixed(1)+'" y="'+(ty+4+fsN).toFixed(1)+'" font-size="'+fsN+'" font-weight="650" fill="var(--ink)">'+esc(name)+"</text>":"")+
+        (val?'<text x="'+(tx+5).toFixed(1)+'" y="'+(ty+4+fsN+fsV*1.35).toFixed(1)+'" font-size="'+fsV+'" font-family="var(--mono)" fill="var(--ink-2)">'+esc(val)+"</text>":"")+
+        "</g>";
+      if(it.aggKey&&tw>4) s+='<rect class="hlmark-svg" data-hl-for="'+esc(it.aggKey)+'" data-hl-total="'+it.v+'" data-hl-len="'+tw.toFixed(1)+
+        '" x="'+tx.toFixed(1)+'" y="'+(ty+th-3).toFixed(1)+'" width="0" height="3" rx="1" fill="var(--ink)" pointer-events="none"/>';
+    });
+  });
+  return '<svg viewBox="0 0 '+W+" "+H+'" preserveAspectRatio="xMidYMid meet" role="img" class="tmap">'+s+"</svg>";
+}
 /* Twenty-four columns, one per hour of the desk-local trading day. Shaded bands
    mark the hours outside any desk's window, so "outside hours" is a region of
    the chart rather than a number the reader has to hold in their head. */
@@ -5537,6 +5640,16 @@ const PANEL_INFO={
  read:"Each desk has a natural profile: an FX spot book sits almost entirely in the shortest band, a rates book spreads across the curve.",
  flag:"A trader with weight in a band their mandate does not reach. Tenor authorisations are personal, so a single long-dated deal on a short-dated book is a breach even when the desk is approved for it."},
 
+"Desk":{
+ what:"Every desk ranked by the page's measure — deals booked, or in the P&L view what the desk earned. Colour is the asset class the desk mostly deals in.",
+ read:"Read the two rankings against each other. A desk that climbs when the measure changes to P&L earns on margin; one that falls earns on flow. The tooltip gives the desk's margin, its asset-class mix and the alerts against it.",
+ flag:"A desk whose P&L rank sits well above its deal rank without a product mix to explain it — options and credit earn more per deal than spot, so the mix in the tooltip is the first thing to check."},
+
+"Trader map":{
+ what:"Every trader in scope as a tile, area proportional to their deals or their P&L, grouped by desk and coloured by the asset class they mostly deal in.",
+ read:"Compare a tile with its neighbours on the same desk, not across the floor — desks earn at very different rates. Hover a tile for the trader's deals, notional, P&L, margin and alerts; click to hold them across every panel; double-click for the trader file.",
+ flag:"A desk carried by one tile, and a tile that is far larger in the P&L view than in the deal view. Revenue concentrated in one book is a key-person risk at best, and at worst the shape of mismarking or of a trader pricing clients well away from the desk."},
+
 /* The P&L view renames five panels, and the help is keyed by title, so those
    five need an entry of their own or the button disappears when the measure
    changes. Each one is written about the measure, not about the chart: the
@@ -6052,10 +6165,15 @@ function paneActivity(){
   };
   const byProd=Object.create(null), byCtpy=Object.create(null), byAc=Object.create(null),
         byCh=Object.create(null), byTenor=Object.create(null), bySize=Object.create(null),
-        byMonthAc=Object.create(null), ctpyType=Object.create(null);
+        byMonthAc=Object.create(null), ctpyType=Object.create(null),
+        byDesk=Object.create(null), byTrader=Object.create(null),
+        deskAc=Object.create(null), trAc=Object.create(null);
   const hrs=Array(24).fill(0), hrsPl=Array(24).fill(0);
+  const tally=(m,k,ac)=>{ const c=m[k]||(m[k]=Object.create(null)); c[ac]=(c[ac]||0)+1; };
   rows.forEach(t=>{
     put(grab(byProd,t.product),t);
+    put(grab(byDesk,t.deskId),t); tally(deskAc,t.deskId,t.ac);
+    put(grab(byTrader,t.traderId),t); tally(trAc,t.traderId,t.ac);
     put(grab(byCtpy,t.ctpy),t);
     put(grab(byAc,t.ac),t);
     put(grab(byCh,t.channel),t);
@@ -6069,9 +6187,12 @@ function paneActivity(){
   });
   // Alerts the same way: one pass keyed by dimension rather than a scan per series.
   const alBy={product:Object.create(null),ctpy:Object.create(null),
-              tenorb:Object.create(null),sizeb:Object.create(null)};
+              tenorb:Object.create(null),sizeb:Object.create(null),
+              desk:Object.create(null),trader:Object.create(null)};
   ALERTS.forEach(a=>{
     if(!matchRail(a)) return;
+    alBy.desk[a.deskId]=(alBy.desk[a.deskId]||0)+1;
+    alBy.trader[a.traderId]=(alBy.trader[a.traderId]||0)+1;
     a.products.forEach(x=>alBy.product[x]=(alBy.product[x]||0)+1);
     (a.ctpys||[]).forEach(x=>alBy.ctpy[x]=(alBy.ctpy[x]||0)+1);
     (a.tenorBands||[]).forEach(x=>alBy.tenorb[x]=(alBy.tenorb[x]||0)+1);
@@ -6169,6 +6290,72 @@ function paneActivity(){
       agg:hlAggM("sizeb",bd[2],v),aggKey:mcut+"sizeb|"+bd[2]};
   }).filter(x=>x.v>0);
 
+  /* Desk and trader colour is the asset class each one mostly deals in, counted
+     in deals rather than in the page's measure, so the colour of a desk does not
+     change when the reader switches to P&L — colour follows the entity, never
+     its rank. Most desks are a single class; the mix in the tooltip says so where
+     one is not. */
+  const domAc=m=>{ let best="",bn=-1; for(const k in m) if(m[k]>bn){ bn=m[k]; best=k; } return best; };
+  const mixOf=(m,n)=>Object.keys(m||{}).sort((a,b)=>m[b]-m[a]).filter(k=>m[k]/n>=0.05)
+    .map(k=>k+" "+Math.round(m[k]/n*100)+"%").join(" · ");
+  const deskStats=DESKS.map(d=>{
+    const b=byDesk[d.id]; if(!b) return null;
+    return {d,b,v:mval(b),ac:domAc(deskAc[d.id]),al:alBy.desk[d.id]||0};
+  }).filter(Boolean).sort((a,b)=>b.v-a.v);
+  const deskItems=deskStats.map((x,i)=>({label:x.d.short,v:x.v,vLabel:mfmt(x.v),
+    color:AC_COLOR[x.ac]||"var(--ink-3)",tip:x.d.name,
+    tipsub:"Ranked "+(i+1)+" of "+deskStats.length+(PL?" by P&L":" by deals")+" · "+x.d.region,
+    tiptable:["Deals|"+fmtNum(x.b.n),"Notional|"+fmtM(x.b.nl),"P&L|"+fmtK(x.b.pl),
+      "Margin|"+mgfmt(marg(x.b))+" per $1m","Traders|"+x.b.tn,
+      "Mix|"+mixOf(deskAc[x.d.id],x.b.n),"Alerts|"+fmtNum(x.al)].join("§"),
+    hl:'data-hlsrc="desk|'+x.d.id+'" '+hlDim("desk",x.d.id),
+    agg:hlAggM("desk",x.d.id,x.v),aggKey:mcut+"desk|"+x.d.id}));
+
+  /* Every trader on the floor at once, area in the page's measure and grouped by
+     desk. A tile's size is only comparable to its neighbours', which is why the
+     desks are drawn as groups: the question it answers is "who carries this
+     desk", and a desk carried by one tile is the one to look at. A tile cannot
+     have negative area, so in the P&L view a trader who lost money in the scope
+     is listed under the chart rather than silently dropped. */
+  const tmGroups=deskStats.map(x=>{
+    const items=TRADERS.filter(t=>t.deskId===x.d.id&&byTrader[t.id]).map(t=>{
+      const b=byTrader[t.id], v=mval(b), ac=domAc(trAc[t.id]), parts=t.name.split(" ");
+      const sur=parts[parts.length-1], ini=parts.map(w=>w.charAt(0)).join("");
+      return {id:t.id,label:t.name,labels:[t.name,parts[0].charAt(0)+". "+sur,sur,ini],v,
+        color:AC_COLOR[ac]||"var(--ink-3)",ac,tip:t.name,
+        tipsub:x.d.short+" · "+t.grade+" · "+(x.v>0&&v>0?Math.round(v/x.v*100)+"% of the desk's "+(PL?"P&L":"deals"):""),
+        tiptable:["Deals|"+fmtNum(b.n),"Notional|"+fmtM(b.nl),"P&L|"+fmtK(b.pl),
+          "Margin|"+mgfmt(marg(b))+" per $1m","Mix|"+mixOf(trAc[t.id],b.n),
+          "Alerts|"+fmtNum(alBy.trader[t.id]||0)].join("§"),
+        hl:'data-hlsrc="trader|'+t.id+'" data-trader="'+t.id+'" data-hl-trader="'+t.id+'" data-hl-desk="'+t.deskId+'"',
+        agg:hlAggM("trader",t.id,v),aggKey:mcut+"trader|"+t.id};
+    });
+    return {label:x.d.short,v:x.v,items,tip:x.d.name,tipsub:x.d.region+" · "+x.b.tn+" traders",
+      tiptable:["Deals|"+fmtNum(x.b.n),"P&L|"+fmtK(x.b.pl),"Alerts|"+fmtNum(x.al)].join("§"),
+      hl:'data-hlsrc="desk|'+x.d.id+'" '+hlDim("desk",x.d.id)+" "+hlAggM("desk",x.d.id,x.v)};
+  });
+  // A loss, or a desk that lost money overall, has no area to draw.
+  const tmOut=[].concat(...tmGroups.map(g=>g.items.filter(it=>!(it.v>0))))
+    .concat(...tmGroups.filter(g=>!(g.v>0)).map(g=>g.items.filter(it=>it.v>0)));
+  const tmSmall=[];
+  const tmSvg=treemap(tmGroups,{w:1600,h:440,fmt:mfmt,skipped:tmSmall});
+  const tmDrawn=tmGroups.filter(g=>g.v>0).reduce((a,g)=>a.concat(g.items.filter(it=>it.v>0)),[])
+    .filter(it=>tmSmall.indexOf(it)<0);
+  const tmAcs=ASSET_CLASSES.filter(ac=>tmDrawn.some(it=>it.ac===ac));
+  const tmList=a=>a.map(it=>esc(it.label)+" ("+mfmt(it.v)+")").join(", ");
+  const tmNote=(tmOut.length?"Not drawn — "+(PL?"a loss":"no deals")+" in this scope: "+tmList(tmOut)+". ":"")+
+    (tmSmall.length?"Too small to draw at this scale: "+tmList(tmSmall)+".":"");
+  const tmPanel=panel("Trader map",
+    (PL?"area = P&L":"area = deals")+" · grouped by desk · colour = main asset class · "+
+      tmDrawn.length+(tmDrawn.length===1?" trader":" traders"),
+    '<div class="panel-body"><div class="tmap-well">'+tmSvg+"</div>"+
+      '<div class="tmap-foot"><div class="alegend">'+
+        tmAcs.map(ac=>'<span class="alg"><i style="background:'+AC_COLOR[ac]+'"></i>'+esc(ac)+"</span>").join("")+"</div>"+
+        (tmNote?'<div class="tmap-note">'+tmNote+"</div>":"")+
+      "</div></div>",
+    PL?"Who earns the floor's money, desk by desk. A desk whose revenue sits in one tile depends on one person's book — and a junior name holding the largest tile on a desk is a result that should be explainable before anyone is congratulated for it."
+      :"Who does the floor's business, desk by desk. A desk whose deals sit in one tile depends on one person's book; a tile far larger than its neighbours on the same desk is someone dealing at a rate the rest of the desk does not.");
+
   const segTot=segs=>segs.reduce((a,x)=>a+x.v,0);
   const rowA='<div class="gridw2 tight">'+
     panel(PL?"P&L by month":"Deal volume by month","stacked by asset class · 12 months",
@@ -6212,7 +6399,7 @@ function paneActivity(){
         :"A name large by notional and small by count is a block relationship; the reverse is a flow one. Concentration is not itself a finding, but every off-market pattern eventually points at one of these names.")+
     "</div>";
 
-  const rowC='<div class="grid3 tight">'+
+  const rowC='<div class="grid4t tight">'+
     panel("Execution hours",(PL?"P&L through the trading day":"the trading day")+" · desk-local time",
       '<div class="panel-body"><div class="chart-well">'+
         hourChart(PL?hrsPl:hrs,{w:560,h:212,cut:mcut,unitLabel:PL?"P&L":"Deals",
@@ -6227,6 +6414,10 @@ function paneActivity(){
       '<div class="panel-body"><div class="chart-well">'+hbars(tenorItems,{w:460,rowH:26,labW:120})+"</div></div>",
       PL?"Longer risk earns more per million because the spread is charged on a bigger duration. A short book earning like a long one is worth a question."
         :"The whole book by maturity band, against which any one trader's mix can be read.")+
+    panel("Desk",(PL?"ranked by P&L":"ranked by deals")+" · colour = main asset class",
+      '<div class="panel-body"><div class="chart-well">'+hbars(deskItems,{w:460,rowH:19,labW:116})+"</div></div>",
+      PL?"The desks ranked by what they earned. Read it against the deal ranking: a desk that climbs when the measure changes earns on margin rather than on flow."
+        :"The desks ranked by how many deals they book. Hover a desk to see it across every other panel; double-click to scope the page to it.")+
     "</div>";
 
   /* Trading activity, one small chart per trader. Alert panels answer "who is
@@ -6314,8 +6505,8 @@ function paneActivity(){
     "<b>Click the card</b> to lock that trader across every panel without filtering anything away; <b>double-click</b> for the trader file.");
 
 
-  return kpis+rowA+'<div class="mt10">'+rowB+"</div>"+'<div class="mt10">'+rowC+"</div>"+
-    '<div class="mt10">'+activity+"</div>";
+  return kpis+rowA+'<div class="mt10">'+rowC+"</div>"+'<div class="mt10">'+rowB+"</div>"+
+    '<div class="mt10">'+tmPanel+"</div>"+'<div class="mt10">'+activity+"</div>";
 }
 
 /* ============================================================
