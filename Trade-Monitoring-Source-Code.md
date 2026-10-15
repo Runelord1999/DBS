@@ -11,6 +11,16 @@ There is a companion file, `Trade-Monitoring-Demo.html`: the same application
 as one self-contained page with the synthetic book inside it. Open it by
 double-clicking — no server, no install, no internet.
 
+The rest of the handover set, for when you need more than the code:
+
+| File | What it is for |
+|---|---|
+| `Trade-Monitoring-BRD.docx` | What to build: requirements, acceptance criteria and phasing. Read it first. |
+| `Trade-Surveillance-Data-Schema.xlsx` | Every table and field, the rule-to-field matrix and the lineage of every panel. |
+| `Trade-Monitoring-Source-Data-Checklist.xlsx` | The fields to find in the bank's own systems, grouped by owning system. |
+| `Trade-Surveillance-58-Rules.docx` | Each of the fifty-eight rules explained, with the data it needs. |
+| `Trade-Monitoring-Production-Shell.zip` | This code split into the files a server would host, with a data adapter and a data contract. |
+
 ---
 
 ## What this is, in one paragraph
@@ -27,7 +37,7 @@ important design decision in the whole thing.
 
 Plain HTML, CSS and JavaScript. No framework, no build step, no package
 manager, no runtime dependencies, no network calls. One stylesheet and
-thirty-two JavaScript files that execute in order into a single shared scope.
+thirty-three JavaScript files that execute in order into a single shared scope.
 
 That is deliberate: it runs by opening a file, which is what makes it
 demonstrable to a committee without a deployment. It is **not** a
@@ -367,7 +377,7 @@ const isBiz=d=>!isWeekend(d)&&!isHoliday(d);
 
 **REPLACE** · 122 lines
 
-The twelve desks and sixty-eight traders. Your DIM_DESK and DIM_TRADER feeds replace this file entirely.
+The twelve desks and sixty-eight traders, all fictional. Your DIM_DESK and DIM_TRADER feeds replace this file entirely.
 
 ```javascript
 /* ============================================================
@@ -4375,7 +4385,7 @@ const hlAggR=(dim,key,total,ratePct)=>hlAgg("R:"+dim,key,total,ratePct);
 
 **REBUILD** · 519 lines
 
-Hand-rolled SVG chart primitives — stacked columns, horizontal bars, donuts, sparklines, heat cells. No chart library. Reference for what each panel plots; your stack will draw them.
+Hand-rolled SVG chart primitives — stacked columns, horizontal bars, donuts, sparklines, heat cells, and the squarified treemap behind the trader map. No chart library. Reference for what each panel plots; your stack will draw them. If you rebuild the treemap, keep one detail of `treemap`: each desk is re-weighted for the space its heading takes, so a tile's area stays proportional to its value across the whole floor and not only within its own desk.
 
 ```javascript
 /* ============================================================
@@ -5681,7 +5691,7 @@ function paneOverview(){
 
 **REBUILD** · 430 lines
 
-Trade activity pane. Every panel is drawn in whichever measure the page is set to — deals and notional, or P&L and margin — from one pass over the book; the measure branches are in `paneActivity` and the toggle that drives them is `setMeasure` in `01-engine.js`.
+Trade activity pane. Every panel is drawn in whichever measure the page is set to — deals and notional, or P&L and margin — from one pass over the book; the measure branches are in `paneActivity` and the toggle that drives them is `setMeasure` in `01-engine.js`. The same pass ranks the desks and builds the trader map: every trader in scope as a tile sized by the measure and grouped by desk. A trader who cannot be drawn — a loss in the P&L view, or a figure too small to see — is listed under the chart rather than dropped.
 
 ```javascript
 /* ============================================================
