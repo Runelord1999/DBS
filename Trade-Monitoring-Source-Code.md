@@ -76,9 +76,9 @@ In this order:
 
 | | lines |
 |---|---|
-| Application logic and presentation | 4,905 |
+| Application logic and presentation | 4,908 |
 | Synthetic data generators (`*-demo-*`, replace entirely) | 2,753 |
-| **Total JavaScript** | **7,658** |
+| **Total JavaScript** | **7,661** |
 | Stylesheet | 605 |
 
 ## Contents
@@ -104,7 +104,7 @@ In this order:
 | 17 | `16-charts.js` | 519 | REBUILD |
 | 18 | `17-market-context.js` | 189 | REBUILD / PORT |
 | 19 | `18-view-helpers.js` | 7 | SUPPORT |
-| 20 | `19-panel-guidance.js` | 295 | PORT |
+| 20 | `19-panel-guidance.js` | 298 | PORT |
 | 21 | `20-pane-overview.js` | 255 | REBUILD |
 | 22 | `21-pane-activity.js` | 430 | REBUILD |
 | 23 | `22-pane-timeseries.js` | 757 | REBUILD |
@@ -5123,7 +5123,7 @@ function kpi(eyebrow,value,sub,accent){
 
 ## 20. `19-panel-guidance.js`
 
-**PORT** · 295 lines
+**PORT** · 298 lines
 
 The explanatory copy behind every information icon: what each chart is, how to read it, and where an anomaly shows. Plain text, no code. Reuse it verbatim — it is the product's documentation.
 
@@ -5378,7 +5378,10 @@ function panel(title,right,body,foot,cls){
     : "";
   return '<div class="panel '+(cls||"")+'"><div class="panel-hd"><h3>'+title+inf+"</h3>"+
     (right?'<div class="slo">'+right+"</div>":"")+
-    "</div>"+body+(foot?'<div class="foot">'+foot+"</div>":"")+"</div>";
+    /* Chart captions removed Oct 2026 at the user's request. The foot argument is
+       still accepted at every call site so the text survives in source and the
+       captions can be restored by reinstating the concatenation below. */
+    "</div>"+body+"</div>";
 }
 function sevTag(s){ return '<span class="tag '+SEV_TAG[s]+'">'+s+"</span>"; }
 function statusTag(s){ return '<span class="tag '+STATUS_TAG[s]+'">'+s+"</span>"; }

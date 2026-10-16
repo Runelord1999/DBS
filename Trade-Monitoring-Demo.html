@@ -5814,7 +5814,10 @@ function panel(title,right,body,foot,cls){
     : "";
   return '<div class="panel '+(cls||"")+'"><div class="panel-hd"><h3>'+title+inf+"</h3>"+
     (right?'<div class="slo">'+right+"</div>":"")+
-    "</div>"+body+(foot?'<div class="foot">'+foot+"</div>":"")+"</div>";
+    /* Chart captions removed Oct 2026 at the user's request. The foot argument is
+       still accepted at every call site so the text survives in source and the
+       captions can be restored by reinstating the concatenation below. */
+    "</div>"+body+"</div>";
 }
 function sevTag(s){ return '<span class="tag '+SEV_TAG[s]+'">'+s+"</span>"; }
 function statusTag(s){ return '<span class="tag '+STATUS_TAG[s]+'">'+s+"</span>"; }
