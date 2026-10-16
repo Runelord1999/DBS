@@ -76,10 +76,10 @@ In this order:
 
 | | lines |
 |---|---|
-| Application logic and presentation | 4,904 |
+| Application logic and presentation | 4,905 |
 | Synthetic data generators (`*-demo-*`, replace entirely) | 2,753 |
-| **Total JavaScript** | **7,657** |
-| Stylesheet | 602 |
+| **Total JavaScript** | **7,658** |
+| Stylesheet | 605 |
 
 ## Contents
 
@@ -117,9 +117,9 @@ In this order:
 | 30 | `29-rail.js` | 67 | REBUILD |
 | 31 | `30-render.js` | 62 | SUPPORT |
 | 32 | `31-events.js` | 233 | REBUILD |
-| 33 | `32-boot.js` | 6 | SUPPORT |
-| — | `css/dashboard.css` | 602 | REBUILD |
-| — | `index.html` | 122 | REBUILD |
+| 33 | `32-boot.js` | 7 | SUPPORT |
+| — | `css/dashboard.css` | 605 | REBUILD |
+| — | `index.html` | 154 | REBUILD |
 
 ---
 
@@ -8036,7 +8036,7 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(hlPinned){ hlP
 
 ## 33. `32-boot.js`
 
-**SUPPORT** · 6 lines
+**SUPPORT** · 7 lines
 
 Start-up.
 
@@ -8047,6 +8047,7 @@ Start-up.
 state.blot.from=isoDate(dateAt(29));
 state.blot.to=isoDate(TODAY);
 render();
+window.__tmReady=true;
 ```
 
 ---
@@ -8093,6 +8094,9 @@ retheming means editing the variables, not the chart code.
 }
 *{box-sizing:border-box}
 html{font-size:16px}
+/* The start-up notice below the body tag. The head script marks the page "js"
+   before anything is drawn, so a working copy never shows it. */
+html.js .tm-check{display:none !important}
 html,body{margin:0;padding:0}
 body{background:
   radial-gradient(1200px 600px at 80% -10%,color-mix(in srgb,var(--agent) 6%,transparent),transparent 60%),
@@ -8677,8 +8681,40 @@ container and the drawer. Everything else is generated at runtime.
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trade Monitoring &amp; Anomaly Detection</title>
 <link rel="stylesheet" href="css/dashboard.css">
+<!-- tm-check:start -->
+<script>
+/* Runs before anything is drawn, in any browser. It marks the page as able to
+   run scripts, which hides the start-up notice; and if the main script then
+   fails before the dashboard is up (an older browser, a blocked feature), it
+   brings the notice back with the browser's own error rather than leaving a
+   half-drawn page. Written without modern syntax so that it runs even where
+   the main script cannot. */
+document.documentElement.className+=" js";
+window.onerror=function(msg,src,line){
+  if(window.__tmReady) return false;
+  var h=document.documentElement;
+  h.className=h.className.replace(/(^|\s)js(\s|$)/," ");
+  var e=document.getElementById("tm-error");
+  if(e) e.appendChild(document.createTextNode(
+    "This browser could not run the dashboard: "+msg+(line?" (line "+line+")":"")+
+    ". Open the file in a current version of Chrome or Edge, not Internet Explorer mode."));
+  return false;
+};
+</script>
+<!-- tm-check:end -->
 </head>
 <body>
+<!-- tm-check:start -->
+<article class="tm-check" id="tm-check" style="max-width:760px;margin:24px auto;padding:20px 24px;border:2px solid #D1293F;border-radius:10px;background:#FFF4F5;color:#12182B;font:15px/1.55 'Segoe UI',Arial,sans-serif;writing-mode:horizontal-tb;transform:none;text-transform:none">
+<h2 style="margin:0 0 10px;font-size:20px;line-height:1.3;color:#B0141B">This copy of Trade Monitoring cannot start</h2>
+The dashboard is one self-contained file. It needs no internet connection and no installation: all of its mock data is inside it, and it opens by double-clicking in Chrome or Edge.<br><br>
+It cannot run here because its program code (JavaScript) is missing from this copy, or is being blocked by this browser. The file's size tells you which:<br><br>
+<strong>About 540 KB</strong> &mdash; the file is complete, and JavaScript is switched off for files opened from this computer.<br>
+<strong>Much smaller</strong> &mdash; the code was removed on the way to this computer, usually by a security filter that strips scripts from HTML files sent by email or downloaded.<br><br>
+Either way, ask IT for an approved way to run it. The file contains only fictional data and makes no network connections.<br><br>
+<em id="tm-error" style="font-style:normal;color:#B0141B"></em>
+</article>
+<!-- tm-check:end -->
 <div class="shell">
   <aside class="rail">
     <a class="brand" href="index.html" data-tip="Back to all dashboards"><div class="brand-mark">TM</div>
