@@ -76,10 +76,10 @@ In this order:
 
 | | lines |
 |---|---|
-| Application logic and presentation | 4,908 |
+| Application logic and presentation | 4,995 |
 | Synthetic data generators (`*-demo-*`, replace entirely) | 2,753 |
-| **Total JavaScript** | **7,661** |
-| Stylesheet | 605 |
+| **Total JavaScript** | **7,748** |
+| Stylesheet | 610 |
 
 ## Contents
 
@@ -104,21 +104,21 @@ In this order:
 | 17 | `16-charts.js` | 519 | REBUILD |
 | 18 | `17-market-context.js` | 189 | REBUILD / PORT |
 | 19 | `18-view-helpers.js` | 7 | SUPPORT |
-| 20 | `19-panel-guidance.js` | 298 | PORT |
+| 20 | `19-panel-guidance.js` | 372 | PORT |
 | 21 | `20-pane-overview.js` | 255 | REBUILD |
-| 22 | `21-pane-activity.js` | 430 | REBUILD |
+| 22 | `21-pane-activity.js` | 431 | REBUILD |
 | 23 | `22-pane-timeseries.js` | 757 | REBUILD |
 | 24 | `23-pane-detections.js` | 83 | REBUILD |
 | 25 | `24-pane-rules.js` | 47 | REBUILD |
 | 26 | `25-pane-blotter.js` | 105 | REBUILD |
 | 27 | `26-pane-traders.js` | 112 | REBUILD |
 | 28 | `27-pane-log.js` | 101 | REBUILD |
-| 29 | `28-drawer.js` | 262 | REBUILD / PORT |
+| 29 | `28-drawer.js` | 268 | REBUILD / PORT |
 | 30 | `29-rail.js` | 67 | REBUILD |
-| 31 | `30-render.js` | 62 | SUPPORT |
-| 32 | `31-events.js` | 233 | REBUILD |
+| 31 | `30-render.js` | 63 | SUPPORT |
+| 32 | `31-events.js` | 238 | REBUILD |
 | 33 | `32-boot.js` | 7 | SUPPORT |
-| — | `css/dashboard.css` | 605 | REBUILD |
+| — | `css/dashboard.css` | 610 | REBUILD |
 | — | `index.html` | 154 | REBUILD |
 
 ---
@@ -5123,7 +5123,7 @@ function kpi(eyebrow,value,sub,accent){
 
 ## 20. `19-panel-guidance.js`
 
-**PORT** · 298 lines
+**PORT** · 372 lines
 
 The explanatory copy behind every information icon: what each chart is, how to read it, and where an anomaly shows. Plain text, no code. Reuse it verbatim — it is the product's documentation.
 
@@ -5408,20 +5408,94 @@ function sortRows(rows,tbl,getters){
     return s.dir*((x||0)-(y||0));
   });
 }
-function pager(tbl,total){
-  const st=state[tbl], pages=Math.max(1,Math.ceil(total/st.per)), p=Math.min(st.page,pages-1);
-  const from=total?p*st.per+1:0, to=Math.min(total,(p+1)*st.per);
+/* ============================================================
+   Paging. Every table that can outgrow a screen is paged, and every long
+   card grid loads in batches. Rows are filtered and sorted in full first and
+   only then cut to a page, so every count, total and highlight on the page
+   describes all the matching rows, not the visible ones. Nothing is cut off
+   without a way to reach it.
+============================================================ */
+const PER_OPTS=[10,25,50,100,250];
+// Each paged table's starting page size. A table that fits inside it shows no
+// pager at all; once the reader picks another size the control stays put, so
+// they can always pick it back.
+const PER_DEFAULT={det:25,blot:50,log:25};
+/* The control itself. pageAttr(i) writes the attribute a page button carries
+   and perAttr the one on the rows-per-page select, so the same control drives
+   a pane (which redraws the tab) or a drawer table (which redraws only itself). */
+function pagerHtml(total,page,per,dflt,pageAttr,perAttr){
+  if(total<=per&&per===dflt) return "";
+  const pages=Math.max(1,Math.ceil(total/per)), p=Math.max(0,Math.min(page,pages-1));
+  const from=total?p*per+1:0, to=Math.min(total,(p+1)*per);
   let btns="";
-  const push=i=>{ btns+='<button class="pbtn'+(i===p?" on":"")+'" data-page="'+tbl+"|"+i+'">'+(i+1)+"</button>"; };
+  const push=i=>{ btns+='<button class="pbtn'+(i===p?" on":"")+'" '+pageAttr(i)+(i===p?' aria-current="page"':"")+">"+(i+1)+"</button>"; };
   const win=[];
   for(let i=0;i<pages;i++) if(i<2||i>pages-3||Math.abs(i-p)<=1) win.push(i);
   let last=-1;
   win.forEach(i=>{ if(i-last>1) btns+='<span class="muted" style="padding:0 3px">…</span>'; push(i); last=i; });
   return '<div class="pager"><span>Showing <b class="mono">'+fmtNum(from)+"–"+fmtNum(to)+"</b> of <b class=\"mono\">"+fmtNum(total)+
-    "</b></span><div class=\"pbtns\"><button class=\"pbtn\" data-page=\""+tbl+"|"+Math.max(0,p-1)+'" '+(p===0?"disabled":"")+">Prev</button>"+
-    btns+'<button class="pbtn" data-page="'+tbl+"|"+Math.min(pages-1,p+1)+'" '+(p>=pages-1?"disabled":"")+">Next</button></div>"+
-    '<label class="chk" style="padding:0">Rows <select class="mini-sel" data-per="'+tbl+'">'+
-    [10,25,50,100,250].map(n=>'<option value="'+n+'"'+(st.per===n?" selected":"")+">"+n+"</option>").join("")+"</select></label></div>";
+    "</b></span><div class=\"pbtns\"><button class=\"pbtn\" "+pageAttr(Math.max(0,p-1))+" "+(p===0?"disabled":"")+">Prev</button>"+
+    btns+'<button class="pbtn" '+pageAttr(Math.min(pages-1,p+1))+" "+(p>=pages-1?"disabled":"")+">Next</button></div>"+
+    '<label class="chk" style="padding:0">Rows <select class="mini-sel" '+perAttr+">"+
+    PER_OPTS.map(n=>'<option value="'+n+'"'+(per===n?" selected":"")+">"+n+"</option>").join("")+"</select></label></div>";
+}
+function pager(tbl,total){
+  const st=state[tbl];
+  return pagerHtml(total,st.page,st.per,PER_DEFAULT[tbl]||st.per,i=>'data-page="'+tbl+"|"+i+'"','data-per="'+tbl+'"');
+}
+/* A paged table inside a drawer. Turning its page redraws that table alone:
+   redrawing the drawer would throw away whatever the reader was doing in it,
+   such as a half-written disposition. One drawer is open at a time, so each
+   table has a fixed key that the next drawer simply replaces. */
+const LPAGE=Object.create(null);
+function localPaged(key,rows,o){
+  LPAGE[key]={rows,per:o.per||25,dflt:o.per||25,page:o.page||0,head:o.head,row:o.row};
+  return '<div data-lp="'+key+'">'+localPagedInner(key)+"</div>";
+}
+function localPagedInner(key){
+  const lp=LPAGE[key], pages=Math.max(1,Math.ceil(lp.rows.length/lp.per));
+  lp.page=Math.max(0,Math.min(lp.page,pages-1));
+  return '<div class="dwrap"><table class="dtable"><thead><tr>'+lp.head+"</tr></thead><tbody>"+
+    lp.rows.slice(lp.page*lp.per,(lp.page+1)*lp.per).map(lp.row).join("")+"</tbody></table></div>"+
+    pagerHtml(lp.rows.length,lp.page,lp.per,lp.dflt,i=>'data-lpage="'+key+"|"+i+'"','data-lper="'+key+'"');
+}
+function localPagedRedraw(key){ const el=document.querySelector('[data-lp="'+key+'"]'); if(el&&LPAGE[key]) el.innerHTML=localPagedInner(key); }
+/* A card grid that loads in batches: the first batch with the pane, the next
+   whenever the foot of the grid scrolls into view, or all at once on request.
+   The batch count survives a redraw of the same list, so changing a measure
+   does not throw the reader back to the top of a long grid. */
+const LAZY=Object.create(null);
+function lazyGrid(key,items,o){
+  const batch=o.batch||24, sig=items.length+"|"+(o.sig||""), prev=LAZY[key];
+  const n=Math.min(items.length,prev&&prev.sig===sig?prev.n:batch);
+  LAZY[key]={items,n,batch,sig,noun:o.noun||"items"};
+  return '<div class="'+o.cls+'"'+(o.style||"")+' data-lazygrid="'+key+'">'+items.slice(0,n).join("")+"</div>"+lazyFoot(key);
+}
+function lazyFoot(key){
+  const L=LAZY[key], total=L.items.length;
+  if(L.n>=total) return '<div class="lazymore" data-lazyfoot="'+key+'" hidden></div>';
+  return '<div class="lazymore" data-lazyfoot="'+key+'"><span>Showing <b class="mono">'+fmtNum(L.n)+"</b> of <b class=\"mono\">"+
+    fmtNum(total)+"</b> "+L.noun+'</span><button class="pbtn" data-lazystep="'+key+'">Show '+Math.min(L.batch,total-L.n)+
+    ' more</button><button class="pbtn" data-lazyall="'+key+'">Show all '+fmtNum(total)+"</button></div>";
+}
+function lazyShow(key,all){
+  const L=LAZY[key], grid=document.querySelector('[data-lazygrid="'+key+'"]'), foot=document.querySelector('[data-lazyfoot="'+key+'"]');
+  if(!L||!grid||L.n>=L.items.length) return;
+  const to=all?L.items.length:Math.min(L.items.length,L.n+L.batch);
+  grid.insertAdjacentHTML("beforeend",L.items.slice(L.n,to).join(""));
+  L.n=to;
+  if(foot) foot.outerHTML=lazyFoot(key);
+  if(hlCurrent) hlApply(hlCurrent);     // the new cards join any selection in force
+  lazyObserve();
+}
+let lazyIO=null;
+function lazyObserve(){
+  if(lazyIO){ lazyIO.disconnect(); lazyIO=null; }
+  if(typeof IntersectionObserver==="undefined") return;   // the buttons still work
+  const feet=$$(".lazymore:not([hidden])"); if(!feet.length) return;
+  lazyIO=new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting) lazyShow(e.target.getAttribute("data-lazyfoot"),false); }),
+    {rootMargin:"0px 0px 400px 0px"});
+  feet.forEach(el=>lazyIO.observe(el));
 }
 function opt(v,label,cur){ return '<option value="'+esc(v)+'"'+(cur===v?" selected":"")+">"+esc(label)+"</option>"; }
 const ageOf=a=>DAYS-1-a.day;
@@ -5692,7 +5766,7 @@ function paneOverview(){
 
 ## 22. `21-pane-activity.js`
 
-**REBUILD** · 430 lines
+**REBUILD** · 431 lines
 
 Trade activity pane. Every panel is drawn in whichever measure the page is set to — deals and notional, or P&L and margin — from one pass over the book; the measure branches are in `paneActivity` and the toggle that drives them is `setMeasure` in `01-engine.js`. The same pass ranks the desks and builds the trader map: every trader in scope as a tile sized by the measure and grouped by desk. A trader who cannot be drawn — a loss in the P&L view, or a figure too small to see — is listed under the chart rather than dropped.
 
@@ -6081,7 +6155,7 @@ function paneActivity(){
       "<b>"+(isTenor?(allT.length?fmtYrs(median(allT))+" med · "+uniq(allT.map(x=>x.toFixed(2))).length+" tenors":"—")
           :"peak "+(A.metric==="notional"?fmtM(peak):A.metric==="pnl"?fmtK(peak):fmtNum(peak)))+"</b></div>"+
       "</div>";
-  }).join(""):'<div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div>';
+  }):null;
 
   const actLegend=(isTenor?TENOR_BANDS.map(b=>({label:b.label,color:b.color})):act.segs)
     .map(sg=>'<span class="alg"><i style="background:'+sg.color+'"></i>'+esc(sg.label)+"</span>").join("")+
@@ -6114,7 +6188,8 @@ function paneActivity(){
   const activity=panel("Trading activity by trader",
     span+" · "+actRows.length+(actRows.length===1?" trader":" traders")+" · one column per "+A.unit+
       (A.yoy?" · dashed = same period last year":""),
-    actStrip+'<div class="agrid"'+gridStyle+">"+actCards+"</div>",
+    actStrip+(actCards?lazyGrid("act",actCards,{cls:"agrid",style:gridStyle,batch:24,noun:"traders"})
+      :'<div class="agrid"'+gridStyle+'><div class="anodata">No weeks or days match that range. Try clearing it, or widen the numbers.</div></div>'),
     (isTenor
       ? "Each dot is a group of deals at one maturity, sized by how many. A book concentrated on one point of the curve is a row of large dots; a book spread across it is a column of small ones — which is the difference between a trader running a mandate and a trader wandering. The line is their median tenor."
       : "Each chart is one trader's own book, period by period, stacked by asset class.")+
@@ -7025,12 +7100,12 @@ function paneRules(){
       "<span>Upheld <b"+(dec.length-passed?' class="failc"':"")+">"+(dec.length-passed)+"</b></span>"+
       "<span>Explained <b>"+(dec.length?Math.round(passed/dec.length*100):0)+"%</b></span>"+
       '<span style="margin-left:auto">'+spark(months,74,20,SEV_COLOR[r.sev])+"</span></div></div>";
-  }).join("");
+  });
   const filt='<div class="fstrip"><label><span>Category</span><div class="segbtns">'+
     cats.map(c=>'<button data-rulecat="'+esc(c)+'" aria-pressed="'+(state.rules.cat===c)+'">'+(c||"All")+"</button>").join("")+
     "</div></label><div class=\"fspacer\"></div><span class=\"tiny\">"+RULES.length+" rules active · every one evaluated per trader · thresholds shown are the production settings</span></div>";
   return panel("Rule library",RULES.length+" typologies across pricing, conduct, valuation, controls, settlement, financing and information misuse",
-    filt+'<div class="rulegrid">'+cards+"</div>",
+    filt+lazyGrid("rules",cards,{cls:"rulegrid",batch:24,noun:"rules",sig:state.rules.cat}),
     "Each card states the exact test the engine applies, <b>what that test is measured against</b>, the historic outcome, and — on the "+
     "<b>fields chip</b> — every data element the rule reads and the system it has to come from. A typology is only as good as its feed: "+
     "half of these are impossible without an execution timestamp to the second, and a third without reference data nobody currently owns. "+
@@ -7186,7 +7261,7 @@ function paneTraders(){
       '<span class="bar-mini" style="width:100%"><i style="width:'+(r.s.idx/maxIdx*100).toFixed(0)+"%;background:"+c+'"></i></span>'+
       (r.t.arc?'<div class="tiny" style="color:'+c+'">Pattern: '+esc(r.t.arc)+"</div>":'<div class="tiny">No recurring pattern</div>')+
       "</div>";
-  }).join("");
+  });
 
   const pts=rows.map(r=>({
     id:r.t.id, deskId:r.t.deskId, x:r.s.trades, y:r.alerts, r:Math.max(1,r.susp+1), big:r.s.idx>maxIdx*0.5,
@@ -7209,7 +7284,7 @@ function paneTraders(){
     panel("Alerts against volume","bubble size = alerts upheld as suspicious",
       '<div class="panel-body"><div class="chart-well tall">'+bubbleChart(pts,{w:600,h:300})+"</div></div>",
       "A name sitting high and to the left alerts more than its trading volume explains. <b>Hover a bubble</b> to light that trader everywhere, <b>click</b> for the trader file.")+
-    panel("Detection heatmap","trader × rule · the Overview matrix transposed · full 12 months",
+    panel("Detection heatmap","trader × rule · the "+top.length+" names with the most alerts · full 12 months",
       '<div class="matwrap tallmat" style="padding-top:2px"><table class="matrix"><thead><tr><th class="rowhd"></th>'+
       RULES.map(r=>'<th class="colhd" data-hlsrc="rule|'+r.id+'" data-hlpin="1" data-tip="'+esc(r.name)+'" data-tipsub="'+esc(r.cat)+
         '"><div>'+r.id+" "+esc(r.name.slice(0,20))+"</div></th>").join("")+"</tr></thead><tbody>"+
@@ -7265,7 +7340,7 @@ function paneTraders(){
 
   return rowA+'<div class="mt14">'+panel("Trader risk index",
     "12 months · severity-weighted alerts per 100 of the trader's own deals · "+rows.length+" traders",
-    '<div class="tgrid">'+cards+"</div>",
+    lazyGrid("traders",cards,{cls:"tgrid",batch:25,noun:"traders"}),
     "The index weights each alert by severity and divides by the trader's own deal count, so it ranks behaviour rather than busyness. "+
     "<b>Versus cohort</b> restates it against the median of the same grade doing the same kind of work — the comparison a desk head asks for first.")+"</div>"+
     '<div class="mt14">'+tbl+"</div>";
@@ -7383,7 +7458,7 @@ function paneLog(){
 
 ## 29. `28-drawer.js`
 
-**REBUILD / PORT** · 262 lines
+**REBUILD / PORT** · 268 lines
 
 The alert case file: evidence table, market context, trader control profile, audit trail and the disposition form. The structure of what a reviewer is shown is worth porting even if the markup is not.
 
@@ -7475,16 +7550,16 @@ function alertFindingHTML(a){
       a.evidence.map(e=>'<div class="ek">'+esc(e.k)+'</div><div class="ev'+(e.bad?" bad":"")+'">'+esc(e.v)+"</div>").join("")+
       "</div></div>"+
 
-    '<div class="block"><div class="lbl">Deals in this alert</div><div class="dwrap"><table class="dtable"><thead><tr>'+
-      "<th>Trade</th><th>Date / time</th><th>Product</th><th>Instrument</th><th>Dir</th><th class=\"r\">Notional</th>"+
-      "<th class=\"r\">Price</th><th class=\"r\">Mid</th><th class=\"r\">Dev bps</th><th>Counterparty</th>"+revHead+"<th>Status</th></tr></thead><tbody>"+
-      trades.map(t=>'<tr class="flag"><td class="mono"><a href="#" data-trade="'+t.id+'">'+t.id+"</a></td>"+
+    '<div class="block"><div class="lbl">Deals in this alert</div>'+localPaged("al-deals",trades,{per:25,
+      head:"<th>Trade</th><th>Date / time</th><th>Product</th><th>Instrument</th><th>Dir</th><th class=\"r\">Notional</th>"+
+      "<th class=\"r\">Price</th><th class=\"r\">Mid</th><th class=\"r\">Dev bps</th><th>Counterparty</th>"+revHead+"<th>Status</th>",
+      row:t=>'<tr class="flag"><td class="mono"><a href="#" data-trade="'+t.id+'">'+t.id+"</a></td>"+
         '<td class="mono">'+fmtDateShort(t.date)+" "+fmtTime(t.execMin)+"</td><td>"+esc(t.product)+"</td><td>"+esc(t.instrument)+"</td>"+
         "<td>"+esc(t.dir)+'</td><td class="r mono">'+fmtM(t.notional)+'</td><td class="r mono">'+t.px.toFixed(t.dp)+"</td>"+
         '<td class="r mono muted">'+t.mktPx.toFixed(t.dp)+'</td><td class="r mono '+(Math.abs(t.devBps)>25?"failc":"")+'">'+
         (t.devBps>0?"+":"")+t.devBps.toFixed(1)+"</td><td>"+esc(t.ctpy)+"</td>"+revCell(t)+
-        '<td><span class="tag '+(t.status==="Cancelled"?"t-muted":t.status==="Amended"?"t-warn":t.status==="Live"?"t-run":"t-pass")+'">'+t.status+"</span></td></tr>").join("")+
-      "</tbody></table></div></div>";
+        '<td><span class="tag '+(t.status==="Cancelled"?"t-muted":t.status==="Amended"?"t-warn":t.status==="Live"?"t-run":"t-pass")+'">'+t.status+"</span></td></tr>"})+
+      "</div>";
 }
 function alertDrawer(a){
   drawerAlert=a;
@@ -7606,13 +7681,20 @@ function tradeDrawer(t){
         "<td>"+sevTag(a.sev)+'</td><td class="mono">'+esc(a.dateStr)+"</td><td>"+statusTag(a.status)+"</td>"+
         '<td style="white-space:normal">'+esc(a.summary)+"</td></tr>").join("")+"</tbody></table></div></div>"
       :'<div class="block"><div class="lbl">Alerts referencing this deal</div><p class="narr">None. This deal passed all '+RULES.length+' detection rules.</p></div>')+
-    '<div class="block"><div class="lbl">Same trader, same day</div><div class="dwrap"><table class="dtable"><thead><tr>'+
-      "<th>Trade</th><th>Time</th><th>Product</th><th>Dir</th><th class=\"r\">Notional</th><th class=\"r\">Dev bps</th><th>Counterparty</th></tr></thead><tbody>"+
-      (byTraderDay.get(t.traderId+"|"+t.dayIdx)||[]).slice(0,25).sort((a,b)=>a.execMin-b.execMin)
-        .map(x=>'<tr'+(x.id===t.id?' class="flag"':"")+'><td class="mono"><a href="#" data-trade="'+x.id+'">'+x.id+'</a></td><td class="mono">'+fmtTime(x.execMin)+"</td>"+
-          "<td>"+esc(x.product)+"</td><td>"+esc(x.dir)+'</td><td class="r mono">'+fmtM(x.notional)+
-          '</td><td class="r mono '+(Math.abs(x.devBps)>25?"failc":"")+'">'+(x.devBps>0?"+":"")+x.devBps.toFixed(1)+"</td><td>"+esc(x.ctpy)+"</td></tr>").join("")+
-      "</tbody></table></div></div>");
+    (function(){
+      /* The whole day in time order, then paged — opening on the page that holds
+         this deal. Cutting the day to a fixed count before sorting it could leave
+         out the very deal the drawer is about. */
+      const day=(byTraderDay.get(t.traderId+"|"+t.dayIdx)||[]).slice().sort((a,b)=>a.execMin-b.execMin);
+      const at=Math.max(0,day.findIndex(x=>x.id===t.id));
+      return '<div class="block"><div class="lbl">Same trader, same day · '+fmtNum(day.length)+(day.length===1?" deal":" deals")+"</div>"+
+        localPaged("tr-sameday",day,{per:25,page:Math.floor(at/25),
+          head:"<th>Trade</th><th>Time</th><th>Product</th><th>Dir</th><th class=\"r\">Notional</th><th class=\"r\">Dev bps</th><th>Counterparty</th>",
+          row:x=>'<tr'+(x.id===t.id?' class="flag"':"")+'><td class="mono"><a href="#" data-trade="'+x.id+'">'+x.id+'</a></td><td class="mono">'+fmtTime(x.execMin)+"</td>"+
+            "<td>"+esc(x.product)+"</td><td>"+esc(x.dir)+'</td><td class="r mono">'+fmtM(x.notional)+
+            '</td><td class="r mono '+(Math.abs(x.devBps)>25?"failc":"")+'">'+(x.devBps>0?"+":"")+x.devBps.toFixed(1)+"</td><td>"+esc(x.ctpy)+"</td></tr>"})+
+        "</div>";
+    })());
 }
 
 /* ---- Trader file ---- */
@@ -7642,12 +7724,11 @@ function traderDrawer(tr){
     (byRule.length?'<div class="block"><div class="lbl">Typologies triggered</div><div class="chart-well" style="height:'+Math.min(240,byRule.length*24+14)+'px">'+
       hbars(byRule.map(x=>({label:x.r.id+" "+x.r.name.slice(0,30),v:x.n,color:SEV_COLOR[x.r.sev],click:'data-ruleclick="'+x.r.id+'"'})),{w:520,rowH:22,labW:220})+
       "</div></div>":"")+
-    '<div class="block"><div class="lbl">Alerts</div><div class="dwrap"><table class="dtable"><thead><tr>'+
-      "<th>Alert</th><th>Date</th><th>Rule</th><th>Sev</th><th class=\"r\">Notional</th><th>Status</th><th>Pattern</th></tr></thead><tbody>"+
-      mine.slice(0,40).map(a=>'<tr><td class="mono"><a href="#" data-alert="'+a.id+'">'+a.id+'</a></td><td class="mono">'+fmtDateShort(a.date)+"</td>"+
+    '<div class="block"><div class="lbl">Alerts · most recent first</div>'+localPaged("tr-alerts",mine,{per:25,
+      head:"<th>Alert</th><th>Date</th><th>Rule</th><th>Sev</th><th class=\"r\">Notional</th><th>Status</th><th>Pattern</th>",
+      row:a=>'<tr><td class="mono"><a href="#" data-alert="'+a.id+'">'+a.id+'</a></td><td class="mono">'+fmtDateShort(a.date)+"</td>"+
         "<td>"+a.ruleId+"</td><td>"+sevTag(a.sev)+'</td><td class="r mono">'+fmtM(a.notional)+"</td><td>"+statusTag(a.status)+"</td>"+
-        '<td style="white-space:normal">'+esc(a.summary)+"</td></tr>").join("")+"</tbody></table></div>"+
-      (mine.length>40?'<div class="tiny" style="margin-top:8px">Showing the 40 most recent of '+mine.length+" alerts.</div>":"")+"</div>");
+        '<td style="white-space:normal">'+esc(a.summary)+"</td></tr>"})+"</div>");
 }
 ```
 
@@ -7728,7 +7809,7 @@ function closeMsel(){
 
 ## 31. `30-render.js`
 
-**SUPPORT** · 62 lines
+**SUPPORT** · 63 lines
 
 Pane dispatch.
 
@@ -7751,6 +7832,7 @@ function render(){
   // re-attached to the new nodes and its aggregate cache re-cut to the rail.
   hlRefresh();
   if(state.tab==="timeseries") tsDraw();
+  lazyObserve();
 }
 /* One place to move the review period. A drill that widens the window and leaves
    the rail's select behind makes the sidebar lie about what the numbers cover, so
@@ -7798,7 +7880,7 @@ function goTimeSeriesCase(alertId){
 
 ## 32. `31-events.js`
 
-**REBUILD** · 233 lines
+**REBUILD** · 238 lines
 
 One delegated listener for the whole page; defines every interaction.
 
@@ -7862,6 +7944,10 @@ function handleChrome(t,e){
   const br=t.closest("[data-brange]"); if(br){ const n=+br.dataset.brange;
     state.blot.from=isoDate(dateAt(n-1)); state.blot.to=isoDate(TODAY); state.blot.page=0; render(); return true; }
   const srt=t.closest("[data-sortt]"); if(srt){ toggleSort(srt.dataset.sortt,srt.dataset.sortk); render(); return true; }
+  const lpg=t.closest("[data-lpage]");
+  if(lpg){ const p=lpg.dataset.lpage.split("|"); if(LPAGE[p[0]]){ LPAGE[p[0]].page=+p[1]; localPagedRedraw(p[0]); } return true; }
+  const lst=t.closest("[data-lazystep]"); if(lst){ lazyShow(lst.dataset.lazystep,false); return true; }
+  const lal=t.closest("[data-lazyall]"); if(lal){ lazyShow(lal.dataset.lazyall,true); return true; }
   const pg=t.closest("[data-page]"); if(pg){ const p=pg.dataset.page.split("|"); state[p[0]].page=+p[1]; render();
     window.scrollTo({top:document.body.scrollHeight*0.35,behavior:"instant"}); return true; }
   if(t.closest("#d-clear")){ Object.assign(state.det,{rule:"",cat:"",status:"",trader:"",search:"",openOnly:false,page:0}); render(); return true; }
@@ -7994,6 +8080,7 @@ document.addEventListener("change",e=>{
     if(t.checked) set.add(p[1]); else set.delete(p[1]);
     refreshMselBtn(p[0]); render(); return; }
   const per=t.dataset.per; if(per){ state[per].per=+t.value; state[per].page=0; render(); return; }
+  const lper=t.dataset.lper; if(lper&&LPAGE[lper]){ LPAGE[lper].per=+t.value; LPAGE[lper].page=0; localPagedRedraw(lper); return; }
   const map={"d-rule":["det","rule"],"d-cat":["det","cat"],"d-status":["det","status"],"d-trader":["det","trader"],
     "b-ac":["blot","ac"],"b-product":["blot","product"],"b-desk":["blot","desk"],"b-trader":["blot","trader"],
     "b-dir":["blot","dir"],"b-from":["blot","from"],"b-to":["blot","to"],"l-status":["log","status"]};
@@ -8344,6 +8431,11 @@ rect.hlmark-svg,rect.hlshare{opacity:0;transition:opacity .12s ease;pointer-even
 .pbtn:hover:not(:disabled){border-color:var(--brand);color:var(--ink)}
 .pbtn:disabled{opacity:.4;cursor:not-allowed}
 .pbtn.on{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.block .pager{padding:8px 0 0;margin-top:8px}
+/* The foot of a card grid that loads in batches. */
+.lazymore{display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 16px 14px;
+  font-size:0.71875rem;color:var(--ink-3);flex-wrap:wrap}
+.lazymore[hidden]{display:none}
 
 /* ---- Severity + score chips ---- */
 .sev{display:inline-flex;align-items:center;gap:5px;font-size:0.59375rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}

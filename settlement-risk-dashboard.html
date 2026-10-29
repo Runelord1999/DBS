@@ -352,6 +352,13 @@ tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:var(--pane
 .muted{color:var(--ink-3)}
 .foot{padding:10px 16px;border-top:1px solid var(--hair);font-size:0.6875rem;color:var(--ink-3);line-height:1.55}
 .foot b{color:var(--gold)}
+/* The pager under every table that can outgrow a screen. */
+.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid var(--hair);font-size:0.71875rem;color:var(--ink-3);flex-wrap:wrap}
+.pager .pbtns{display:flex;gap:4px;align-items:center}
+.pbtn{border:1px solid var(--hair);border-radius:6px;padding:4px 10px;font-size:0.6875rem;font-weight:700;color:var(--ink-2);background:var(--panel)}
+.pbtn:hover:not(:disabled){border-color:var(--brand);color:var(--ink)}
+.pbtn:disabled{opacity:.4;cursor:not-allowed}
+.pbtn.on{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 .tfoot td{font-weight:700;color:var(--ink);background:var(--panel-2);border-top:1px solid var(--hair)}
 .bar-mini{height:6px;border-radius:3px;background:var(--hair);overflow:hidden;min-width:60px;display:inline-block;vertical-align:middle}
 .bar-mini i{display:block;height:100%;border-radius:3px}
@@ -1400,6 +1407,43 @@ const SORTS={
   tests:{key:"id",dir:1},
   allcarve:{key:"customer",dir:1},
 };
+/* ============================================================
+   Shared paging engine. Every table that can outgrow a screen is paged.
+   A table is filtered and sorted in full first and only then cut to a page,
+   so every count, total and highlight on the page describes all the matching
+   rows, never just the visible ones — and nothing is cut off without a way to
+   reach it. pageOf() returns the rows for the current page; pagerBar() draws
+   the control beneath the table.
+============================================================ */
+const PER_OPTS=[10,25,50,100,250];
+const PAGES=Object.create(null);
+function pageOf(key,rows,dflt,idOf){
+  const P=PAGES[key]||(PAGES[key]={page:0,per:dflt,dflt});
+  // The same list in the same order keeps its page. A different filter,
+  // search, sort or a new row changes the list's signature, and the table
+  // starts again at page one, where the reader can see what changed.
+  const sig=rows.length+"|"+(rows.length?idOf(rows[0])+"|"+idOf(rows[rows.length-1]):"");
+  if(P.sig!==sig){ P.sig=sig; P.page=0; }
+  const pages=Math.max(1,Math.ceil(rows.length/P.per));
+  P.page=Math.max(0,Math.min(P.page,pages-1));
+  P.total=rows.length;
+  return rows.slice(P.page*P.per,(P.page+1)*P.per);
+}
+// A table that fits inside its default page shows no pager. Once the reader
+// picks another page size the control stays, so they can always pick it back.
+function pagerBar(key,total){
+  const P=PAGES[key]; if(!P) return "";
+  const n=total==null?P.total:total, per=P.per;
+  if(!n||(n<=per&&per===P.dflt)) return "";
+  const pages=Math.max(1,Math.ceil(n/per)), p=Math.min(P.page,pages-1);
+  const from=p*per+1, to=Math.min(n,(p+1)*per);
+  const btn=(i,label,dis)=>`<button type="button" class="pbtn${label==null&&i===p?" on":""}" data-pg="${key}|${i}"${dis?" disabled":""}${label==null&&i===p?' aria-current="page"':""}>${label==null?i+1:label}</button>`;
+  let nums="",last=-1;
+  for(let i=0;i<pages;i++) if(i<2||i>pages-3||Math.abs(i-p)<=1){ if(i-last>1) nums+=`<span class="muted" style="padding:0 3px">…</span>`; nums+=btn(i); last=i; }
+  return `<div class="pager"><span>Showing <b class="num">${from.toLocaleString()}–${to.toLocaleString()}</b> of <b class="num">${n.toLocaleString()}</b></span>`+
+    `<div class="pbtns">${btn(Math.max(0,p-1),"Prev",p===0)}${nums}${btn(Math.min(pages-1,p+1),"Next",p>=pages-1)}</div>`+
+    `<label class="muted" style="display:flex;align-items:center;gap:6px">Rows <select class="mini-sel" data-pgper="${key}">${PER_OPTS.map(x=>`<option value="${x}"${x===per?" selected":""}>${x}</option>`).join("")}</select></label></div>`;
+}
 const TEXT_KEYS=new Set(["name","customer","segment","country","label","scope","product","assetClass","limitType","status","id","threshold","purpose","requester","approver"]);
 function sortTh(table,key,label,cls=""){
   const s=SORTS[table];
@@ -2530,8 +2574,7 @@ function paneCustomers(){
   const keyed=rows.map(c=>({c,k:val(c)}));
   keyed.sort((a,b)=>(typeof a.k==="string") ? a.k.localeCompare(b.k)*dir : (a.k-b.k)*dir);
   const allRows=keyed.map(o=>o.c);
-  const CUST_ROW_CAP=300;
-  const shownRows=allRows.slice(0,CUST_ROW_CAP);
+  const shownRows=pageOf("customers",allRows,50,c=>c.id);
   const th=(k,l,cls="")=>`<th class="${cls} sortable${key===k?" sorted":""}" data-sort="${k}">${l}<span class="sortcaret">${key===k?(dir<0?"▼":"▲"):"↕"}</span></th>`;
   return `<div class="panel"><div class="panel-hd">
       <h3>Customer limits &amp; utilization</h3>
@@ -2544,7 +2587,7 @@ function paneCustomers(){
       const s=custStats(c); const [lbl,cls]=custStatusTag(c);
       return `<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}${c.rank?`<div class="muted" style="font-size:.6875rem">Global rank #${c.rank}</div>`:""}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num">${fmtPct(s.avg)}</td><td class="r num">${fmtPct(s.max)}</td><td class="r num">${fmtPct(s.min)}</td><td class="r num">${fmtPct(custUtilCur(c))}</td><td class="r"><span class="tag ${cls}">${lbl}</span></td></tr>`;
     }).join("")}</tbody></table>
-    ${allRows.length>shownRows.length?`<div class="foot">Showing ${shownRows.length} of ${allRows.length.toLocaleString()} customers in this sort order — search or narrow the filters to reach the rest.</div>`:""}</div>`;
+    ${pagerBar("customers")}</div>`;
 }
 
 /* ============================================================
@@ -2565,7 +2608,7 @@ function paneBlotter(){
     id:t=>t.id, date:t=>t.date.getTime(), customer:t=>t.customer.name, assetClass:t=>t.assetClass,
     product:t=>t.product, notional:t=>t.notionalM, sr:t=>t.srConsumedM, limitType:t=>t.limitType, status:t=>t.status,
   });
-  const shown=sorted.slice(0,120);
+  const shown=pageOf("blotter",sorted,50,t=>t.id);
   return `<div class="kpis kpis-4">
     <div class="kpi" style="--accent:var(--run)"><div class="eyebrow">Trades<i class="info" data-tip="Trade count in the selected date range, after the sidebar filters. Change the range with the Date range selector in the sidebar.">i</i></div><b class="num runc">${rows.length.toLocaleString()}</b><small>last ${days} days</small></div>
     <div class="kpi" style="--accent:var(--agent)"><div class="eyebrow">Total notional<i class="info" data-tip="Total traded notional across the filtered blotter.">i</i></div><b class="num tealc">${fmtM(totalNotional)}</b><small>across all asset classes</small></div>
@@ -2576,7 +2619,7 @@ function paneBlotter(){
   <div class="panel mt14"><div class="panel-hd"><h3>Transaction blotter</h3><span class="slo">${rows.length.toLocaleString()} trades · last ${days} days · click any column to sort</span><div>${chips}</div></div>
     <div class="table-wrap"><table><thead><tr>${sortTh("blotter","id","Trade ID")}${sortTh("blotter","date","Date")}${sortTh("blotter","customer","Customer")}${sortTh("blotter","assetClass","Asset class")}${sortTh("blotter","product","Product")}${sortTh("blotter","notional","Notional","r")}${sortTh("blotter","sr","SR consumed","r")}${sortTh("blotter","limitType","Limit type")}${sortTh("blotter","status","Status","r")}</tr></thead>
     <tbody>${shown.map(t=>`<tr class="clickable" data-cust="${t.customer.id}"><td class="mono">${t.id}</td><td class="muted">${fmtDate(t.date)}</td><td>${esc(t.customer.name)}</td><td class="muted">${t.assetClass}</td><td class="muted">${t.product}</td><td class="r num">${fmtM(t.notionalM)}</td><td class="r num failc">${fmtM(t.srConsumedM)}</td><td class="muted">${t.limitType}</td><td class="r"><span class="tag ${t.status==='Settled'?'t-pass':t.status==='Pending'?'t-warn':'t-fail'}">${t.status}</span></td></tr>`).join("")}</tbody></table>
-    ${rows.length>shown.length?`<div class="foot">Showing ${shown.length} of ${rows.length.toLocaleString()} trades in this sort order — narrow the date range or filters to see fewer.</div>`:""}</div>`;
+    ${pagerBar("blotter")}</div>`;
 }
 
 /* ============================================================
@@ -2607,12 +2650,12 @@ function paneRankings(){
   </div>
   <div class="panel mt14"><div class="panel-hd"><h3>Limit breach alerts<i class="info" data-tip="Customers currently drawing more than 100% of their approved SR limit.">i</i></h3><span class="slo">${breaches.length} customers over 100% utilization</span></div>
     ${breaches.length?`<table><thead><tr><th>Customer</th><th>Segment</th><th>Country</th><th class="r">Limit</th><th class="r">Current util.</th><th class="r">Excess</th></tr></thead>
-    <tbody>${breaches.map(c=>`<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num failc">${fmtPct(custUtilCur(c))}</td><td class="r num failc">${fmtM((custUtilCur(c)-1)*c.limitM)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">No customers currently over 100% of their SR limit.</div>`}</div>
+    <tbody>${pageOf("breach",breaches,25,c=>c.id).map(c=>`<tr class="clickable" data-cust="${c.id}"><td>${esc(c.name)}</td><td class="muted">${SEGMENT_LABEL[c.segment]}</td><td class="muted">${c.country}</td><td class="r num">${fmtM(c.limitM)}</td><td class="r num failc">${fmtPct(custUtilCur(c))}</td><td class="r num failc">${fmtM((custUtilCur(c)-1)*c.limitM)}</td></tr>`).join("")}</tbody></table>${pagerBar("breach")}`:`<div class="empty">No customers currently over 100% of their SR limit.</div>`}</div>
   <div class="panel mt14"><div class="panel-hd"><h3>Carve-out threshold alerts<i class="info" data-tip="Carve-outs whose drawn amount has crossed the % or amount threshold set for them in the SR Carve-Outs tab.">i</i></h3><span class="slo">${custThresholdAlerts.length} breached of ${CARVEOUTS.length} configured</span></div>
     ${custThresholdAlerts.length?`<table><thead><tr><th>Customer</th><th>Scope</th><th>Label</th><th class="r">Carve-out</th><th class="r">Drawn</th><th class="r">Util.</th><th>Alert at</th></tr></thead>
-    <tbody>${custThresholdAlerts.slice(0,40).map(a=>{const up=carveUtilPct(a.co);
+    <tbody>${pageOf("thresh",custThresholdAlerts,25,a=>a.co.id).map(a=>{const up=carveUtilPct(a.co);
       return `<tr class="clickable" data-carvecust="${a.c.id}"><td>${esc(a.c.name)}</td><td><span class="tag ${a.co.scope==='country'?'t-run':'t-violet'}">${CARVE_SCOPES[a.co.scope].label}</span></td><td class="muted">${esc(a.co.label)}</td><td class="r num">${fmtM(a.co.amountM)}</td><td class="r num failc">${fmtM(carveDrawn(a.co))}</td><td class="r num ${up>=1?'failc':'warnc'}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(a.co)}</td></tr>`;}).join("")}</tbody></table>
-    ${custThresholdAlerts.length>40?`<div class="foot">Showing 40 of ${custThresholdAlerts.length} breached carve-outs.</div>`:""}`:`<div class="empty">No carve-out thresholds currently breached in this view.</div>`}</div>`;
+    ${pagerBar("thresh")}`:`<div class="empty">No carve-out thresholds currently breached in this view.</div>`}</div>`;
 }
 
 /* ============================================================
@@ -2666,10 +2709,10 @@ function carveScopeTable(c,scope){
   const reservedTotal=list.reduce((a,co)=>a+carveReservedM(co),0);
   return `<div class="panel"><div class="panel-hd"><h3>${meta.label} carve-outs<i class="info" data-tip="Each row allocates part of ${esc(c.name)}'s ${fmtM(c.limitM)} SR limit to one ${meta.label.toLowerCase()} label. Reserved is the part of that slice held today for an expected deal — approved but not yet drawn, and not available to anything else.">i</i></h3><span class="slo">${list.length} allocated · ${fmtM(allocated)} of ${fmtM(c.limitM)}</span></div>
     ${list.length?`<div class="table-wrap"><table><thead><tr>${sortTh("carveouts","label",meta.label)}${sortTh("carveouts","amount","Carve-out","r")}${sortTh("carveouts","share","% of limit","r")}${sortTh("carveouts","drawn","Drawn","r")}${sortTh("carveouts","reserved","Reserved","r")}${sortTh("carveouts","util","Util.","r")}${sortTh("carveouts","threshold","Alert at")}<th class="r"></th></tr></thead>
-    <tbody>${rows.map(co=>{const up=carveUtilPct(co);const br=carveThresholdBreached(co);
+    <tbody>${pageOf("carve-"+scope,rows,25,co=>co.id).map(co=>{const up=carveUtilPct(co);const br=carveThresholdBreached(co);
       const rsv=carveReservedM(co);
       return `<tr><td>${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num muted">${(co.amountM/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${rsv>0?'gold':'muted'}"${rsv>0?` data-tip="${esc(reservesForCarve(co.id).filter(rsvHoldsToday).map(r=>r.id+" · "+fmtM(r.amountM)+" · "+r.purpose+" (to "+r.to+")").join(" — "))}"`:''}>${rsv>0?fmtM(rsv):"—"}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted" style="font-size:0.71875rem">${carveThresholdLabel(co)} ${br?'<span class="tag t-fail" style="margin-left:4px">Breached</span>':''}</td><td class="r"><button class="xbtn" data-delco="${co.id}" data-tip="Remove this carve-out" aria-label="Remove ${esc(co.label)} carve-out">&times;</button></td></tr>`;}).join("")}</tbody>
-    <tfoot class="tfoot"><tr><td>Allocated</td><td class="r num">${fmtM(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(list.reduce((a,co)=>a+carveDrawn(co),0))}</td><td class="r num ${reservedTotal>0?'gold':'muted'}">${reservedTotal>0?fmtM(reservedTotal):"—"}</td><td class="r num" colspan="3">Unallocated headroom: <b class="${remaining<0?'failc':'passc'}">${fmtM(remaining)}</b></td></tr></tfoot></table></div>`
+    <tfoot class="tfoot"><tr><td>Allocated</td><td class="r num">${fmtM(allocated)}</td><td class="r num">${(allocated/c.limitM*100).toFixed(0)}%</td><td class="r num failc">${fmtM(list.reduce((a,co)=>a+carveDrawn(co),0))}</td><td class="r num ${reservedTotal>0?'gold':'muted'}">${reservedTotal>0?fmtM(reservedTotal):"—"}</td><td class="r num" colspan="3">Unallocated headroom: <b class="${remaining<0?'failc':'passc'}">${fmtM(remaining)}</b></td></tr></tfoot></table></div>${pagerBar("carve-"+scope)}`
     :`<div class="empty">No ${meta.label.toLowerCase()} carve-outs for this customer yet — add one above.</div>`}</div>`;
 }
 function paneCarveouts(){
@@ -2687,12 +2730,13 @@ function paneCarveouts(){
     const all=applySort(CARVEOUTS,"allcarve",{
       customer:co=>(CUST_BY_ID[co.customerId]||{}).name||"", scope:co=>CARVE_SCOPES[co.scope].label, label:co=>co.label,
       amount:co=>co.amountM, drawn:co=>carveDrawn(co), util:co=>carveUtilPct(co), created:co=>co.created,
-    }).slice(0,60);
+    });
+    const allPage=pageOf("allcarve",all,25,co=>co.id);
     return picker+`<div class="panel"><div class="panel-hd"><h3>All carve-outs</h3><span class="slo">${CARVEOUTS.length} across ${new Set(CARVEOUTS.map(x=>x.customerId)).size} customers · click any column to sort</span></div>
       <div class="table-wrap"><table><thead><tr>${sortTh("allcarve","customer","Customer")}${sortTh("allcarve","scope","Scope")}${sortTh("allcarve","label","Label")}${sortTh("allcarve","amount","Carve-out","r")}${sortTh("allcarve","drawn","Drawn","r")}${sortTh("allcarve","util","Util.","r")}${sortTh("allcarve","created","Created")}</tr></thead>
-      <tbody>${all.map(co=>{const cu=CUST_BY_ID[co.customerId];const up=carveUtilPct(co);
+      <tbody>${allPage.map(co=>{const cu=CUST_BY_ID[co.customerId];const up=carveUtilPct(co);
         return `<tr class="clickable" data-carvecust="${co.customerId}"><td>${cu?esc(cu.name):"—"}</td><td><span class="tag ${co.scope==='country'?'t-run':'t-violet'}">${CARVE_SCOPES[co.scope].label}</span></td><td class="muted">${esc(co.label)}</td><td class="r num">${fmtM(co.amountM)}</td><td class="r num failc">${fmtM(carveDrawn(co))}</td><td class="r num ${up>=1?'failc':up>=0.75?'warnc':''}">${fmtPct(up)}</td><td class="muted">${co.created}</td></tr>`;}).join("")}</tbody></table></div>
-      ${CARVEOUTS.length>60?`<div class="foot">Showing 60 of ${CARVEOUTS.length} — pick a customer above to see just theirs.</div>`:""}</div>`;
+      ${pagerBar("allcarve")}</div>`;
   }
 
   const scope=state.carveScope, meta=CARVE_SCOPES[scope];
@@ -2819,7 +2863,7 @@ function requestsTable(){
         ${fc(`<select class="fin" id="rqf-status"><option value="">All</option>${["Pending","Approved","Rejected"].map(t=>`<option value="${t}"${f.status===t?" selected":""}>${t}</option>`).join("")}</select>`)}
         <th class="fcell"></th>
       </tr></thead>
-    <tbody>${sorted.length?sorted.map(rq=>{
+    <tbody>${sorted.length?pageOf("requests",sorted,25,rq=>rq.id).map(rq=>{
       const c=CUST_BY_ID[rq.customerId];
       const cls=rq.status==="Approved"?"t-pass":rq.status==="Rejected"?"t-fail":"t-warn";
       const cur=+rq.current||0, nl=+rq.newLimit||0, up=cur>0?(nl-cur)/cur:0;
@@ -2837,7 +2881,7 @@ function requestsTable(){
         <td class="muted">${esc(rq.decided||"—")}</td>
         <td><span class="tag ${cls}">${rq.status}</span></td>
         <td class="r">${rq.status==="Pending"?`<button class="btn-ghost" data-reqapprove="${esc(rq.id)}">Approve</button> <button class="btn-ghost btn-danger" data-reqreject="${esc(rq.id)}">Reject</button>`:""}</td></tr>`;
-    }).join(""):`<tr><td colspan="13"><div class="empty">No requests match these filters.</div></td></tr>`}</tbody></table></div></div>`;
+    }).join(""):`<tr><td colspan="13"><div class="empty">No requests match these filters.</div></td></tr>`}</tbody></table></div>${pagerBar("requests",sorted.length)}</div>`;
 }
 
 /* ============================================================
@@ -3024,7 +3068,7 @@ function reservesTable(){
         ${fc(`<select class="fin" id="rvf-status"><option value="">All</option>${["Pending","Approved","Rejected"].map(t=>`<option value="${t}"${f.status===t?" selected":""}>${t}</option>`).join("")}</select>`)}
         <th class="fcell"></th>
       </tr></thead>
-    <tbody>${sorted.length?sorted.slice(0,300).map(r=>{
+    <tbody>${sorted.length?pageOf("reserves",sorted,25,r=>r.id).map(r=>{
       const c=CUST_BY_ID[r.customerId];
       const cls=r.status==="Approved"?"t-pass":r.status==="Rejected"?"t-fail":"t-warn";
       const win=rsvWindow(r);
@@ -3047,7 +3091,7 @@ function reservesTable(){
         <td class="r">${r.status==="Pending"?`<button class="btn-ghost" data-rsvapprove="${esc(r.id)}">Approve</button> <button class="btn-ghost btn-danger" data-rsvreject="${esc(r.id)}">Reject</button>`
           :(r.status==="Approved"&&r.toDay>=0?`<button class="btn-ghost btn-danger" data-rsvrelease="${esc(r.id)}">Release</button>`:"")}</td></tr>`;
     }).join(""):`<tr><td colspan="14"><div class="empty">No reserve requests match these filters.</div></td></tr>`}</tbody></table></div>
-    ${sorted.length>300?`<div class="foot">Showing 300 of ${sorted.length.toLocaleString()} in this sort order.</div>`:""}</div>`;
+    ${pagerBar("reserves",sorted.length)}</div>`;
 }
 
 /* ============================================================
@@ -3223,7 +3267,7 @@ const DOC_SECTIONS=[
     {id:"d-viz-charts", t:"8.3 Chart inventory"}]},
   {id:"d-interact", t:"9 · Interaction patterns", kids:[
     {id:"d-int-highlight", t:"9.1 Data Highlight"},
-    {id:"d-int-sort", t:"9.2 Sorting"},
+    {id:"d-int-sort", t:"9.2 Sorting and paging"},
     {id:"d-int-drawer", t:"9.3 Customer drawer"},
     {id:"d-int-drill", t:"9.4 Drill-down & pivot"}]},
   {id:"d-algo", t:"10 · Algorithm reference", kids:[
@@ -3825,17 +3869,17 @@ function paneDocs(){
 
   <h3 id="d-tab-customers">7.2 Customers</h3>
   <p>The full list: customer, segment, country, SR limit, average, maximum and minimum utilization over the selected range, current utilization and a status tag. Every column sorts. A name search filters as you type, putting the cursor back where it was after each redraw.</p>
-  <p>Sort values are worked out once per row before sorting rather than inside the comparison itself — a comparison function gets called many times over, and each of these values scans ${HIST_DAYS} days of history. The table draws at most 300 rows and says how many it is showing; the search box and the rail filters are how you reach the rest.</p>
+  <p>Sort values are worked out once per row before sorting rather than inside the comparison itself — a comparison function gets called many times over, and each of these values scans ${HIST_DAYS} days of history. The table is paged, 50 customers to a page by default: every customer is reachable, the pager states the range shown and the total, and the search box and rail filters narrow the list.</p>
 
   <h3 id="d-tab-blotter">7.3 Transaction Blotter</h3>
-  <p>SR consumption by asset class, then the trade list itself for the selected date range: trade id, date, customer, asset class, product, notional, SR consumed, limit type and status. Asset-class chips filter the list and every column sorts. It shows 120 rows at a time, from the top of whatever sort order is active.</p>
+  <p>SR consumption by asset class, then the trade list itself for the selected date range: trade id, date, customer, asset class, product, notional, SR consumed, limit type and status. Asset-class chips filter the list and every column sorts. It is paged, 50 trades to a page by default, in whatever sort order is active.</p>
 
   <h3 id="d-tab-rankings">7.4 Rankings &amp; Alerts</h3>
   <ul>
     <li><b>Nearest to 100% utilization</b> — the top 25. The queue for a pre-emptive limit review.</li>
     <li><b>Longest period with zero utilization</b> — the top 25 dormant limits, by how many consecutive days they have sat at zero.</li>
-    <li><b>Limit breach alerts</b> — every customer currently over 100%, with the excess amount. Not capped.</li>
-    <li><b>Carve-out threshold alerts</b> — carve-outs whose drawn amount has crossed the threshold set for them, worst first, showing the first 40.</li>
+    <li><b>Limit breach alerts</b> — every customer currently over 100%, with the excess amount. Every one is listed, 25 to a page.</li>
+    <li><b>Carve-out threshold alerts</b> — carve-outs whose drawn amount has crossed the threshold set for them, worst first, 25 to a page.</li>
   </ul>
 
   <h3 id="d-tab-carveouts">7.5 SR Carve-Outs</h3>
@@ -3906,7 +3950,7 @@ function paneDocs(){
     <li>Inside the two automated views, a row of <b>suite chips</b> narrows the table, and a chip turns red with a count when that suite has failures — so a failing suite is visible without reading the table.</li>
     <li>The <b>Run</b> button follows the chip: with a suite selected it runs only that suite.</li>
     <li>The manual view has the same chips by <b>area</b>, plus a status filter, so a tester can pull up just the scenarios they own.</li>
-    <li>Tables cap at ${TEST_ROW_CAP} rows and say so, rather than painting hundreds at once.</li>
+    <li>Tables are paged — 50 tests or 25 scenarios to a page by default — rather than painting hundreds of rows at once.</li>
   </ul>
   <h4>Dashboards</h4>
   <ul>
@@ -3983,8 +4027,9 @@ tint strength = 14% at idle, rising to 72% at the limit</code></pre>
   <h4>Pinning</h4>
   <p>Clicking a total pins the selection, so it survives scrolling and redrawing, and a badge appears naming what is pinned. Click it again or press <kbd>Esc</kbd> to release. Elements that already do something when clicked — a segment bar that drills down, a tile that opens a customer — keep doing it; hovering still highlights them. The checkbox in the heatmap toolbar turns the whole effect off.</p>
 
-  <h3 id="d-int-sort">9.2 Sorting</h3>
+  <h3 id="d-int-sort">9.2 Sorting and paging</h3>
   <p>One mechanism serves every table on the site. A central register remembers the current column and direction for each table; one helper draws a header with its arrow, another applies the sort, and a third flips the direction or switches column. Text columns default to ascending, numeric columns to descending.</p>
+  <p>Every table that can outgrow a screen is paged the same way: Prev and Next, numbered pages, the range shown out of the total, and a choice of 10, 25, 50, 100 or 250 rows. A table is filtered and sorted in full before it is cut to a page, so the counts, totals and highlights around it always describe every matching row. A different filter, search or sort starts it again at page one; turning a page does not. A table that fits inside its default page shows no pager at all. Rankings stay as rankings — the two top-25 lists are a fixed length by design and say so.</p>
 
   <h3 id="d-int-drawer">9.3 Customer drawer</h3>
   <p>Opens from any customer tile, table row or ranking entry. It contains the customer's identity and status; their utilization and capacity outlook (eighteen months of history plus the twelve-month run-off, with the same moving-average toggle); their carve-out allocation bars where they have any; a breakdown table of total against utilized SR that matches those bars exactly; and a trade list with maturity dates and days left to maturity.</p>
@@ -4733,6 +4778,31 @@ function buildTests(){
       const bad=(h.match(/>undefined<|>NaN<|\$NaN|\[object Object\]/g)||[]).length;
       return _T.pass(bad===0,bad+" occurrences");});
   });
+  add("UI","ui","Every row of a paged table is reachable, once",()=>{
+    const bad=[];
+    [0,1,24,25,26,99,100,101,4149].forEach(n=>PER_OPTS.forEach(per=>{
+      const rows=Array.from({length:n},(_,i)=>({id:"r"+i})), seen=[];
+      delete PAGES.__t; pageOf("__t",rows,per,r=>r.id);
+      const pages=Math.max(1,Math.ceil(n/per));
+      for(let i=0;i<pages;i++){ PAGES.__t.page=i; pageOf("__t",rows,per,r=>r.id).forEach(r=>seen.push(r.id)); }
+      if(seen.join()!==rows.map(r=>r.id).join()) bad.push(n+"@"+per);
+    }));
+    delete PAGES.__t;
+    return _T.pass(bad.length===0,bad.length?"lost or repeated rows at "+bad.join(", "):"9 sizes × "+PER_OPTS.length+" page sizes");});
+  add("UI","ui","A changed list starts again at page one",()=>{
+    const rows=Array.from({length:300},(_,i)=>({id:"r"+i}));
+    delete PAGES.__t; pageOf("__t",rows,25,r=>r.id); PAGES.__t.page=5;
+    const kept=pageOf("__t",rows,25,r=>r.id)[0].id;
+    const reset=pageOf("__t",rows.slice().reverse(),25,r=>r.id)[0].id;
+    delete PAGES.__t;
+    return _T.pass(kept==="r125"&&reset==="r299","same list kept page 6 ("+kept+"); re-sorted list back to page 1 ("+reset+")");});
+  add("UI","ui","A table that fits its default page shows no pager",()=>{
+    delete PAGES.__t; pageOf("__t",Array.from({length:25},(_,i)=>({id:i})),25,r=>r.id);
+    const small=pagerBar("__t");
+    pageOf("__t",Array.from({length:26},(_,i)=>({id:i})),25,r=>r.id);
+    const big=pagerBar("__t");
+    delete PAGES.__t;
+    return _T.pass(small===""&&big.indexOf("of <b class=\"num\">26</b>")>0,"25 rows: none · 26 rows: "+(big?"shown":"missing"));});
   add("UI","ui","Every sortable table has a registered sort state",()=>{
     const html=Object.values(TCX.panes()).join("");
     const used=new Set((html.match(/data-sorttable="([a-z0-9]+)"/gi)||[]).map(m=>m.split('"')[1]));
@@ -5418,9 +5488,9 @@ function buildManualTests(){
   m("Customers","Low","Customers with no limit are shown honestly",
     ["Find a row with no SR limit."],
     "It reads No SR limit on file rather than showing zeroes, and carries a No limit tag.");
-  m("Customers","Medium","The row cap is disclosed",
-    ["Clear all filters and scroll to the foot of the table."],
-    "A note says how many of the total are shown and suggests searching or filtering to reach the rest.");
+  m("Customers","Medium","Every customer is reachable through the pager",
+    ["Clear all filters and go to the last page of the table.","Change the rows-per-page setting, then sort by another column."],
+    "The pager states the range shown and the total, the last page ends on the final customer, and changing the page size or the sort returns the table to page one.");
   m("Customers","Low","Clicking a row opens the matching customer",
     ["Click three rows in different segments."],
     "The drawer opens on the right name each time.");
@@ -5797,7 +5867,6 @@ function allRuns(){ return TEST_STATE.runs.concat(SEED_RUNS).sort((a,b)=>b.ts-a.
 
 /* ---- the runner. Real assertions, real timings. ---- */
 let TEST_RESULTS={};
-const TEST_ROW_CAP=250;
 function runAutoTests(suiteId){
   _TC={};   // shared artefacts are recomputed once per run, not once per test
   const list=AUTO_TESTS.filter(t=>!suiteId||t.suite===suiteId);
@@ -5984,7 +6053,7 @@ function paneTests(){
         ms:t=>TEST_RESULTS[t.id]?TEST_RESULTS[t.id].ms:-1,
       });
       if(!sorted.length) return `<tr><td colspan="7"><div class="empty">Nothing matches this filter.</div></td></tr>`;
-      return sorted.slice(0,TEST_ROW_CAP).map(t=>{
+      return pageOf("tests-"+view,sorted,50,t=>t.id).map(t=>{
         const r=TEST_RESULTS[t.id];
         const tag=!r?`<span class="tag t-muted">Not run</span>`:r.pass?`<span class="tag t-pass">Pass</span>`:`<span class="tag t-fail">Fail</span>`;
         return `<tr${r&&!r.pass?' style="background:color-mix(in srgb,var(--fail) 6%,transparent)"':''}>
@@ -6000,7 +6069,7 @@ function paneTests(){
       const base=AUTO_TESTS.filter(t=>t.kind===(view==="prop"?"prop":"auto")).filter(t=>!sel||t.suite===sel);
       const n=state.tests.show==="fail" ? base.filter(t=>TEST_RESULTS[t.id]&&!TEST_RESULTS[t.id].pass).length
             : state.tests.show==="notrun" ? base.filter(t=>!TEST_RESULTS[t.id]).length : base.length;
-      return n>TEST_ROW_CAP?`<div class="foot">Showing ${TEST_ROW_CAP} of ${n.toLocaleString()} in this sort order — narrow by suite, or switch to Failures only.</div>`:"";
+      return pagerBar("tests-"+view,n);
     })()}</div></div>`:""}
 
   ${view==="manual"?`
@@ -6018,8 +6087,8 @@ function paneTests(){
         }).join("")}</div>`;
     })()}
     <div class="table-wrap"><table><thead><tr><th>Test</th><th>Area</th><th>Scenario</th><th>Priority</th><th class="r">Status</th><th>Last run</th><th class="r">Record</th></tr></thead>
-    <tbody>${MANUAL_TESTS.filter(m=>!state.tests.area||m.area===state.tests.area)
-      .filter(m=>!state.tests.manStatus||((TEST_STATE.manual[m.id]||{status:"Not run"}).status===state.tests.manStatus))
+    <tbody>${pageOf("manual",MANUAL_TESTS.filter(m=>!state.tests.area||m.area===state.tests.area)
+      .filter(m=>!state.tests.manStatus||((TEST_STATE.manual[m.id]||{status:"Not run"}).status===state.tests.manStatus)),25,m=>m.id)
       .map(m=>{
       const r=TEST_STATE.manual[m.id]||{status:"Not run"};
       const cls=r.status==="Passed"?"t-pass":r.status==="Failed"?"t-fail":r.status==="Blocked"?"t-warn":"t-muted";
@@ -6042,7 +6111,7 @@ function paneTests(){
           <div style="font-size:0.75rem;color:var(--ink-2);line-height:1.6">${esc(m.expected)}</div>
           ${r.notes?`<div class="eyebrow" style="margin:10px 0 4px">Tester note</div><div style="font-size:0.75rem;color:var(--ink-3)">${esc(r.notes)}</div>`:""}
         </div></td></tr>`:""}`;
-    }).join("")||`<tr><td colspan="7"><div class="empty">No scenarios match this filter.</div></td></tr>`}</tbody></table></div></div>`:""}
+    }).join("")||`<tr><td colspan="7"><div class="empty">No scenarios match this filter.</div></td></tr>`}</tbody></table></div>${pagerBar("manual")}</div>`:""}
 
   ${view==="rel"?`
   <div class="grid2 mt14">
@@ -6097,6 +6166,8 @@ function render(){
 $("#f-daterange").addEventListener("change",e=>{state.dateRangeDays=+e.target.value;render();});
 
 document.addEventListener("click",e=>{
+  const pgb=e.target.closest("[data-pg]");
+  if(pgb){ const [k,i]=pgb.dataset.pg.split("|"); if(PAGES[k]){ PAGES[k].page=+i; render(); } return; }
   const mbtn=e.target.closest(".msel-btn");
   if(mbtn){ const key=mbtn.dataset.msel; if(openMselKey===key) closeMsel(); else openMsel(key); return; }
   const mselall=e.target.closest("[data-mselall]"); if(mselall){const key=mselall.dataset.mselall; state.filters[key]=new Set(MSEL_OPTS[key]); if(key==="segment") state.overviewSegClick=""; refreshMsel(key); render(); return;}
@@ -6226,6 +6297,8 @@ document.addEventListener("input",e=>{
   }
 });
 document.addEventListener("change",e=>{
+  const pgk=e.target.dataset&&e.target.dataset.pgper;
+  if(pgk&&PAGES[pgk]){ PAGES[pgk].per=+e.target.value; PAGES[pgk].page=0; render(); return; }
   if(e.target.id==="ov-ma"){ state.showMA=e.target.checked; render(); return; }
   if(e.target.id==="ov-resv"){ state.showReserve=e.target.checked; render(); return; }
   if(e.target.id==="hm-hidenosr"){ state.heatHideNoSR=e.target.checked; render(); return; }
