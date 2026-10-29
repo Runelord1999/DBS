@@ -5125,7 +5125,7 @@ function kpi(eyebrow,value,sub,accent){
 
 **PORT** · 372 lines
 
-The explanatory copy behind every information icon: what each chart is, how to read it, and where an anomaly shows. Plain text, no code. Reuse it verbatim — it is the product's documentation.
+The explanatory copy behind every information icon: what each chart is, how to read it, and where an anomaly shows. Reuse it verbatim — it is the product's documentation. The file also holds `panel()`, the frame every chart is drawn in (its caption argument is still accepted but no longer drawn), and the shared paging helpers: `pager()` for the tables on a tab, `localPaged()` for tables inside a drawer, which page by redrawing only themselves, and `lazyGrid()` for card grids that load in batches as the reader scrolls. Port the rules even if you use your own components: filter and sort the full set, then cut it to a page; every count describes all the matching rows; a changed filter, search or sort returns to page one; nothing is cut off at a fixed count.
 
 ```javascript
 /* ============================================================
@@ -6972,7 +6972,7 @@ function tsFit(){
 
 **REBUILD** · 83 lines
 
-The alert queue.
+The alert queue, paged 25 a page.
 
 ```javascript
 /* ============================================================
@@ -7063,7 +7063,7 @@ function paneDetections(){
 
 **REBUILD** · 47 lines
 
-The rule library pane.
+The rule library pane. Its cards load in batches of 24.
 
 ```javascript
 /* ============================================================
@@ -7118,7 +7118,7 @@ function paneRules(){
 
 **REBUILD** · 105 lines
 
-The trade blotter.
+The trade blotter, paged 50 a page.
 
 ```javascript
 /* ============================================================
@@ -7231,7 +7231,7 @@ function paneBlotter(){
 
 **REBUILD** · 112 lines
 
-Traders and desks.
+Traders and desks. The risk-index cards load in batches of 25.
 
 ```javascript
 /* ============================================================
@@ -7351,7 +7351,7 @@ function paneTraders(){
 
 **REBUILD** · 101 lines
 
-The review log.
+The review log, paged 25 a page.
 
 ```javascript
 /* ============================================================
@@ -7460,7 +7460,7 @@ function paneLog(){
 
 **REBUILD / PORT** · 268 lines
 
-The alert case file: evidence table, market context, trader control profile, audit trail and the disposition form. The structure of what a reviewer is shown is worth porting even if the markup is not.
+The alert case file: evidence table, market context, trader control profile, audit trail and the disposition form. The structure of what a reviewer is shown is worth porting even if the markup is not. Its long tables — the deals an alert cites, a trader's alerts, a trader's whole day — page in place, so turning a page never discards a half-written disposition.
 
 ```javascript
 /* ============================================================
@@ -8766,7 +8766,10 @@ tr.clickable:hover .expandhint{opacity:1}
 ## `index.html`
 
 **REBUILD** · the markup shell: the filter rail, the tab strip, the pane
-container and the drawer. Everything else is generated at runtime.
+container and the drawer. Everything else is generated at runtime. It also
+carries a start-up notice that a small head script hides before anything is
+drawn: a copy whose scripts were stripped in transit, or opened where
+JavaScript is blocked or cannot run, shows the notice instead of a broken page.
 
 ```html
 <!DOCTYPE html>
